@@ -1460,11 +1460,7 @@ const _briefingState = {
 };
 
 function openBriefingModal() {
-  // 처음 열 때만 가능한 RGN2 한 개 자동 추가 (사용자 편의)
-  if (_briefingState.regions.length === 0) {
-    const all = _allRgn2List();
-    if (all.length) _briefingState.regions = [all[0]];
-  }
+  // 지역은 사용자가 직접 추가 (자동 선택 X)
   _renderBriefingBody();
   document.getElementById('briefingModal').classList.add('open');
 }
@@ -1658,7 +1654,8 @@ function _renderBriefingBody() {
       <div style="font-size:11.5px;color:#8fa3b8">기준일 D-1: <span style="color:#60a5fa;font-weight:600">${d1||'-'}</span> &nbsp;|&nbsp; 비교일 D-2: <span style="color:#8fa3b8">${d2||'-'}</span></div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
         <select id="briefingAddSel" class="filter-select" style="min-width:140px">
-          ${remain.length ? remain.map(r => `<option value="${r}">${r}</option>`).join('') : '<option value="">선택 가능 지역 없음</option>'}
+          <option value="">${remain.length ? '지역 선택…' : '선택 가능 지역 없음'}</option>
+          ${remain.map(r => `<option value="${r}">${r}</option>`).join('')}
         </select>
         <button class="btn btn-ghost btn-sm" onclick="_briefingAddRegion()" ${remain.length?'':'disabled'}>+ 지역 추가</button>
       </div>
@@ -3008,10 +3005,11 @@ function _renderPerfDaily(body, hist, tgt) {
     <div class="modal-section">
       <div class="modal-section-title">📆 일자별 세부 지표 <span style="color:#4b6278;font-size:11px;font-weight:400;margin-left:6px">최근 ${dailyDesc.length}일</span></div>
       <div class="table-wrap table-scroll">
-        <table class="data-table" style="min-width:900px">
+        <table class="data-table" style="min-width:960px">
           <thead>
             <tr>
               <th rowspan="2" style="padding:9px 6px">일자</th>
+              <th rowspan="2" class="center">세트수</th>
               <th rowspan="2" class="center">전체<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
               <th colspan="4" class="center slot-group">시간대별 처리건수</th>
               <th rowspan="2" class="center">수락률</th>
