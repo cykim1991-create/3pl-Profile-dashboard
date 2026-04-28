@@ -564,10 +564,39 @@ const CONFIG = {
 // Google OAuth (GIS Token Model)
 // ═══════════════════════════════════════════════════
 const OAUTH_CLIENT_ID = '210806485129-9u0lfm2ceh8cmm1rjftvbs8kp27lf2a3.apps.googleusercontent.com';
+const LS_TOKEN_KEY = '3pl_oauth_token_v1';
 let gsiTokenClient = null;
 let gsiAccessToken = null;
 let gsiTokenExpiry  = 0;
 let gsiUserName     = '';
+
+// ── OAuth 토큰 localStorage 캐시 (새로고침 시 자동 복원) ─────────
+// 주의: 토큰은 평문으로 저장됨. 1시간 수명이지만 공용 PC에서는 로그아웃 권장
+function _saveOAuthToStorage() {
+  try {
+    if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) return;
+    localStorage.setItem(LS_TOKEN_KEY, JSON.stringify({
+      token:  gsiAccessToken,
+      expiry: gsiTokenExpiry,
+      name:   gsiUserName || '',
+      saved:  Date.now(),
+    }));
+  } catch (_) {}
+}
+function _loadOAuthFromStorage() {
+  try {
+    const s = localStorage.getItem(LS_TOKEN_KEY);
+    if (!s) return null;
+    const o = JSON.parse(s);
+    if (!o || !o.token || !o.expiry) return null;
+    // 만료 1분 전부터는 무효 처리 (요청 도중 만료 방지)
+    if (Date.now() + 60000 >= o.expiry) return null;
+    return o;
+  } catch (_) { return null; }
+}
+function _clearOAuthStorage() {
+  try { localStorage.removeItem(LS_TOKEN_KEY); } catch (_) {}
+}
 
 function initGSI() {
   if (typeof google === 'undefined' || !google.accounts) return;
@@ -589,11 +618,13 @@ function initGSI() {
       gsiAccessToken = resp.access_token;
       gsiTokenExpiry  = Date.now() + (resp.expires_in - 60) * 1000;
       updateGsiBtn(true);
-      // 사용자 이름 가져오기
+      _saveOAuthToStorage(); // 새로고침 시 복원할 수 있도록 캐시
+      // 사용자 이름 가져오기 (캐시도 같이 갱신)
       fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: 'Bearer ' + resp.access_token }
       }).then(r => r.json()).then(info => {
         gsiUserName = info.name || info.email || '';
+        _saveOAuthToStorage();
       }).catch(() => {});
 
       // 로그인 게이트가 보이는 상태였다면 → 게이트 닫고 대시보드 init() 실행
@@ -663,6 +694,7 @@ function gsiLogin() {
     google.accounts.oauth2.revoke(gsiAccessToken, () => {});
     gsiAccessToken = null; gsiTokenExpiry = 0;
     gsiUserName = '';
+    _clearOAuthStorage();
     updateGsiBtn(false);
     if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
     showToast('로그아웃됨');
@@ -725,6 +757,12 @@ async function writeLogWithOAuth(log) {
       const apiMsg  = errBody?.error?.message || res.statusText || `HTTP ${res.status}`;
       _lastOAuthWriteError = `[${res.status}] ${apiMsg}`;
       console.error('OAuth 시트 쓰기 실패:', _lastOAuthWriteError, errBody);
+      // 401 (인증 만료) — 캐시 토큰 폐기 → 다음 새로고침 시 로그인 게이트
+      if (res.status === 401) {
+        gsiAccessToken = null; gsiTokenExpiry = 0;
+        _clearOAuthStorage();
+        updateGsiBtn(false);
+      }
       return false;
     }
     _lastOAuthWriteError = '';
@@ -1096,6 +1134,7 @@ function populateRegionFilter() {
 
 function applyFilters() {
   currentRegionFilter = document.getElementById('regionFilter').value;  // 이제 RGN2 값
+  // filtered = 상단 RGN2 필터만 적용 (위험만 필터는 테이블에서만 적용 → KPI 카드는 영향 안 받음)
   filtered = STATE.partners.filter(p => {
     if (!currentRegionFilter) return true;
     // 협력사의 운영지역/권역명에서 RGN2 추출 후 비교
@@ -1106,7 +1145,6 @@ function applyFilters() {
       k['협력사명'] === p['협력사명'] && getRGN2(k['운영지역']) === currentRegionFilter
     );
   });
-  if (riskOnlyMode) filtered = filtered.filter(p => getRiskLevel(p) === 'red');
   renderRealtime();
   renderPerformance();
 }
@@ -1842,11 +1880,10 @@ function renderRealtime() {
   _renderGradeChip('realtime');
   _updateSortIndicators('realtime', _RT_SORT_KEYS);
 
+  // KPI 카드용: 상단 RGN2 필터만 적용된 'filtered' 사용 (위험만 토글의 영향 X)
   const all = filtered;
-  // 실시간운행현황 시트의 행을 사용 (없으면 데일리 최신으로 fallback)
   const realtimeKPIs = all.map(p => getRealtimeKPI(p['협력사ID'])).filter(Boolean);
 
-  // KPI 카드는 전체 (필터 적용 후 partners) 기준
   const totalDel  = realtimeKPIs.reduce((s,k) => s+Number(k['총처리건수']||0), 0);
   const totalAct  = realtimeKPIs.reduce((s,k) => s+Number(k['운행라이더수']||0), 0);
   const totalJoin = realtimeKPIs.reduce((s,k) => s+Number(k['계약중라이더수']||k['가입라이더수']||0), 0);
@@ -1868,15 +1905,18 @@ function renderRealtime() {
   const el = document.getElementById('rt-date-label');
   if (el && dates.length) el.textContent = dates[0]+' 기준';
 
+  // 테이블용: 위험만 필터를 여기서만 적용 (KPI 카드에는 영향 없음)
+  const tableSrc = riskOnlyMode ? all.filter(p => getRiskLevel(p) === 'red') : all;
+
   const tbody = document.getElementById('realtimeBody');
-  if (!all.length) { tbody.innerHTML = `<tr><td colspan="18" class="empty">데이터 없음</td></tr>`; return; }
+  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="18" class="empty">데이터 없음</td></tr>`; return; }
 
   const st = _tblState.realtime;
 
   // 등급 필터
   const gradeFiltered = st.filterGrades.size > 0
-    ? all.filter(p => st.filterGrades.has(p['등급']))
-    : all;
+    ? tableSrc.filter(p => st.filterGrades.has(p['등급']))
+    : tableSrc;
 
   // ── 레코드 빌드 ──
   const records = gradeFiltered.map(p => {
@@ -2648,8 +2688,10 @@ function renderPerfList() {
   _updateSortIndicators('perfList', _PERF_SORT_KEYS);
 
   // 슬롯 목표는 협력사 권역별로 다르므로 records.map 안에서 lookup
-  const source = (filtered && filtered.length) ? filtered : (STATE.partners || []);
-  const st     = _tblState.perfList;
+  // 퍼포먼스 리스트도 위험만 필터를 여기서만 적용 (상단 KPI 카드는 영향 X)
+  const baseList = (filtered && filtered.length) ? filtered : (STATE.partners || []);
+  const source   = riskOnlyMode ? baseList.filter(p => getRiskLevel(p) === 'red') : baseList;
+  const st       = _tblState.perfList;
 
   // 검색 + 등급 필터
   const partnersBase = source.filter(p => {
@@ -3671,7 +3713,21 @@ function showToast(msg) {
   setTimeout(()=>t.classList.remove('show'), 2800);
 }
 
-window.addEventListener('load', showLoginGate);
+// 페이지 로드 시 — 캐시된 OAuth 토큰이 유효하면 자동 복원, 아니면 로그인 게이트
+window.addEventListener('load', () => {
+  const cached = _loadOAuthFromStorage();
+  if (cached) {
+    gsiAccessToken = cached.token;
+    gsiTokenExpiry = cached.expiry;
+    gsiUserName    = cached.name || '';
+    updateGsiBtn(true);
+    document.getElementById('loginGate').style.display = 'none';
+    document.getElementById('loading').style.display = 'flex';
+    init();
+    return;
+  }
+  showLoginGate();
+});
 </script>
 </body>
 </html>
