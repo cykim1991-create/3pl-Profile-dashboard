@@ -325,6 +325,8 @@ textarea.form-input{resize:vertical;min-height:60px}
       <select class="filter-select" id="regionFilter" onchange="applyFilters()">
         <option value="">전체 RGN2</option>
       </select>
+      <button class="btn btn-primary btn-sm" onclick="openBriefingModal()" title="아침 영업 브리핑 보고서 작성"
+              style="font-size:11px">📝 영업 브리핑</button>
       <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
       <button class="btn btn-ghost btn-sm" onclick="openSetup()" title="연결 설정">⚙</button>
       <button class="btn btn-sm" id="gsiBtn" onclick="gsiLogin()" style="background:#1e3a5f;color:#8fa3b8;border:1px solid #1e3048;font-size:11px">🔑 로그인</button>
@@ -482,6 +484,17 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="modal-close" onclick="closeRgn2ManagerModal()">✕</button>
     </div>
     <div id="rgn2ManagerBody" style="padding:20px;display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- 영업 브리핑 보고서 모달 -->
+<div class="modal-overlay" id="briefingModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:780px">
+    <div class="modal-header">
+      <div class="modal-title">📝 영업 브리핑 보고서</div>
+      <button class="modal-close" onclick="closeBriefingModal()">✕</button>
+    </div>
+    <div id="briefingBody" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px;max-height:82vh;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -941,13 +954,13 @@ async function init() {
   try {
     // v9 시트 구조: row1=제목, row2=헤더, row3+=데이터 (0-indexed: header=1, data=2)
     // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
-    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, tplVals] = await Promise.all([
+    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals] = await Promise.all([
       fetchSheet('협력사기본정보',     'A:L'),    // 12열
-      fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표_* 4컬럼 포함)
-      fetchSheet('실시간운행현황',     'A:T'),    // 20열 (목표_* 4컬럼 포함)
+      fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
+      fetchSheet('실시간운행현황',     'A:T'),    // 20열 (목표 4컬럼)
       fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
       fetchSheet('RGN2_담당자',        'A:C'),    // 3열 (RGN2, 담당자, 변경일시)
-      fetchSheet('RGN2_3PL처리비중',   'A:B'),    // 2열
+      fetchSheet('RGN2_일별지표',      'A:H'),    // 8열 (RGN2 × 일자 단위 영업브리핑 지표, 최근 7일)
     ]);
     STATE.partners     = parseSheet(partnerVals,  1, 2);
     const allKPI       = parseSheet(kpiVals, 1, 2);
@@ -966,12 +979,30 @@ async function init() {
       return m;
     }, {});
 
-    // RGN2_3PL처리비중: 셀이 % 형식("42.0%")이면 NaN이 되므로 _parsePercent로 정규화
-    const tplRows  = parseSheet(tplVals, 1, 2);
-    STATE.tpl3Share = tplRows.reduce((m, r) => {
-      if (r['RGN2']) m[r['RGN2']] = _parsePercent(r['비중']);
+    // RGN2_일별지표 (RGN2 × 일자, 최근 7일):
+    //   3PL처리비중, 60분초과율, UTR, Total_DCPO, FL_라이더수, FL_DCPO
+    //   row1=제목, row2=헤더, row3=가이드, row4+=데이터 → header=1, dataStart=3
+    STATE.rgn2Daily = parseSheet(rgn2DailyVals, 1, 3).map(r => ({
+      일자:           r['일자']         || '',
+      RGN2:           r['RGN2']         || '',
+      '3PL처리비중':  _parsePercent(r['3PL처리비중']),
+      '60분초과율':   Number(String(r['60분초과율']||'').replace(/[%\s,]/g,'')) || 0,
+      UTR:            Number(r['UTR']||0) || 0,
+      Total_DCPO:     Number(String(r['Total_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
+      FL_라이더수:    Number(String(r['FL_라이더수']||'').replace(/[,\s명]/g,'')) || 0,
+      FL_DCPO:        Number(String(r['FL_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
+    }));
+    // tpl3Share 호환 — 각 RGN2의 가장 최근 일자 3PL처리비중을 정적 매핑으로 노출
+    STATE.tpl3Share = (() => {
+      const latest = {};
+      STATE.rgn2Daily.forEach(r => {
+        if (!r.RGN2) return;
+        if (!latest[r.RGN2] || r.일자 > latest[r.RGN2].일자) latest[r.RGN2] = r;
+      });
+      const m = {};
+      Object.entries(latest).forEach(([k,v]) => m[k] = v['3PL처리비중'] || 0);
       return m;
-    }, {});
+    })();
     STATE.settings     = {};
     STATE.promo        = [];
     STATE.pipeline     = [];
@@ -1379,6 +1410,292 @@ function openRgn2ManagerModal() {
 
 function closeRgn2ManagerModal() {
   document.getElementById('rgn2ManagerModal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════
+// 영업 브리핑 보고서 모달 (RGN2별 자동 산출 + 영업계획 입력)
+// ═══════════════════════════════════════════════════
+
+const _briefingState = {
+  regions: [],   // 사용자가 선택한 RGN2 배열
+  plan: '',      // 당일 영업계획 텍스트
+};
+
+function openBriefingModal() {
+  // 처음 열 때만 가능한 RGN2 한 개 자동 추가 (사용자 편의)
+  if (_briefingState.regions.length === 0) {
+    const all = _allRgn2List();
+    if (all.length) _briefingState.regions = [all[0]];
+  }
+  _renderBriefingBody();
+  document.getElementById('briefingModal').classList.add('open');
+}
+function closeBriefingModal() {
+  // plan 텍스트는 유지하되 모달만 닫기
+  const ta = document.getElementById('briefingPlan');
+  if (ta) _briefingState.plan = ta.value;
+  document.getElementById('briefingModal').classList.remove('open');
+}
+
+// 데이터에서 사용 가능한 RGN2 목록 (정렬)
+// RGN2_일별지표 시트가 가장 권위 있는 RGN2 정의이므로 우선 사용
+function _allRgn2List() {
+  const set = new Set();
+  (STATE.rgn2Daily || []).forEach(r => { if (r.RGN2) set.add(r.RGN2); });
+  (STATE.kpi       || []).forEach(r => { const g = getRGN2(r['운영지역']); if (g && g !== '-') set.add(g); });
+  (STATE.partners  || []).forEach(p => { if (p['권역명']) set.add(getRGN2(p['권역명']) || p['권역명']); });
+  return [...set].sort();
+}
+
+function _briefingAddRegion() {
+  const sel = document.getElementById('briefingAddSel');
+  if (!sel) return;
+  const v = sel.value;
+  if (!v) return;
+  if (_briefingState.regions.includes(v)) {
+    showToast('이미 추가된 지역입니다');
+    return;
+  }
+  // plan 보존
+  const ta = document.getElementById('briefingPlan');
+  if (ta) _briefingState.plan = ta.value;
+  _briefingState.regions.push(v);
+  _renderBriefingBody();
+}
+
+function _briefingRemoveRegion(rgn2) {
+  const ta = document.getElementById('briefingPlan');
+  if (ta) _briefingState.plan = ta.value;
+  _briefingState.regions = _briefingState.regions.filter(r => r !== rgn2);
+  _renderBriefingBody();
+}
+
+// ── RGN2 × 날짜 단위 집계 ──
+// 1) RGN2 단위 지표(3PL처리비중/60분초과율/UTR/Total_DCPO/FL_라이더수/FL_DCPO)는
+//    STATE.rgn2Daily에서 직접 lookup
+// 2) 운행라이더수(3PL)와 totalVol은 협력사 단위 시트(STATE.kpi)에서 RGN2 합산
+function _briefingAggregate(rgn2, dateStr) {
+  const rgn2Row = (STATE.rgn2Daily || []).find(r =>
+    r.RGN2 === rgn2 && r['일자'] === dateStr);
+
+  // 협력사 단위 시트에서 운행라이더수(3PL) / 총처리건수만 합산
+  const partnerRows = (STATE.kpi || []).filter(r =>
+    getRGN2(r['운영지역']) === rgn2 && r['일자'] === dateStr);
+  const sum = (rows, f) => rows.reduce((s,r) => s + Number(r[f]||0), 0);
+
+  // RGN2_일별지표가 있어도 partnerRows가 비었을 수 있고, 그 반대도 가능
+  // → 두 값 중 하나라도 있으면 집계 결과 반환
+  if (!rgn2Row && !partnerRows.length) return null;
+
+  return {
+    sharePct:    rgn2Row ? rgn2Row['3PL처리비중']  : null,  // 0~1 비율 (null 가능)
+    over60:      rgn2Row ? rgn2Row['60분초과율']  : 0,
+    utr:         rgn2Row ? rgn2Row['UTR']          : 0,
+    totalDcpo:   rgn2Row ? rgn2Row['Total_DCPO']   : 0,
+    flRiders:    rgn2Row ? rgn2Row['FL_라이더수']  : 0,
+    flDcpo:      rgn2Row ? rgn2Row['FL_DCPO']      : 0,
+    totalVol:    sum(partnerRows, '총처리건수'),
+    riders3pl:   sum(partnerRows, '운행라이더수'),
+  };
+}
+
+// ── 가장 최근 두 날짜 (D-1, D-2) 추출 ──
+// RGN2_일별지표 시트의 일자가 우선 (RGN2 단위 지표가 비어있는 협력사 일자는 의미 없음)
+// 시트가 비어있으면 fallback으로 STATE.kpi 일자 사용
+function _briefingDates() {
+  const fromRgn2 = [...new Set((STATE.rgn2Daily||[]).map(r => r['일자']).filter(Boolean))];
+  const fromKpi  = [...new Set((STATE.kpi||[]).map(r => r['일자']).filter(Boolean))];
+  const dates = (fromRgn2.length ? fromRgn2 : fromKpi).sort();
+  if (!dates.length) return { d1:'', d2:'' };
+  return { d1: dates[dates.length-1], d2: dates[dates.length-2] || '' };
+}
+
+// 변화량 포맷터 — 단위/소수점 처리
+function _bDeltaFmt(curr, prev, opts) {
+  opts = opts || {};
+  const unit = opts.unit || '';
+  const dec  = opts.dec  != null ? opts.dec : 1;
+  const isPP = !!opts.pp; // %p 표기
+  if (prev === null || prev === undefined || isNaN(prev)) return '(-)';
+  const d = curr - prev;
+  if (Math.abs(d) < Math.pow(10, -dec) / 2) return '(±0)';
+  const arrow = d > 0 ? '▲' : '▼';
+  const abs   = Math.abs(d);
+  const fmt   = abs.toLocaleString(undefined, { maximumFractionDigits: dec, minimumFractionDigits: dec });
+  return `(${arrow}${fmt}${isPP ? '%p' : unit})`;
+}
+
+// 빈 라인 / "데이터 없음" 표기
+function _bN(v, opts) {
+  opts = opts || {};
+  if (v === null || v === undefined || isNaN(v) || v === 0) return '-';
+  const dec = opts.dec != null ? opts.dec : 0;
+  const unit = opts.unit || '';
+  return v.toLocaleString(undefined, { maximumFractionDigits: dec, minimumFractionDigits: dec }) + unit;
+}
+
+// 보고서 텍스트 생성 (한 RGN2 블록)
+function _briefingBlockText(rgn2) {
+  const { d1, d2 } = _briefingDates();
+  const a = _briefingAggregate(rgn2, d1);
+  const b = d2 ? _briefingAggregate(rgn2, d2) : null;
+  if (!a) return `[${rgn2}] 주요 지표 실적 현황(전일 대비)\n\n* 데이터 없음\n`;
+  // 3PL처리비중 (0~1 비율) → 백분율 + 전일 대비 %p 변화량
+  const shareTxt = a.sharePct != null
+    ? (a.sharePct * 100).toFixed(1) + '%'
+    : '-';
+  const shareDelta = (a.sharePct != null && b && b.sharePct != null)
+    ? _bDeltaFmt(a.sharePct * 100, b.sharePct * 100, {pp:true, dec:1})
+    : '';
+  // FL 대비 DCPO 차이 — 양수면 FL보다 비쌈 ▲, 음수면 FL보다 쌈 ▼
+  const dcpoGapTxt = (a.totalDcpo && a.flDcpo)
+    ? (() => {
+        const gap = a.totalDcpo - a.flDcpo;
+        const arrow = gap > 0 ? '▲' : '▼';
+        return `(FL 대비 ${arrow}${Math.abs(Math.round(gap)).toLocaleString()}원)`;
+      })()
+    : '(FL 대비 -)';
+  return [
+    `[${rgn2}] 주요 지표 실적 현황(전일 대비)`,
+    ``,
+    `* 3PL처리비중: ${shareTxt} ${shareDelta}`.trim(),
+    `* 60분초과율: ${_bN(a.over60, {dec:1, unit:'%'})} ${b? _bDeltaFmt(a.over60, b.over60, {pp:true, dec:1}) : ''}`.trim(),
+    `* UTR ${_bN(a.utr, {dec:1})} ${b? _bDeltaFmt(a.utr, b.utr, {dec:1}) : ''}`.trim(),
+    `* 운행라이더수 FL/3PL ${_bN(a.flRiders)}명/${_bN(a.riders3pl)}명 ${b? `(${_bArrow(a.flRiders,b.flRiders,'명')}/${_bArrow(a.riders3pl,b.riders3pl,'명')})` : ''}`.trim(),
+    `* Total DCPO ${_bN(a.totalDcpo, {unit:'원'})} ${dcpoGapTxt}`,
+  ].join('\n');
+}
+
+// FL/3PL 라이더수 변화는 ▲500명 / ▼60명 식으로 합쳐 표기 (단일 단위)
+function _bArrow(curr, prev, unit) {
+  if (prev === null || prev === undefined || isNaN(prev) || !prev) return '-';
+  const d = curr - prev;
+  if (Math.abs(d) < 1) return '±0' + (unit||'');
+  const arrow = d > 0 ? '▲' : '▼';
+  return arrow + Math.abs(Math.round(d)).toLocaleString() + (unit||'');
+}
+
+function _buildBriefingText() {
+  const blocks = _briefingState.regions.map(r => _briefingBlockText(r));
+  const planRaw = (document.getElementById('briefingPlan')?.value || '').trim();
+  const planLines = planRaw.split('\n').map(l => l.trim()).filter(Boolean);
+  const planTxt = `[당일 영업계획]\n` + (planLines.length
+    ? '\n' + planLines.map(l => l.startsWith('*') ? l : `* ${l}`).join('\n')
+    : '\n* (영업계획을 작성해주세요)');
+  return blocks.join('\n\n') + '\n\n' + planTxt;
+}
+
+async function copyBriefingText() {
+  const ta = document.getElementById('briefingPlan');
+  if (ta) _briefingState.plan = ta.value;
+  const text = _buildBriefingText();
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('✓ 보고서 복사됨 — 슬랙에 붙여넣기 하세요');
+  } catch (e) {
+    // fallback: 텍스트 영역 선택 후 execCommand
+    const tmp = document.createElement('textarea');
+    tmp.value = text; document.body.appendChild(tmp);
+    tmp.select(); try { document.execCommand('copy'); showToast('✓ 보고서 복사됨'); }
+    catch(_) { showToast('❌ 클립보드 접근 실패'); }
+    document.body.removeChild(tmp);
+  }
+}
+
+// ── 본문 렌더링 ──
+function _renderBriefingBody() {
+  const body = document.getElementById('briefingBody');
+  if (!body) return;
+  const { d1, d2 } = _briefingDates();
+  const all = _allRgn2List();
+  const remain = all.filter(r => !_briefingState.regions.includes(r));
+
+  // 지역 카드 HTML
+  const regionCards = _briefingState.regions.length
+    ? _briefingState.regions.map(rgn2 => _renderBriefingRegionCard(rgn2, d1, d2)).join('')
+    : `<div style="color:#4b6278;text-align:center;padding:20px;background:#0d1825;border-radius:8px">지역(RGN2)을 추가해 주세요</div>`;
+
+  body.innerHTML = `
+    <div style="background:#0d1825;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="font-size:11.5px;color:#8fa3b8">기준일 D-1: <span style="color:#60a5fa;font-weight:600">${d1||'-'}</span> &nbsp;|&nbsp; 비교일 D-2: <span style="color:#8fa3b8">${d2||'-'}</span></div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <select id="briefingAddSel" class="filter-select" style="min-width:140px">
+          ${remain.length ? remain.map(r => `<option value="${r}">${r}</option>`).join('') : '<option value="">선택 가능 지역 없음</option>'}
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="_briefingAddRegion()" ${remain.length?'':'disabled'}>+ 지역 추가</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">${regionCards}</div>
+
+    <div style="background:#0d1825;border-radius:8px;padding:12px 14px">
+      <div style="font-size:12px;color:#8fa3b8;font-weight:600;margin-bottom:6px">📌 당일 영업계획</div>
+      <textarea id="briefingPlan" rows="5"
+                style="width:100%;background:#0f1a26;border:1px solid #1e3048;border-radius:6px;color:#e8edf2;padding:10px 12px;font-size:12.5px;font-family:inherit;line-height:1.6;box-sizing:border-box;resize:vertical"
+                placeholder="• 영등포구 기존 협력사 퍼포먼스 중간 점검&#10;• 동작구 현황 체크 시작&#10;• 의왕시 협력사 인터뷰">${_briefingState.plan.replace(/</g,'&lt;')}</textarea>
+      <div style="font-size:10.5px;color:#4b6278;margin-top:4px">한 줄에 하나씩 쓰면 자동으로 글머리 기호가 붙습니다</div>
+    </div>
+
+    <div style="background:#0a131c;border:1px dashed #1e3048;border-radius:8px;padding:12px 14px">
+      <div style="font-size:11.5px;color:#8fa3b8;font-weight:600;margin-bottom:6px">📋 미리보기 (복사될 텍스트)</div>
+      <pre id="briefingPreview" style="white-space:pre-wrap;color:#c5d5e5;font-family:inherit;font-size:12px;line-height:1.65;margin:0">${_buildBriefingText().replace(/</g,'&lt;')}</pre>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="closeBriefingModal()">닫기</button>
+      <button class="btn btn-primary" onclick="copyBriefingText()">📋 보고서 복사</button>
+    </div>
+  `;
+
+  // 영업계획 textarea 변경 시 미리보기 업데이트
+  const ta = document.getElementById('briefingPlan');
+  if (ta) ta.addEventListener('input', () => {
+    _briefingState.plan = ta.value;
+    const pv = document.getElementById('briefingPreview');
+    if (pv) pv.textContent = _buildBriefingText();
+  });
+}
+
+// 한 지역 카드 렌더 — 자동 산출된 지표 + 변화량 + 삭제 버튼
+function _renderBriefingRegionCard(rgn2, d1, d2) {
+  const a = _briefingAggregate(rgn2, d1);
+  const b = d2 ? _briefingAggregate(rgn2, d2) : null;
+  if (!a) {
+    return `<div style="background:#0d1825;border:1px solid #1e3048;border-radius:8px;padding:12px 14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:14px;font-weight:700;color:#e8edf2">[${rgn2}]</div>
+        <button class="btn btn-ghost btn-sm" style="color:#f87171" onclick="_briefingRemoveRegion('${rgn2}')">삭제</button>
+      </div>
+      <div style="color:#4b6278;font-size:12px">${d1} 데이터 없음</div>
+    </div>`;
+  }
+  const shareTxt = a.sharePct != null ? (a.sharePct * 100).toFixed(1) + '%' : '-';
+  const shareDelta = (a.sharePct != null && b && b.sharePct != null)
+    ? _bDeltaFmt(a.sharePct * 100, b.sharePct * 100, {pp:true, dec:1})
+    : '';
+  const dcpoGap = (a.totalDcpo && a.flDcpo) ? (a.totalDcpo - a.flDcpo) : null;
+  const gapHtml = dcpoGap !== null
+    ? `<span style="color:${dcpoGap>0?'#f87171':'#4ade80'};font-size:11px">FL 대비 ${dcpoGap>0?'▲':'▼'}${Math.abs(Math.round(dcpoGap)).toLocaleString()}원</span>`
+    : `<span style="color:#4b6278;font-size:11px">FL 대비 -</span>`;
+  const cell = (label, val, delta) => `<div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+    <span style="font-size:10.5px;color:#8fa3b8">${label}</span>
+    <span style="font-size:13.5px;color:#e8edf2;font-weight:700">${val}</span>
+    ${delta?`<span style="font-size:10.5px;color:#8fa3b8">${delta}</span>`:''}
+  </div>`;
+  return `<div style="background:#0d1825;border:1px solid #1e3048;border-radius:8px;padding:12px 14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:700;color:#e8edf2">[${rgn2}] <span style="color:#4b6278;font-size:11px;font-weight:400;margin-left:4px">${d1}</span></div>
+      <button class="btn btn-ghost btn-sm" style="color:#f87171" onclick="_briefingRemoveRegion('${rgn2}')">삭제</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px">
+      ${cell('3PL처리비중', shareTxt, shareDelta)}
+      ${cell('60분초과율',  _bN(a.over60,{dec:1,unit:'%'}),  b? _bDeltaFmt(a.over60,b.over60,{pp:true,dec:1}) : '')}
+      ${cell('UTR',         _bN(a.utr,{dec:1}),               b? _bDeltaFmt(a.utr,b.utr,{dec:1}) : '')}
+      ${cell('운행라이더수 FL', _bN(a.flRiders)+'명',         b? _bArrow(a.flRiders,b.flRiders,'명') : '')}
+      ${cell('운행라이더수 3PL',_bN(a.riders3pl)+'명',        b? _bArrow(a.riders3pl,b.riders3pl,'명') : '')}
+      ${cell('Total DCPO',  _bN(a.totalDcpo,{unit:'원'}),     gapHtml)}
+    </div>
+  </div>`;
 }
 
 // 달성률 cell: stacked "212%" on top, "34건" below
