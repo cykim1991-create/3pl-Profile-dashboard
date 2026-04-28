@@ -839,21 +839,30 @@ async function init() {
   if (!CONFIG.isReady) { showSetupPanel(); return; }
   setLoadingProgress(10, '협력사 데이터 로딩 중...');
   try {
-    // 시트 구조: row1=제목, row2=헤더, row3=가이드, row4+=데이터 (0-indexed: 1,3)
-    // _설정: row1=제목, row2=헤더, row3+=데이터 (0-indexed: 1,2)
-    const [partnerVals, settingsVals, kpiVals, logVals] = await Promise.all([
-      fetchSheet('기본정보',  'A:L'),
-      fetchSheet('_설정',     'A:C'),
-      fetchSheet('daily_KPI', 'A:M'),
-      fetchSheet('활동로그',  'A:I'),
+    // v9 시트 구조: row1=제목, row2=헤더, row3+=데이터 (0-indexed: header=1, data=2)
+    // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
+    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, tplVals] = await Promise.all([
+      fetchSheet('협력사기본정보',     'A:L'),    // 12열
+      fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표_* 4컬럼 포함)
+      fetchSheet('실시간운행현황',     'A:T'),    // 20열 (목표_* 4컬럼 포함)
+      fetchSheet('활동로그',           'A:J'),    // 10열
+      fetchSheet('RGN2_담당자',        'A:B'),    // 2열
+      fetchSheet('RGN2_3PL처리비중',   'A:B'),    // 2열
     ]);
-    STATE.partners = parseSheet(partnerVals,  1, 3);
-    STATE.settings = parseSettings(parseSheet(settingsVals, 1, 2));
-    const allKPI   = parseSheet(kpiVals, 1, 3);
-    STATE.kpi      = filterKPIRecent(allKPI, 8);
-    STATE.logs     = parseSheet(logVals, 1, 3);
-    STATE.promo    = [];
-    STATE.pipeline = [];
+    STATE.partners     = parseSheet(partnerVals,  1, 2);
+    const allKPI       = parseSheet(kpiVals, 1, 2);
+    STATE.kpi          = filterKPIRecent(allKPI, 8);
+    // 실시간운행현황은 현재 KPI 시계열의 최신 행과 같은 정보를 제공 — 아직 사용처는 KPI 기반이지만 향후 분리 가능
+    STATE.realtimeKpi  = parseSheet(realtimeVals, 1, 2);
+    STATE.logs         = parseSheet(logVals, 1, 3);    // 활동로그는 가이드 행 있음
+    // 키-값 시트 → 객체로 변환
+    const mgrRows      = parseSheet(mgrVals, 1, 2);
+    STATE.rgn2Managers = mgrRows.reduce((m, r) => { if (r['RGN2']) m[r['RGN2']] = r['담당자'] || ''; return m; }, {});
+    const tplRows      = parseSheet(tplVals, 1, 2);
+    STATE.tpl3Share    = tplRows.reduce((m, r) => { if (r['RGN2']) m[r['RGN2']] = Number(r['비중']) || 0; return m; }, {});
+    STATE.settings     = {};
+    STATE.promo        = [];
+    STATE.pipeline     = [];
 
     setLoadingProgress(100, '완료');
     boot();
@@ -863,11 +872,19 @@ async function init() {
     boot();
     const msg = e.message || '';
     let hint = '';
-    if (msg.includes('404')) hint = '탭 이름 불일치 또는 시트 ID 오류';
-    else if (msg.includes('403')) hint = '시트 공개 설정 필요 (공유→링크가 있는 모든 사용자→뷰어)';
-    else if (msg.includes('400')) hint = 'API Key 오류';
+    if (msg.includes('Unable to parse range')) {
+      const m = msg.match(/range:\s*([^!]+)!/);
+      hint = `탭 이름 "${m?m[1]:'?'}"이(가) 시트에 없습니다. 시트 탭 이름이 v9 명세와 일치하는지 확인하세요.`;
+    } else if (msg.includes('blocked')) {
+      hint = 'API Key의 HTTP 리퍼러 제한 — Google Cloud Console에서 현재 도메인 추가 필요';
+    } else if (msg.includes('404')) {
+      hint = 'Spreadsheet ID가 잘못되었거나 시트가 삭제됨';
+    } else if (msg.includes('403')) {
+      hint = '시트 공개 설정 필요 (공유→링크가 있는 모든 사용자→뷰어)';
+    } else if (msg.includes('400')) {
+      hint = 'API 요청 형식 오류 — 탭 이름/범위 확인';
+    }
     showToast(`⚠ API 실패: ${hint || msg}`);
-    // 콘솔에 상세 내용 출력
     console.error('API 연결 실패 상세:', e.message);
   }
 }
