@@ -1012,7 +1012,7 @@ function getPendingLogs(pid) {
 function _kpiDateOf(k) { return k['일자'] || k['주차시작일'] || ''; }
 
 function getLatestKPI(pid) {
-  // Try join by name first (new raw_daily structure), fall back to ID
+  // 데일리운영현황(STATE.kpi)에서 가장 최근 일자의 행 — 일자별/주차별 집계용
   const partner = STATE.partners.find(p => p['협력사ID'] === pid);
   const name    = partner ? partner['협력사명'] : null;
   const rows    = STATE.kpi.filter(k =>
@@ -1020,6 +1020,18 @@ function getLatestKPI(pid) {
   );
   if (!rows.length) return null;
   return rows.sort((a,b) => _kpiDateOf(b) > _kpiDateOf(a) ? 1 : -1)[0];
+}
+
+// 실시간운행현황(STATE.realtimeKpi) 시트에서 협력사 한 행 — 오늘 스냅샷
+// 시트가 비어있거나 협력사 누락 시 데일리운영현황의 가장 최근 일자로 fallback
+function getRealtimeKPI(pid) {
+  const partner = STATE.partners.find(p => p['협력사ID'] === pid);
+  const name = partner ? partner['협력사명'] : null;
+  const rt = (STATE.realtimeKpi || []).find(k =>
+    k['협력사ID'] === pid || (name && k['협력사명'] === name)
+  );
+  if (rt) return rt;
+  return getLatestKPI(pid);   // fallback
 }
 
 function getKPIHistory(pid) {
@@ -1060,8 +1072,9 @@ function getPromoForPartner(pid) { return null; }
 
 // 위험도: 시간대별 슬롯 달성률 중 한 슬롯이라도 100% 미만이면 위험,
 //        모든 슬롯이 100% 이상이면 정상.
+//        실시간운행현황 시트 기반 (오늘 데이터)
 function getRiskLevel(p) {
-  const kpi = getLatestKPI(p['협력사ID']);
+  const kpi = getRealtimeKPI(p['협력사ID']);
   if (!kpi) return 'green';   // 데이터 없으면 일단 정상
 
   const sets = Number(kpi['신청세트수'] || kpi['세트수'] || p['현재세트수'] || 0);
@@ -1325,13 +1338,14 @@ function renderRealtime() {
   _updateSortIndicators('realtime', _RT_SORT_KEYS);
 
   const all = filtered;
-  const latestKPIs = all.map(p => getLatestKPI(p['협력사ID'])).filter(Boolean);
+  // 실시간운행현황 시트의 행을 사용 (없으면 데일리 최신으로 fallback)
+  const realtimeKPIs = all.map(p => getRealtimeKPI(p['협력사ID'])).filter(Boolean);
 
   // KPI 카드는 전체 (필터 적용 후 partners) 기준
-  const totalDel  = latestKPIs.reduce((s,k) => s+Number(k['총처리건수']||0), 0);
-  const totalAct  = latestKPIs.reduce((s,k) => s+Number(k['운행라이더수']||0), 0);
-  const totalJoin = latestKPIs.reduce((s,k) => s+Number(k['계약중라이더수']||k['가입라이더수']||0), 0);
-  const slaVals   = latestKPIs.map(k => {
+  const totalDel  = realtimeKPIs.reduce((s,k) => s+Number(k['총처리건수']||0), 0);
+  const totalAct  = realtimeKPIs.reduce((s,k) => s+Number(k['운행라이더수']||0), 0);
+  const totalJoin = realtimeKPIs.reduce((s,k) => s+Number(k['계약중라이더수']||k['가입라이더수']||0), 0);
+  const slaVals   = realtimeKPIs.map(k => {
     const v = k['SLA_수락률(%)'] !== undefined ? Number(k['SLA_수락률(%)']) : Number(k['SLA수락률(%)']||0)*100;
     return v;
   }).filter(v => v > 0);
@@ -1345,7 +1359,7 @@ function renderRealtime() {
   document.getElementById('rt-sla').textContent = avgSLA.toFixed(1)+'%';
   document.getElementById('rt-risk').textContent = riskCnt+'개';
 
-  const dates = latestKPIs.map(k=>k['일자']||k['주차시작일']).filter(Boolean).sort().reverse();
+  const dates = realtimeKPIs.map(k=>k['일자']||k['주차시작일']).filter(Boolean).sort().reverse();
   const el = document.getElementById('rt-date-label');
   if (el && dates.length) el.textContent = dates[0]+' 기준';
 
@@ -1361,7 +1375,7 @@ function renderRealtime() {
 
   // ── 레코드 빌드 ──
   const records = gradeFiltered.map(p => {
-    const kpi  = getLatestKPI(p['협력사ID']);
+    const kpi  = getRealtimeKPI(p['협력사ID']);   // 실시간 시트 사용
     const rLvl = getRiskLevel(p);
 
     const operArea  = (kpi && kpi['운영지역']) || p['권역명'] || '';
@@ -2492,7 +2506,8 @@ function openPartnerModal(pid) {
   _currentPartnerPID = pid;
   _currentPartnerTab = 'profile';
 
-  const kpi      = getLatestKPI(pid);
+  // 모달 헤더는 실시간 시트 기준 (오늘 세트수 등)
+  const kpi      = getRealtimeKPI(pid);
   const operArea = (kpi && kpi['운영지역']) || p['권역명'] || '';
   const region   = operArea.replace('표준서울','서울 ').replace('표준인천','인천 ');
   const grade    = p['등급'] || (kpi && kpi['등급']) || '-';
@@ -2517,11 +2532,12 @@ function openPartnerModal(pid) {
   document.getElementById('partnerModal').classList.add('open');
 }
 
-// ── Profile 탭 컨텐츠: 기본 정보 + 최신 KPI + 활동 로그 ──
+// ── Profile 탭 컨텐츠: 기본 정보 + 실시간 KPI + 활동 로그 ──
 function _renderPartnerProfile(body, pid) {
   const p = STATE.partners.find(x => x['협력사ID'] === pid);
   if (!p) return;
-  const kpi = getLatestKPI(pid);
+  // "실시간 운영 지표" 카드는 실시간운행현황 시트 기준
+  const kpi = getRealtimeKPI(pid);
   const operArea = (kpi && kpi['운영지역']) || p['권역명'] || '';
 
   // ── SECTION 1: 기본 정보 ────────────────────────
