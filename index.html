@@ -300,6 +300,20 @@ textarea.form-input{resize:vertical;min-height:60px}
   </div>
 </div>
 
+<!-- ── 로그인 게이트 (반드시 Google 로그인을 해야 대시보드 진입) ── -->
+<div id="loginGate" style="display:none;position:fixed;inset:0;background:#0f1923;z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:18px">
+  <div style="font-size:32px">🚀</div>
+  <div style="font-size:20px;font-weight:700;color:#e8edf2">3PL 협력사 프로파일</div>
+  <div style="font-size:13px;color:#8fa3b8;text-align:center;max-width:360px;line-height:1.6">
+    이 대시보드는 Google 계정 로그인이 필요합니다.<br>
+    구글 시트 데이터를 불러오고 활동 로그를 시트에 기록하기 위해 사용됩니다.
+  </div>
+  <button class="btn btn-primary" onclick="gsiLoginAndInit()" style="font-size:13px;padding:10px 24px;margin-top:6px">
+    🔑 Google 로그인
+  </button>
+  <div id="loginGate-error" style="display:none;color:#f87171;font-size:12px;margin-top:4px;max-width:360px;text-align:center"></div>
+</div>
+
 <div id="app" style="display:none">
   <div class="topbar">
     <div class="topbar-logo">🚀 <span>3PL</span> 협력사</div>
@@ -314,7 +328,6 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
       <button class="btn btn-ghost btn-sm" onclick="openSetup()" title="연결 설정">⚙</button>
       <button class="btn btn-sm" id="gsiBtn" onclick="gsiLogin()" style="background:#1e3a5f;color:#8fa3b8;border:1px solid #1e3048;font-size:11px">🔑 로그인</button>
-      <div class="region-badge" id="regionLabel">서울</div>
     </div>
   </div>
 
@@ -547,9 +560,19 @@ function initGSI() {
   if (typeof google === 'undefined' || !google.accounts) return;
   gsiTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: OAUTH_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     callback: (resp) => {
-      if (resp.error) { showToast('❌ 로그인 실패: ' + resp.error); return; }
+      if (resp.error) {
+        const gate = document.getElementById('loginGate');
+        const err  = document.getElementById('loginGate-error');
+        if (gate && gate.style.display !== 'none' && err) {
+          err.textContent = '로그인 실패: ' + resp.error;
+          err.style.display = 'block';
+        } else {
+          showToast('❌ 로그인 실패: ' + resp.error);
+        }
+        return;
+      }
       gsiAccessToken = resp.access_token;
       gsiTokenExpiry  = Date.now() + (resp.expires_in - 60) * 1000;
       updateGsiBtn(true);
@@ -559,9 +582,54 @@ function initGSI() {
       }).then(r => r.json()).then(info => {
         gsiUserName = info.name || info.email || '';
       }).catch(() => {});
-      showToast('✓ Google 로그인 완료 — 활동로그가 시트에 자동 저장됩니다');
+
+      // 로그인 게이트가 보이는 상태였다면 → 게이트 닫고 대시보드 init() 실행
+      const gate = document.getElementById('loginGate');
+      if (gate && gate.style.display !== 'none') {
+        gate.style.display = 'none';
+        document.getElementById('loading').style.display = 'flex';
+        showToast('✓ Google 로그인 완료');
+        init();
+      } else {
+        showToast('✓ Google 로그인 완료 — 활동로그가 시트에 자동 저장됩니다');
+      }
     },
   });
+}
+
+// 로그인 게이트 버튼 — gsi 라이브러리 준비 후 OAuth 토큰 요청
+function gsiLoginAndInit() {
+  const err = document.getElementById('loginGate-error');
+  if (err) err.style.display = 'none';
+  if (!gsiTokenClient) {
+    let attempts = 0;
+    const wait = setInterval(() => {
+      attempts++;
+      initGSI();
+      if (gsiTokenClient) {
+        clearInterval(wait);
+        gsiTokenClient.requestAccessToken();
+      } else if (attempts > 20) {
+        clearInterval(wait);
+        if (err) {
+          err.textContent = 'Google 인증 라이브러리 로드 실패 — 페이지를 새로고침해 주세요';
+          err.style.display = 'block';
+        }
+      }
+    }, 300);
+    return;
+  }
+  gsiTokenClient.requestAccessToken();
+}
+
+// 로그인 게이트 표시 (대시보드 데이터 로딩 차단)
+function showLoginGate() {
+  document.getElementById('loading').style.display = 'none';
+  const app = document.getElementById('app');
+  if (app) app.style.display = 'none';
+  const sp  = document.getElementById('setupPanel');
+  if (sp)  sp.style.display = 'none';
+  document.getElementById('loginGate').style.display = 'flex';
 }
 
 function gsiLogin() {
@@ -578,11 +646,14 @@ function gsiLogin() {
     return;
   }
   if (gsiAccessToken && Date.now() < gsiTokenExpiry) {
-    // 이미 로그인됨 → 로그아웃
+    // 이미 로그인됨 → 로그아웃 후 로그인 게이트로 복귀
     google.accounts.oauth2.revoke(gsiAccessToken, () => {});
     gsiAccessToken = null; gsiTokenExpiry = 0;
+    gsiUserName = '';
     updateGsiBtn(false);
+    if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
     showToast('로그아웃됨');
+    showLoginGate();
   } else {
     gsiTokenClient.requestAccessToken();
   }
@@ -844,6 +915,11 @@ function setLoadingProgress(pct, msg) {
 }
 
 async function init() {
+  // 로그인 필수 — 토큰 없으면 게이트로
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) {
+    showLoginGate();
+    return;
+  }
   if (!CONFIG.isReady) { showSetupPanel(); return; }
   setLoadingProgress(10, '협력사 데이터 로딩 중...');
   try {
@@ -884,6 +960,14 @@ async function init() {
     STATE.promo        = [];
     STATE.pipeline     = [];
 
+    // 시트에 이미 올라간 로컬 로그(같은 로그ID)는 로컬에서 정리 → "로컬" 뱃지 중복 방지
+    try {
+      const sheetIds = new Set((STATE.logs||[]).map(v => v['로그ID']).filter(Boolean));
+      const locals = loadLocalLogs();
+      const remained = locals.filter(l => !sheetIds.has(l.id));
+      if (remained.length !== locals.length) saveLocalLogs(remained);
+    } catch (_) {}
+
     setLoadingProgress(100, '완료');
     boot();
     showToast('✓ 최신 데이터 로딩 완료');
@@ -922,7 +1006,6 @@ function boot() {
   }
   document.getElementById('loading').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
-  document.getElementById('regionLabel').textContent = '서울';
   startAutoRefresh();
 }
 
@@ -2992,11 +3075,12 @@ function renderVOCLogItem(v, pid) {
 }
 
 // ── 활동로그 시트 저장 (OAuth 우선 → Apps Script fallback) ──
+// 시트 저장 성공 시 true, 실패/미저장 시 false 반환
 async function pushLogToScript(log) {
   // 1순위: OAuth 토큰으로 Sheets API 직접 쓰기 (가장 빠르고 안정적)
   if (gsiAccessToken && Date.now() < gsiTokenExpiry) {
     const ok = await writeLogWithOAuth(log);
-    if (ok) return;
+    if (ok) return true;
   }
 
   // 2순위: Apps Script google.script.run (Apps Script URL로 접속 시)
@@ -3011,11 +3095,25 @@ async function pushLogToScript(log) {
         summary: log.summary || '', actionItem: log.action || '',
         status: log.status || '미완료', person: log.person || '',
       });
-    return;
+    return true;
   }
 
   // 토큰 없으면 로그인 유도
   showToast('⚠ 시트 저장하려면 상단 🔑 로그인 버튼을 눌러주세요');
+  return false;
+}
+
+// 활동로그 시트만 다시 가져와 STATE.logs 갱신 (모달 닫지 않고 부분 새로고침)
+async function refreshActivityLogs() {
+  if (!CONFIG.isReady) return;
+  try {
+    const logVals = await fetchSheet('활동로그', 'A:K');
+    STATE.logs = parseSheet(logVals, 1, 3);
+    return true;
+  } catch (e) {
+    console.warn('활동로그 새로고침 실패:', e);
+    return false;
+  }
 }
 
 function submitLocalLog(pid) {
@@ -3034,8 +3132,19 @@ function submitLocalLog(pid) {
   });
 
   if (gsiAccessToken && Date.now() < gsiTokenExpiry) {
-    pushLogToScript(log);
     showToast('✓ 저장됨 — 시트에 기록 중...');
+    // 시트에 push → 성공 시 로컬 복사본 제거 + 시트 데이터 다시 불러와 "로컬" 뱃지 사라지게
+    (async () => {
+      const ok = await pushLogToScript(log);
+      if (ok) {
+        deleteLocalLog(log.id);
+        await refreshActivityLogs();
+        renderVOCList(pid);
+        showToast('✓ 시트 동기화 완료');
+      } else {
+        showToast('⚠ 시트 저장 실패 — 로컬에만 저장됨');
+      }
+    })();
   } else {
     pushLogToScript(log); // Apps Script 환경이면 자동 처리
     showToast('✓ 로컬 저장됨 — 시트 저장하려면 🔑 로그인');
@@ -3228,7 +3337,7 @@ function showToast(msg) {
   setTimeout(()=>t.classList.remove('show'), 2800);
 }
 
-window.addEventListener('load', init);
+window.addEventListener('load', showLoginGate);
 </script>
 </body>
 </html>
