@@ -607,13 +607,21 @@ function updateGsiBtn(loggedIn) {
 async function writeLogWithOAuth(log) {
   if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) return false;
   const p = STATE.partners.find(x => x['협력사ID'] === log.pid || x['협력사명'] === log.pid);
+  // 시트 컬럼 순서(11열): 로그ID, 날짜, 권역명, 협력사ID, 협력사명, 유형, 접촉방식, 담당자, 내용요약, 액션항목, 상태
   const row = [
-    log.id || '', log.pid || '', p ? p['협력사명'] : log.pid,
-    log.date || log.createdAt || '', log.type || '',
-    log.summary || '', log.action || '',
-    log.status || '미완료', log.person || '',
+    log.id || '',
+    log.date || log.createdAt || '',
+    p ? p['권역명'] : '',
+    log.pid || '',
+    p ? p['협력사명'] : log.pid,
+    log.type || '',
+    log.method || '',
+    log.person || '',
+    log.summary || '',
+    log.action || '',
+    log.status || '미완료',
   ];
-  const range = encodeURIComponent('활동로그!A:I');
+  const range = encodeURIComponent('활동로그!A:K');
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${range}:append?valueInputOption=RAW`;
   try {
     const res = await fetch(url, {
@@ -845,21 +853,33 @@ async function init() {
       fetchSheet('협력사기본정보',     'A:L'),    // 12열
       fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표_* 4컬럼 포함)
       fetchSheet('실시간운행현황',     'A:T'),    // 20열 (목표_* 4컬럼 포함)
-      fetchSheet('활동로그',           'A:J'),    // 10열
-      fetchSheet('RGN2_담당자',        'A:B'),    // 2열
+      fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
+      fetchSheet('RGN2_담당자',        'A:C'),    // 3열 (RGN2, 담당자, 변경일시)
       fetchSheet('RGN2_3PL처리비중',   'A:B'),    // 2열
     ]);
     STATE.partners     = parseSheet(partnerVals,  1, 2);
     const allKPI       = parseSheet(kpiVals, 1, 2);
     STATE.kpi          = filterKPIRecent(allKPI, 8);
-    // 실시간운행현황은 현재 KPI 시계열의 최신 행과 같은 정보를 제공 — 아직 사용처는 KPI 기반이지만 향후 분리 가능
     STATE.realtimeKpi  = parseSheet(realtimeVals, 1, 2);
     STATE.logs         = parseSheet(logVals, 1, 3);    // 활동로그는 가이드 행 있음
+
     // 키-값 시트 → 객체로 변환
-    const mgrRows      = parseSheet(mgrVals, 1, 2);
-    STATE.rgn2Managers = mgrRows.reduce((m, r) => { if (r['RGN2']) m[r['RGN2']] = r['담당자'] || ''; return m; }, {});
-    const tplRows      = parseSheet(tplVals, 1, 2);
-    STATE.tpl3Share    = tplRows.reduce((m, r) => { if (r['RGN2']) m[r['RGN2']] = Number(r['비중']) || 0; return m; }, {});
+    // RGN2_담당자: 이력 누적 형태 (변경일시 컬럼 있으면 시간순 정렬 후 마지막 값이 현재 매핑)
+    const mgrRows = parseSheet(mgrVals, 1, 2);
+    if (mgrRows.length && mgrRows[0]['변경일시'] !== undefined) {
+      mgrRows.sort((a,b) => String(a['변경일시']||'').localeCompare(String(b['변경일시']||'')));
+    }
+    STATE.rgn2Managers = mgrRows.reduce((m, r) => {
+      if (r['RGN2']) m[r['RGN2']] = r['담당자'] || '';
+      return m;
+    }, {});
+
+    // RGN2_3PL처리비중: 셀이 % 형식("42.0%")이면 NaN이 되므로 _parsePercent로 정규화
+    const tplRows  = parseSheet(tplVals, 1, 2);
+    STATE.tpl3Share = tplRows.reduce((m, r) => {
+      if (r['RGN2']) m[r['RGN2']] = _parsePercent(r['비중']);
+      return m;
+    }, {});
     STATE.settings     = {};
     STATE.promo        = [];
     STATE.pipeline     = [];
@@ -903,6 +923,23 @@ function boot() {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('regionLabel').textContent = '서울';
+  startAutoRefresh();
+}
+
+// ── 5분 자동 새로고침 (모달이 열려 있으면 skip) ────────────────
+let _autoRefreshTimer = null;
+function startAutoRefresh() {
+  if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  _autoRefreshTimer = setInterval(() => {
+    if (!CONFIG.isReady) return;
+    // 어떤 모달이라도 열려 있으면 사용자 작업 방해 금지
+    const open = document.querySelectorAll('.modal-overlay.open');
+    if (open.length > 0) return;
+    // 사용자가 활동 로그 작성 폼을 열어둔 경우도 skip
+    const formOpen = document.getElementById('new-log-form-wrap');
+    if (formOpen && formOpen.style.display !== 'none') return;
+    init();   // 시트 다시 fetch + 화면 다시 렌더
+  }, 5 * 60 * 1000);   // 5분
 }
 
 // ═══════════════════════════════════════════════════
@@ -1006,7 +1043,10 @@ function getLogsForPartner(pid) {
 }
 
 function getPendingLogs(pid) {
-  return getLogsForPartner(pid).filter(v => v['액션완료'] !== '✅완료');
+  return getLogsForPartner(pid).filter(v => {
+    const st = v['상태'] || v['액션완료'] || '';
+    return st !== '완료' && st !== '✅완료';
+  });
 }
 
 function _kpiDateOf(k) { return k['일자'] || k['주차시작일'] || ''; }
@@ -1114,6 +1154,19 @@ function getRGN2(operArea) {
   return operArea.replace(/^표준(?:서울|인천|경기|부산)/,'').replace(/[A-Z]+$/,'') || operArea;
 }
 
+// "42%", "42.0%", 0.42, 42, "0.42" 어느 형식이든 0~1 비율로 정규화
+function _parsePercent(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') {
+    return v > 1 ? v / 100 : v;   // 0.42 그대로, 42 → 0.42
+  }
+  // 문자열: "%" 제거 후 숫자 파싱
+  const s = String(v).replace(/[%\s,]/g, '').trim();
+  const n = Number(s);
+  if (!isFinite(n)) return 0;
+  return n > 1 ? n / 100 : n;
+}
+
 // RGN2별 3PL처리비중 조회 (별도 시트로 관리; 미등록 시 null 반환)
 function get3PLShare(rgn2) {
   if (!rgn2 || rgn2 === '-') return null;
@@ -1137,10 +1190,46 @@ function getManagerForRGN2(rgn2, fallback) {
 function _saveRgn2Manager(rgn2, value) {
   if (!rgn2 || rgn2 === '-') return;
   STATE.rgn2Managers = STATE.rgn2Managers || {};
-  STATE.rgn2Managers[rgn2] = (value || '').trim();
+  const newVal  = (value || '').trim();
+  const prevVal = STATE.rgn2Managers[rgn2] || '';
+  STATE.rgn2Managers[rgn2] = newVal;
   // 같은 RGN2의 다른 협력사 모달에도 반영되도록 현재 모달 다시 렌더
   if (typeof _renderPartnerTabBody === 'function' && _currentPartnerPID) _renderPartnerTabBody();
-  if (typeof showToast === 'function') showToast(`${rgn2} 담당 매니저 저장됨`);
+  // 시트에 변경 이력 누적 (값이 실제로 바뀌었을 때만)
+  if (newVal !== prevVal) {
+    appendRgn2ManagerWithOAuth(rgn2, newVal).then(ok => {
+      if (typeof showToast !== 'function') return;
+      if (ok)        showToast(`${rgn2} 담당 매니저 저장됨 (시트 누적)`);
+      else if (gsiAccessToken) showToast(`${rgn2} 저장됨 — 시트 기록 실패`);
+      else           showToast(`${rgn2} 저장됨 — 🔑 로그인 시 시트에 누적됩니다`);
+    });
+  } else if (typeof showToast === 'function') {
+    showToast(`${rgn2} 담당 매니저 저장됨`);
+  }
+}
+
+// RGN2 담당자 변경 이력을 시트에 append (값 + 변경일시)
+async function appendRgn2ManagerWithOAuth(rgn2, manager) {
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) return false;
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const ts  = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} `
+            + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const row = [rgn2, manager, ts];
+  const range = encodeURIComponent('RGN2_담당자!A:C');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}`
+            + `/values/${range}:append?valueInputOption=RAW`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] }),
+    });
+    return res.ok;
+  } catch(e) {
+    console.warn('RGN2 담당자 시트 기록 실패:', e);
+    return false;
+  }
 }
 
 // 협력사 '주요 애로사항' 갱신 (모달의 textarea에서 호출)
@@ -1960,52 +2049,38 @@ function _chartVolumeSLA(labels, volumes, slas) {
     grid += `<text x="${w-padR+6}" y="${y+3}" font-size="9.5" fill="#fbbf24" text-anchor="start">${val}%</text>`;
   }
 
-  // Bars — rect만 (호버 그룹)
-  const barRects = volumes.map((v,i) => {
+  // 바 + 바 라벨 — 같은 chart-hov g (호버 시 라벨도 함께 강조)
+  const bars = volumes.map((v,i) => {
     const x = xFor(i) - barW/2;
     const bh = (v/maxV) * chartH;
     const y = padT + chartH - bh;
+    const inside = bh >= 26;
+    const labelY = inside ? y + 14 : y - 5;
+    const labelFill = inside ? '#ffffff' : '#e8edf2';
     return `<g class="chart-hov" color="#3b82f6">
       <rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="#3b82f6" opacity="0.85" rx="2"/>
+      <text x="${x+barW/2}" y="${labelY}" font-size="9.5" fill="${labelFill}" text-anchor="middle" font-weight="700"
+            stroke="#0d1923" stroke-width="2.5" paint-order="stroke">${v.toLocaleString()}</text>
     </g>`;
   }).join('');
 
-  // SLA line + 점만 (호버 그룹) — 라벨은 따로
+  // SLA 선 (호버 영향 받지 않음)
   const slaPts = slas.map((s,i) => {
     const x = xFor(i);
     const y = padT + chartH - (Math.min(100, Math.max(0, s))/100) * chartH;
     return `${x},${y}`;
   });
   const slaLine = `<polyline points="${slaPts.join(' ')}" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linejoin="round" pointer-events="none"/>`;
+
+  // SLA 점 + SLA 라벨 — 같은 chart-hov g
   const slaPoints = slas.map((s,i) => {
     const x = xFor(i);
     const y = padT + chartH - (Math.min(100, Math.max(0, s))/100) * chartH;
     return `<g class="chart-hov" color="#fbbf24">
       <circle cx="${x}" cy="${y}" r="3" fill="#0d1825" stroke="#fbbf24" stroke-width="2"/>
+      <text x="${x}" y="${y-9}" font-size="9" fill="#fbbf24" text-anchor="middle" font-weight="600"
+            stroke="#0d1923" stroke-width="3" paint-order="stroke">${s ? s.toFixed(1) : '-'}</text>
     </g>`;
-  }).join('');
-
-  // 데이터 라벨은 별도 레이어로 모두 마지막에 렌더 (SLA 위로 떠야 보임)
-  // paint-order=stroke 로 짙은 외곽선 → 어떤 배경 위에서도 가독성 확보
-  //
-  // 바 라벨은 SLA 라벨과 영역이 겹치지 않도록 *바 안쪽 상단*에 배치
-  //   - 바 길이 ≥ 26px : 바 안쪽 위 (흰색)
-  //   - 바 길이 <  26px : 바 위 (밝은 회색) — fallback
-  const barValueLabels = volumes.map((v,i) => {
-    const x = xFor(i);
-    const bh = (v/maxV) * chartH;
-    const y = padT + chartH - bh;
-    const inside = bh >= 26;
-    const labelY = inside ? y + 14 : y - 5;
-    const labelFill = inside ? '#ffffff' : '#e8edf2';
-    return `<text x="${x}" y="${labelY}" font-size="9.5" fill="${labelFill}" text-anchor="middle" font-weight="700"
-            stroke="#0d1923" stroke-width="2.5" paint-order="stroke" pointer-events="none">${v.toLocaleString()}</text>`;
-  }).join('');
-  const slaValueLabels = slas.map((s,i) => {
-    const x = xFor(i);
-    const y = padT + chartH - (Math.min(100, Math.max(0, s))/100) * chartH;
-    return `<text x="${x}" y="${y-9}" font-size="9" fill="#fbbf24" text-anchor="middle" font-weight="600"
-            stroke="#0d1923" stroke-width="3" paint-order="stroke" pointer-events="none">${s ? s.toFixed(1) : '-'}</text>`;
   }).join('');
 
   // X labels
@@ -2024,10 +2099,10 @@ function _chartVolumeSLA(labels, volumes, slas) {
       <text x="114" y="9" font-size="10" fill="#c5d5e5">수락률(%)</text>
     </g>`;
 
-  // 렌더 순서: 격자 → 바 rect → SLA 선 → SLA 점 → (최상위) 라벨들 → x축 라벨
-  // 라벨이 마지막이라 SLA 선/점 위에 그려져 더 이상 가려지지 않음
+  // 렌더 순서: 격자 → 바(rect+라벨 g) → SLA 선 → SLA 점(circle+라벨 g) → x축 라벨
+  // 호버 시 같은 g 안의 라벨도 함께 강조됨
   return _svgFrame('처리건수 · 수락률', w, h,
-    legend + grid + barRects + slaLine + slaPoints + barValueLabels + slaValueLabels + xlabels);
+    legend + grid + bars + slaLine + slaPoints + xlabels);
 }
 
 // 멀티라인 차트 (슬롯 달성률 — 전체+4개 시간대)
@@ -2364,9 +2439,11 @@ function _renderPerfWeekly(body, hist, tgt) {
     const riderAct  = w.riderActAvg  || 0;
     const riderJoin = w.riderJoinAvg || 0;
     const actShare  = riderJoin ? (riderAct/riderJoin)*100 : 0;
+    const setsTxt   = w.sets ? w.sets.toFixed(1) : '-';
     return `<tr>
       <td style="font-weight:700;padding:9px 6px;color:#60a5fa;white-space:nowrap">${_formatWeek(w.week)}
         <span style="color:#4b6278;font-size:10px;margin-left:4px">(${w.days}일)</span></td>
+      <td style="text-align:center;color:#c5d5e5">${setsTxt}</td>
       <td style="text-align:center;font-weight:700;color:#e8edf2">${w.totalVol.toLocaleString()}</td>
       ${volTd(w.amVol)}
       ${volTd(w.pmVol)}
@@ -2382,10 +2459,11 @@ function _renderPerfWeekly(body, hist, tgt) {
     <div class="modal-section">
       <div class="modal-section-title">📅 주차별 세부 지표 <span style="color:#4b6278;font-size:11px;font-weight:400;margin-left:6px">최근 ${weeks.length}주</span></div>
       <div class="table-wrap table-scroll">
-        <table class="data-table" style="min-width:900px">
+        <table class="data-table" style="min-width:960px">
           <thead>
             <tr>
               <th rowspan="2" style="padding:9px 6px">주차</th>
+              <th rowspan="2" class="center">세트수<br><span style="font-size:10px;font-weight:400">(평균)</span></th>
               <th rowspan="2" class="center">전체<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
               <th colspan="4" class="center slot-group">시간대별 처리건수</th>
               <th rowspan="2" class="center">수락률</th>
@@ -2445,6 +2523,7 @@ function _renderPerfDaily(body, hist, tgt) {
     const pmVol = Number(r['오후논피크_물량']||0);
     const evVol = Number(r['저녁피크_물량']||0);
     const niVol = Number(r['심야논피크_물량']||0);
+    const sets  = Number(r['신청세트수']||r['세트수']||0);
     const sla   = _slaOf(r);
     const riderJoin = Number(r['계약중라이더수']||r['가입라이더수']||0);
     const riderAct  = Number(r['운행라이더수']||0);
@@ -2455,6 +2534,7 @@ function _renderPerfDaily(body, hist, tgt) {
     return `<tr>
       <td style="white-space:nowrap;padding:9px 6px;font-weight:600;color:${dateColor}">${date}
         <span style="color:#8fa3b8;font-weight:400;margin-left:4px">(${dow})</span></td>
+      <td style="text-align:center;color:#c5d5e5">${sets || '-'}</td>
       <td style="text-align:center;font-weight:700;color:#e8edf2">${totalVol.toLocaleString()}</td>
       ${volTd(amVol)}
       ${volTd(pmVol)}
@@ -2692,9 +2772,17 @@ function _renderPartnerProfile(body, pid) {
             </div>
           </div>
           <div class="form-row">
-            <div class="form-group full">
+            <div class="form-group">
               <label class="form-label">액션 항목</label>
               <input class="form-input" id="voc-new-action" placeholder="후속 행동 계획">
+            </div>
+            <div class="form-group">
+              <label class="form-label">상태</label>
+              <select class="form-input" id="voc-new-status">
+                <option>미완료</option>
+                <option>진행중</option>
+                <option>완료</option>
+              </select>
             </div>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
@@ -2796,7 +2884,7 @@ function renderVOCList(pid) {
       _src:'sheets', _id:v['로그ID'],
       date: v['날짜'], type: v['유형'], method: v['접촉방식'],
       person: v['담당자'], summary: v['내용요약'], action: v['액션항목'],
-      status: v['액션완료']||'미완료'
+      status: v['상태'] || v['액션완료'] || '미완료'
     })),
     ...localLogs.map(v => ({
       _src:'local', _id:v.id,
@@ -2816,12 +2904,22 @@ function renderVOCLogItem(v, pid) {
   const src = v._src === 'local'
     ? '<span style="font-size:9px;background:#1e3a5f;color:#60a5fa;padding:1px 4px;border-radius:3px;margin-left:4px">로컬</span>'
     : '';
+  // 상태 뱃지 (완료=초록, 진행중=노랑, 미완료=회색)
+  const stRaw = (v.status || '미완료').replace('✅','').trim();
+  const stStyle = stRaw === '완료'
+      ? 'background:#14532d;color:#4ade80'
+    : stRaw === '진행중'
+      ? 'background:#5b4318;color:#fbbf24'
+      : 'background:#243240;color:#8fa3b8';
+  const stLabel = stRaw === '완료' ? '✅ 완료' : stRaw;
+  const statusBadge = `<span style="font-size:9.5px;${stStyle};padding:2px 6px;border-radius:3px;margin-left:4px;font-weight:600">${stLabel}</span>`;
   return `<div class="voc-log-item ${typeClass}" id="vocitem-${v._id}">
     <div class="voc-log-meta">
       <span class="voc-log-type">${v.type||'-'}</span>
       <span class="voc-log-date">${v.date||''}</span>
       ${v.method?`<span style="font-size:10px;color:#8fa3b8">${v.method}</span>`:''}
       ${v.person?`<span class="voc-log-person">${v.person}</span>`:''}
+      ${statusBadge}
       ${src}
     </div>
     <div class="voc-log-summary">${v.summary||''}</div>
@@ -2923,6 +3021,7 @@ async function pushLogToScript(log) {
 function submitLocalLog(pid) {
   const summary = document.getElementById('voc-new-summary').value.trim();
   if (!summary) { showToast('내용 요약을 입력해주세요'); return; }
+  const stEl = document.getElementById('voc-new-status');
   const log = addLocalLog({
     pid,
     date:    document.getElementById('voc-new-date').value,
@@ -2931,7 +3030,7 @@ function submitLocalLog(pid) {
     person:  document.getElementById('voc-new-person').value,
     summary,
     action:  document.getElementById('voc-new-action').value,
-    status:  '미완료'
+    status:  stEl ? stEl.value : '미완료'
   });
 
   if (gsiAccessToken && Date.now() < gsiTokenExpiry) {
@@ -2952,14 +3051,20 @@ function submitLogToSheet(pid) {
   const summary = document.getElementById('voc-new-summary').value.trim();
   if (!summary) { showToast('내용 요약을 입력해주세요'); return; }
   submitLocalLog(pid);
+  const stEl = document.getElementById('voc-new-status');
+  // 시트 컬럼 순서(11열): 로그ID, 날짜, 권역명, 협력사ID, 협력사명, 유형, 접촉방식, 담당자, 내용요약, 액션항목, 상태
   const clip = [
+    '', // 로그ID는 시트에서 자동 부여 가정
     document.getElementById('voc-new-date').value,
-    p?p['권역명']:'', pid, p?p['협력사명']:pid, '기존',
+    p?p['권역명']:'',
+    pid,
+    p?p['협력사명']:pid,
     document.getElementById('voc-new-type').value,
     document.getElementById('voc-new-method').value,
     document.getElementById('voc-new-person').value,
     summary,
-    document.getElementById('voc-new-action').value
+    document.getElementById('voc-new-action').value,
+    stEl ? stEl.value : '미완료'
   ].join('\t');
   navigator.clipboard.writeText(clip).catch(()=>{});
   if (CONFIG.sheetUrl) window.open(CONFIG.sheetUrl,'_blank');
