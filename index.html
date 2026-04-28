@@ -675,8 +675,14 @@ function updateGsiBtn(loggedIn) {
   }
 }
 
+// 마지막 OAuth 쓰기 에러 (디버깅 용)
+let _lastOAuthWriteError = '';
+
 async function writeLogWithOAuth(log) {
-  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) return false;
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) {
+    _lastOAuthWriteError = '로그인 필요 — 액세스 토큰 만료';
+    return false;
+  }
   const p = STATE.partners.find(x => x['협력사ID'] === log.pid || x['협력사명'] === log.pid);
   // 시트 컬럼 순서(11열): 로그ID, 날짜, 권역명, 협력사ID, 협력사명, 유형, 접촉방식, 담당자, 내용요약, 액션항목, 상태
   const row = [
@@ -700,9 +706,19 @@ async function writeLogWithOAuth(log) {
       headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ values: [row] }),
     });
-    return res.ok;
+    if (!res.ok) {
+      // API 에러 본문을 파싱해 정확한 원인 추출
+      const errBody = await res.json().catch(() => ({}));
+      const apiMsg  = errBody?.error?.message || res.statusText || `HTTP ${res.status}`;
+      _lastOAuthWriteError = `[${res.status}] ${apiMsg}`;
+      console.error('OAuth 시트 쓰기 실패:', _lastOAuthWriteError, errBody);
+      return false;
+    }
+    _lastOAuthWriteError = '';
+    return true;
   } catch(e) {
-    console.warn('OAuth 쓰기 실패:', e);
+    _lastOAuthWriteError = '네트워크 오류: ' + (e?.message || e);
+    console.error('OAuth 쓰기 예외:', e);
     return false;
   }
 }
@@ -3142,7 +3158,8 @@ function submitLocalLog(pid) {
         renderVOCList(pid);
         showToast('✓ 시트 동기화 완료');
       } else {
-        showToast('⚠ 시트 저장 실패 — 로컬에만 저장됨');
+        const detail = _lastOAuthWriteError || '알 수 없는 오류';
+        showToast('⚠ 시트 저장 실패 — ' + detail);
       }
     })();
   } else {
