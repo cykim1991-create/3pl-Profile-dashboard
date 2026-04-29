@@ -11,18 +11,19 @@
   --accent: #3b82f6;
   --accent-soft: #60a5fa;
   --accent-bg: #1e3a5f;
-  /* ── 다크 모드 (기본) ── */
-  --bg-page:        var(--bg-page);
-  --bg-card:        var(--bg-card);
-  --bg-section:     var(--bg-section);
-  --bg-input:       var(--bg-section);
-  --bg-input-2:     var(--bg-input-2);
-  --bg-row-tint:    var(--bg-row-tint);
+  /* ── 다크 모드 (기본 — 테마 도입 전 디자인과 동일) ── */
+  --bg-page:        #0f1923;
+  --bg-card:        #111d2b;
+  --bg-section:     #0d1825;
+  --bg-section-2:   #0a131c;
+  --bg-input:       #0d1825;
+  --bg-input-2:     #0f1a26;
+  --bg-row-tint:    #0a1d35;
   --bg-frame:       #0d1923;
-  --bg-filter:      var(--bg-filter);
+  --bg-filter:      #1a2d42;
   --bg-row-risk-red:    #180808;
   --bg-row-risk-yellow: #181200;
-  --border:         var(--border);
+  --border:         #1e3048;
   --border-soft:    #243240;
   --text-strong:    #ffffff;
   --text-primary:   #e8edf2;
@@ -94,8 +95,8 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .section-title{font-size:14px;font-weight:600;color:var(--text-primary)}
 .section-actions{display:flex;gap:8px;align-items:center}
 .btn{padding:6px 12px;border:none;border-radius:6px;font-size:12px;font-weight:500;transition:all .15s}
-.btn-primary{background:#2563eb;color:var(--text-strong)}
-.btn-primary:hover{background:#1d4ed8}
+.btn-primary{background:#2563eb;color:#ffffff}
+.btn-primary:hover{background:#1d4ed8;color:#ffffff}
 .btn-ghost{background:var(--bg-filter);color:var(--text-secondary);border:1px solid var(--border)}
 .btn-ghost:hover{background:var(--border);color:var(--text-primary)}
 .btn-sm{padding:4px 8px;font-size:11px}
@@ -511,14 +512,14 @@ textarea.form-input{resize:vertical;min-height:60px}
   <!-- 우측 하단 floating action button — 지역 담당자 관리 -->
   <button id="rgn2ManagerFab" onclick="openRgn2ManagerModal()" title="지역 담당자 관리"
           style="position:fixed;right:24px;bottom:24px;z-index:50;
-                 background:var(--accent-bg);color:var(--accent-soft);
+                 background:var(--accent);color:#ffffff;
                  border:1px solid var(--accent);border-radius:24px;
                  padding:11px 18px;font-size:12.5px;font-weight:600;
-                 cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);
+                 cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);
                  font-family:inherit;display:inline-flex;align-items:center;gap:7px;
                  transition:transform .12s,background .15s"
-          onmouseover="this.style.background='#1e4a7a';this.style.transform='translateY(-1px)'"
-          onmouseout="this.style.background='var(--accent-bg)';this.style.transform='translateY(0)'">
+          onmouseover="this.style.background='#1d4ed8';this.style.transform='translateY(-1px)'"
+          onmouseout="this.style.background='var(--accent)';this.style.transform='translateY(0)'">
     <span>🧑‍💼</span><span>지역 담당자 관리</span>
   </button>
 </div><!-- /app -->
@@ -2030,8 +2031,8 @@ function renderRealtime() {
 
   document.getElementById('rt-delivery').textContent = totalDel.toLocaleString()+'건';
   document.getElementById('rt-delivery-sub').textContent = `${all.length}개 협력사 합산`;
-  document.getElementById('rt-riders').textContent = totalAct+'명';
-  document.getElementById('rt-riders-sub').textContent = totalJoin ? `계약 ${totalJoin}명 중 운행` : '운행 라이더 합산';
+  document.getElementById('rt-riders').textContent = totalAct.toLocaleString()+'명';
+  document.getElementById('rt-riders-sub').textContent = totalJoin ? `계약 ${totalJoin.toLocaleString()}명 중 운행` : '운행 라이더 합산';
   document.getElementById('rt-sla').textContent = avgSLA.toFixed(1)+'%';
   document.getElementById('rt-risk').textContent = riskCnt+'개';
 
@@ -2145,8 +2146,8 @@ function renderRealtime() {
       <td style="color:var(--text-muted);font-size:11px">${r.p['협력사ID']}</td>
       <td style="color:var(--text-secondary);font-size:11px">${r.contractType}</td>
       <td>${getGradeBadge(r.grade)}</td>
-      <td style="text-align:center;color:var(--accent-soft);font-weight:600">${r.riderJoinN || '-'}</td>
-      <td style="text-align:center;color:#4ade80;font-weight:600">${r.riderActN || '-'}</td>
+      <td style="text-align:center;color:var(--accent-soft);font-weight:600">${r.riderJoinN ? r.riderJoinN.toLocaleString() : '-'}</td>
+      <td style="text-align:center;color:#4ade80;font-weight:600">${r.riderActN ? r.riderActN.toLocaleString() : '-'}</td>
       <td style="text-align:center;color:var(--text-secondary)">${r.setsN || '-'}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.kpi?r.totalVolN.toLocaleString():'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.amVol,r.setsN,r.tgt.am):'-'}</td>
@@ -2604,9 +2605,11 @@ function _sparkline(values, color) {
 
 // 공통 SVG 프레임 빌더
 function _svgFrame(title, w, h, inner) {
+  const TC = _themeTextColors();
+  // 제목은 진한 톤 (라이트=짙은 슬레이트, 다크=거의 흰색)
   return `<svg class="chart-svg" width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
             style="display:block;font-family:inherit">
-    <text x="12" y="18" font-size="12" font-weight="700" fill="#e8edf2">${title}</text>
+    <text x="12" y="18" font-size="13" font-weight="700" fill="${TC.primary}">${title}</text>
     ${inner}
   </svg>`;
 }
@@ -2621,9 +2624,32 @@ function _accentColors() {
   };
 }
 
+// 테마별 텍스트 색상 (SVG fill용 — CSS var 미지원)
+function _themeTextColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return {
+    primary:   (cs.getPropertyValue('--text-primary')   || '').trim() || '#e8edf2',
+    cell:      (cs.getPropertyValue('--text-cell')      || '').trim() || '#c5d5e5',
+    secondary: (cs.getPropertyValue('--text-secondary') || '').trim() || '#8fa3b8',
+    muted:     (cs.getPropertyValue('--text-muted')     || '').trim() || '#4b6278',
+  };
+}
+// 테마별 배경/보더 색상 (SVG stroke/fill 속성용)
+function _themeBgColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return {
+    page:    (cs.getPropertyValue('--bg-page')    || '').trim() || '#0f1923',
+    card:    (cs.getPropertyValue('--bg-card')    || '').trim() || '#111d2b',
+    section: (cs.getPropertyValue('--bg-section') || '').trim() || '#0d1825',
+    border:  (cs.getPropertyValue('--border')     || '').trim() || '#1e3048',
+  };
+}
+
 // 바+라인 콤보 (처리건수 bar + 수락률 line)
 function _chartVolumeSLA(labels, volumes, slas) {
   const AC = _accentColors();
+  const TC = _themeTextColors();
+  const BC = _themeBgColors();
   const w = 900, h = 280;
   const padL = 50, padR = 50, padT = 64, padB = 38;
   const chartW = w - padL - padR;
@@ -2640,8 +2666,8 @@ function _chartVolumeSLA(labels, volumes, slas) {
   for (let t = 0; t <= ticks; t++) {
     const y = padT + chartH - (t/ticks) * chartH;
     const val = Math.round((t/ticks) * maxV);
-    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
-             <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="#4b6278" text-anchor="end">${val.toLocaleString()}</text>`;
+    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${BC.border}" stroke-width="1"/>
+             <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="${TC.muted}" text-anchor="end">${val.toLocaleString()}</text>`;
   }
   // Right axis (SLA 0-100)
   for (let t = 0; t <= ticks; t++) {
@@ -2678,7 +2704,7 @@ function _chartVolumeSLA(labels, volumes, slas) {
     const x = xFor(i);
     const y = padT + chartH - (Math.min(100, Math.max(0, s))/100) * chartH;
     return `<g class="chart-hov" color="#fbbf24">
-      <circle cx="${x}" cy="${y}" r="3" fill="var(--bg-section)" stroke="#fbbf24" stroke-width="2"/>
+      <circle cx="${x}" cy="${y}" r="3" fill="${BC.section}" stroke="#fbbf24" stroke-width="2"/>
       <text x="${x}" y="${y-9}" font-size="9" fill="#fbbf24" text-anchor="middle" font-weight="600"
             stroke="#0d1923" stroke-width="3" paint-order="stroke">${s ? s.toFixed(1) : '-'}</text>
     </g>`;
@@ -2687,17 +2713,17 @@ function _chartVolumeSLA(labels, volumes, slas) {
   // X labels
   const xlabels = labels.map((l,i) => {
     const x = xFor(i);
-    return `<text x="${x}" y="${h-padB+14}" font-size="10" fill="#8fa3b8" text-anchor="middle">${l}</text>`;
+    return `<text x="${x}" y="${h-padB+14}" font-size="10" fill="${TC.secondary}" text-anchor="middle">${l}</text>`;
   }).join('');
 
   // Legend (제목 아래에 별도 행으로 배치)
   const legend = `
     <g transform="translate(${padL}, 38)">
       <rect x="0" y="0" width="10" height="10" fill="${AC.accent}" opacity="0.85" rx="1"/>
-      <text x="14" y="9" font-size="10" fill="#c5d5e5">처리건수</text>
+      <text x="14" y="9" font-size="10" fill="${TC.cell}">처리건수</text>
       <line x1="90" y1="5" x2="108" y2="5" stroke="#fbbf24" stroke-width="2"/>
-      <circle cx="99" cy="5" r="3" fill="var(--bg-section)" stroke="#fbbf24" stroke-width="2"/>
-      <text x="114" y="9" font-size="10" fill="#c5d5e5">수락률(%)</text>
+      <circle cx="99" cy="5" r="3" fill="${BC.section}" stroke="#fbbf24" stroke-width="2"/>
+      <text x="114" y="9" font-size="10" fill="${TC.cell}">수락률(%)</text>
     </g>`;
 
   // 렌더 순서: 격자 → 바(rect+라벨 g) → SLA 선 → SLA 점(circle+라벨 g) → x축 라벨
@@ -2708,6 +2734,8 @@ function _chartVolumeSLA(labels, volumes, slas) {
 
 // 멀티라인 차트 (슬롯 달성률 — 전체+4개 시간대)
 function _chartAchievement(labels, series) {
+  const TC = _themeTextColors();
+  const BC = _themeBgColors();
   const w = 900, h = 240;
   const padL = 44, padR = 16, padT = 34, padB = 38;
   const chartW = w - padL - padR;
@@ -2720,8 +2748,8 @@ function _chartAchievement(labels, series) {
   for (let t = 0; t <= ticks; t++) {
     const y = padT + chartH - (t/ticks) * chartH;
     const val = Math.round((t/ticks) * maxVal);
-    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
-             <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="#4b6278" text-anchor="end">${val}%</text>`;
+    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${BC.border}" stroke-width="1"/>
+             <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="${TC.muted}" text-anchor="end">${val}%</text>`;
   }
   // 100% reference line
   const y100 = padT + chartH - (100/maxVal) * chartH;
@@ -2740,14 +2768,14 @@ function _chartAchievement(labels, series) {
   }).join('');
 
   const xlabels = labels.map((l,i) =>
-    `<text x="${xFor(i)}" y="${h-padB+14}" font-size="10" fill="#8fa3b8" text-anchor="middle">${l}</text>`
+    `<text x="${xFor(i)}" y="${h-padB+14}" font-size="10" fill="${TC.secondary}" text-anchor="middle">${l}</text>`
   ).join('');
 
   const legend = series.map((s,i) => `
     <g transform="translate(${padL + i * 110}, ${padT-18})">
       <line x1="0" y1="5" x2="16" y2="5" stroke="${s.color}" stroke-width="${s.bold?2.2:1.5}"/>
       <circle cx="8" cy="5" r="2.5" fill="${s.color}"/>
-      <text x="22" y="9" font-size="10" fill="#c5d5e5">${s.label}</text>
+      <text x="22" y="9" font-size="10" fill="${TC.cell}">${s.label}</text>
     </g>`).join('');
 
   return _svgFrame('슬롯 달성률 추이 (전체 · 시간대별)', w, h,
@@ -2756,6 +2784,8 @@ function _chartAchievement(labels, series) {
 
 // 누적 바 차트 (시간대별 처리건수 비중 100%)
 function _chartShareStacked(labels, shares) {
+  const TC = _themeTextColors();
+  const BC = _themeBgColors();
   // shares: {am:[], pm:[], ev:[], ni:[]} - percentages summing to ~100 per index
   const w = 900, h = 250;
   const padL = 44, padR = 16, padT = 64, padB = 38;
@@ -2771,8 +2801,8 @@ function _chartShareStacked(labels, shares) {
   let grid = '';
   for (let t = 0; t <= ticks; t++) {
     const y = padT + chartH - (t/ticks) * chartH;
-    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
-             <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="#4b6278" text-anchor="end">${(t/ticks)*100}%</text>`;
+    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${BC.border}" stroke-width="1"/>
+             <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="${TC.muted}" text-anchor="end">${(t/ticks)*100}%</text>`;
   }
 
   const colors = { am:'#fbbf24', pm:'#60a5fa', ev:'#f87171', ni:'#8b5cf6' };
@@ -2787,7 +2817,7 @@ function _chartShareStacked(labels, shares) {
       const bh = (v/100) * chartH;
       const y = padT + chartH - (cursor/100 + v/100) * chartH;
       const labelHtml = v >= 8
-        ? `<text x="${xFor(i)}" y="${y + bh/2 + 3}" font-size="9" fill="var(--bg-page)" text-anchor="middle" font-weight="700">${v.toFixed(0)}%</text>`
+        ? `<text x="${xFor(i)}" y="${y + bh/2 + 3}" font-size="9" fill="${BC.page}" text-anchor="middle" font-weight="700">${v.toFixed(0)}%</text>`
         : '';
       bars.push(`<g class="chart-hov" color="${colors[k]}">
         <rect x="${xFor(i)-barW/2}" y="${y}" width="${barW}" height="${bh}" fill="${colors[k]}" opacity="0.9"/>
@@ -2798,14 +2828,14 @@ function _chartShareStacked(labels, shares) {
   }
 
   const xlabels = labels.map((l,i) =>
-    `<text x="${xFor(i)}" y="${h-padB+14}" font-size="10" fill="#8fa3b8" text-anchor="middle">${l}</text>`
+    `<text x="${xFor(i)}" y="${h-padB+14}" font-size="10" fill="${TC.secondary}" text-anchor="middle">${l}</text>`
   ).join('');
 
   // Legend (제목 아래 별도 행) — 이모지 제거, 텍스트만
   const legend = ['am','pm','ev','ni'].map((k,i) => `
     <g transform="translate(${padL + i * 100}, 38)">
       <rect x="0" y="0" width="10" height="10" fill="${colors[k]}" rx="1"/>
-      <text x="14" y="9" font-size="10" fill="#c5d5e5">${names[k]}</text>
+      <text x="14" y="9" font-size="10" fill="${TC.cell}">${names[k]}</text>
     </g>`).join('');
 
   return _svgFrame('시간대별 처리건수 비중', w, h,
@@ -3053,7 +3083,7 @@ function _renderPerfWeekly(body, hist, tgt) {
       ${volTd(w.evVol)}
       ${volTd(w.niVol)}
       <td style="text-align:center;color:${_slaColor(w.sla)};font-weight:600">${w.sla ? w.sla.toFixed(1)+'%' : '-'}</td>
-      <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct ? riderAct.toFixed(1) : '-'}명
+      <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct ? Number(riderAct.toFixed(1)).toLocaleString() : '-'}명
         <span style="color:var(--text-secondary);font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
     </tr>`;
   }).join('');
@@ -3132,7 +3162,7 @@ function _renderPerfDaily(body, hist, tgt) {
     const riderAct  = Number(r['운행라이더수']||0);
     const actShare  = riderJoin ? (riderAct/riderJoin)*100 : 0;
     const isWeekend = dow === '토' || dow === '일';
-    const dateColor = isWeekend ? '#fbbf24' : '#e8edf2';
+    const dateColor = isWeekend ? '#fbbf24' : 'var(--text-primary)';
 
     return `<tr>
       <td style="white-space:nowrap;padding:9px 6px;font-weight:600;color:${dateColor}">${date}
@@ -3144,7 +3174,7 @@ function _renderPerfDaily(body, hist, tgt) {
       ${volTd(evVol)}
       ${volTd(niVol)}
       <td style="text-align:center;color:${_slaColor(sla)};font-weight:600">${sla ? sla.toFixed(1)+'%' : '-'}</td>
-      <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct}명
+      <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct.toLocaleString()}명
         <span style="color:var(--text-secondary);font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
     </tr>`;
   }).join('');
@@ -3306,8 +3336,8 @@ function _renderPartnerProfile(body, pid) {
       </div>
       <div class="slot-item">
         <div class="slot-item-label">운행라이더</div>
-        <div class="slot-item-val" style="font-size:16px;color:#4ade80">${kpi['운행라이더수']||'-'}명</div>
-        <div style="font-size:10px;color:var(--text-secondary)">계약 ${kpi['계약중라이더수']||'-'}명</div>
+        <div class="slot-item-val" style="font-size:16px;color:#4ade80">${kpi['운행라이더수']?Number(kpi['운행라이더수']).toLocaleString():'-'}명</div>
+        <div style="font-size:10px;color:var(--text-secondary)">계약 ${kpi['계약중라이더수']?Number(kpi['계약중라이더수']).toLocaleString():'-'}명</div>
       </div>
     </div>
     <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">시간대별 달성</div>
