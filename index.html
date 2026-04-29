@@ -7,28 +7,67 @@
 <script src="https://accounts.google.com/gsi/client" async defer onload="typeof initGSI==='function'&&initGSI()"></script>
 <style>
 :root{
-  /* ── 테마 포인트 색상 (테마 변경 시 JS가 갱신) ── */
-  --accent: #3b82f6;       /* 메인 액센트 (버튼/링크/차트 막대) */
-  --accent-soft: #60a5fa;  /* 밝은 톤 (텍스트, 활성 탭, 날짜 등) */
-  --accent-bg: #1e3a5f;    /* 어두운 톤 (active 배경, 토픽 뱃지) */
-  --accent-border: #1e3048;/* 보더(현재 다크 베이스 유지) */
+  /* ── 액센트 (테마와 무관, 항상 파란 톤) ── */
+  --accent: #3b82f6;
+  --accent-soft: #60a5fa;
+  --accent-bg: #1e3a5f;
+  /* ── 다크 모드 (기본) ── */
+  --bg-page:        var(--bg-page);
+  --bg-card:        var(--bg-card);
+  --bg-section:     var(--bg-section);
+  --bg-input:       var(--bg-section);
+  --bg-input-2:     var(--bg-input-2);
+  --bg-row-tint:    var(--bg-row-tint);
+  --bg-frame:       #0d1923;
+  --bg-filter:      var(--bg-filter);
+  --bg-row-risk-red:    #180808;
+  --bg-row-risk-yellow: #181200;
+  --border:         var(--border);
+  --border-soft:    #243240;
+  --text-strong:    #ffffff;
+  --text-primary:   #e8edf2;
+  --text-cell:      #c5d5e5;
+  --text-secondary: #8fa3b8;
+  --text-muted:     #4b6278;
+  --shadow-modal:   0 10px 40px rgba(0,0,0,.45);
+}
+[data-theme="light"]{
+  --accent-bg:      #dbeafe;       /* 라이트에선 액센트 배경을 연한 블루 */
+  --bg-page:        #f5f7fa;
+  --bg-card:        #ffffff;
+  --bg-section:     #f8fafc;
+  --bg-input:       #ffffff;
+  --bg-input-2:     #f8fafc;
+  --bg-row-tint:    #eff6ff;
+  --bg-frame:       #ffffff;
+  --bg-filter:      #f1f5f9;
+  --bg-row-risk-red:    #fef2f2;
+  --bg-row-risk-yellow: #fffbeb;
+  --border:         #e2e8f0;
+  --border-soft:    #f1f5f9;
+  --text-strong:    #0f172a;
+  --text-primary:   #1e293b;
+  --text-cell:      #334155;
+  --text-secondary: #64748b;
+  --text-muted:     #94a3b8;
+  --shadow-modal:   0 10px 40px rgba(15,23,42,.18);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;background:#0f1923;color:#e8edf2;font-size:13px;min-height:100vh}
+body{font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;background:var(--bg-page);color:var(--text-primary);font-size:13px;min-height:100vh}
 a{color:inherit;text-decoration:none}
 button{cursor:pointer;font-family:inherit}
 input,select,textarea{font-family:inherit;font-size:13px}
 
 #app{display:flex;flex-direction:column;height:100vh}
-.topbar{background:#111d2b;border-bottom:1px solid #1e3048;padding:0 20px;display:flex;align-items:center;gap:16px;height:52px;flex-shrink:0;z-index:100}
-.topbar-logo{font-size:15px;font-weight:700;color:#fff;white-space:nowrap}
+.topbar{background:var(--bg-card);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:16px;height:52px;flex-shrink:0;z-index:100}
+.topbar-logo{font-size:15px;font-weight:700;color:var(--text-strong);white-space:nowrap}
 .topbar-logo span{color:var(--accent)}
 .topbar-nav{display:flex;gap:2px;flex:1}
-.nav-btn{padding:6px 14px;border:none;background:transparent;color:#8fa3b8;border-radius:6px;font-size:13px;font-weight:500;transition:all .15s}
-.nav-btn:hover{background:#1e3048;color:#e8edf2}
+.nav-btn{padding:6px 14px;border:none;background:transparent;color:var(--text-secondary);border-radius:6px;font-size:13px;font-weight:500;transition:all .15s}
+.nav-btn:hover{background:var(--border);color:var(--text-primary)}
 .nav-btn.active{background:var(--accent-bg);color:var(--accent-soft);font-weight:600}
 .topbar-filters{display:flex;align-items:center;gap:8px}
-.filter-select{background:#1a2d42;border:1px solid var(--accent-bg);color:#c5d5e5;padding:5px 10px;border-radius:6px;font-size:12px}
+.filter-select{background:var(--bg-filter);border:1px solid var(--accent-bg);color:var(--text-cell);padding:5px 10px;border-radius:6px;font-size:12px}
 .filter-select:focus{outline:none;border-color:var(--accent)}
 .region-badge{background:var(--accent-bg);color:var(--accent-soft);padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600}
 
@@ -38,40 +77,40 @@ input,select,textarea{font-family:inherit;font-size:13px}
 
 /* ── KPI Cards */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-.kpi-card{background:#111d2b;border:1px solid #1e3048;border-radius:10px;padding:16px 18px;position:relative;overflow:hidden}
+.kpi-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
 .kpi-card.blue::before{background:var(--accent)}
 .kpi-card.red::before{background:#ef4444}
 .kpi-card.orange::before{background:#f59e0b}
 .kpi-card.green::before{background:#10b981}
 .kpi-card.purple::before{background:#8b5cf6}
-.kpi-label{font-size:11px;color:#8fa3b8;font-weight:500;margin-bottom:8px}
-.kpi-value{font-size:26px;font-weight:700;color:#fff}
-.kpi-sub{font-size:11px;color:#8fa3b8;margin-top:4px}
+.kpi-label{font-size:11px;color:var(--text-secondary);font-weight:500;margin-bottom:8px}
+.kpi-value{font-size:26px;font-weight:700;color:var(--text-strong)}
+.kpi-sub{font-size:11px;color:var(--text-secondary);margin-top:4px}
 .kpi-icon{position:absolute;right:14px;top:14px;font-size:22px;opacity:.5}
 
 /* ── Section */
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.section-title{font-size:14px;font-weight:600;color:#e8edf2}
+.section-title{font-size:14px;font-weight:600;color:var(--text-primary)}
 .section-actions{display:flex;gap:8px;align-items:center}
 .btn{padding:6px 12px;border:none;border-radius:6px;font-size:12px;font-weight:500;transition:all .15s}
-.btn-primary{background:#2563eb;color:#fff}
+.btn-primary{background:#2563eb;color:var(--text-strong)}
 .btn-primary:hover{background:#1d4ed8}
-.btn-ghost{background:#1a2d42;color:#8fa3b8;border:1px solid #1e3048}
-.btn-ghost:hover{background:#1e3048;color:#e8edf2}
+.btn-ghost{background:var(--bg-filter);color:var(--text-secondary);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--border);color:var(--text-primary)}
 .btn-sm{padding:4px 8px;font-size:11px}
 
 /* ── Table */
-.table-wrap{background:#111d2b;border:1px solid #1e3048;border-radius:10px;overflow:hidden}
+.table-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .table-scroll{overflow-x:auto}
 .data-table{width:100%;border-collapse:collapse}
-.data-table th{background:#0d1825;color:#8fa3b8;font-weight:600;font-size:11px;padding:9px 8px;text-align:left;border-bottom:1px solid #1e3048;white-space:nowrap}
+.data-table th{background:var(--bg-section);color:var(--text-secondary);font-weight:600;font-size:11px;padding:9px 8px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
 .data-table th.center{text-align:center}
-.data-table td{padding:9px 8px;border-bottom:1px solid #0d1825;color:#c5d5e5;vertical-align:middle}
+.data-table td{padding:9px 8px;border-bottom:1px solid var(--bg-section);color:var(--text-cell);vertical-align:middle}
 .data-table tbody tr{transition:background .1s}
-.data-table tbody tr:hover{background:#1a2d42;cursor:pointer}
+.data-table tbody tr:hover{background:var(--bg-filter);cursor:pointer}
 .data-table tbody tr:last-child td{border-bottom:none}
-.data-table th.slot-group{text-align:center;background:#0a1d35;border-bottom:2px solid var(--accent);letter-spacing:.3px}
+.data-table th.slot-group{text-align:center;background:var(--bg-row-tint);border-bottom:2px solid var(--accent);letter-spacing:.3px}
 
 /* ── SVG 차트 호버 효과 (데이터 포인트·라벨 개별 하이라이트) ── */
 .chart-hov{transition:filter .12s ease,opacity .12s ease;cursor:pointer}
@@ -92,7 +131,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .badge-done{background:#052e16;color:#4ade80}
 .badge-tier1{background:var(--accent-bg);color:var(--accent-soft)}
 .badge-tier2{background:#2d1854;color:#a78bfa}
-.badge-tier3{background:#1a2d42;color:#94a3b8}
+.badge-tier3{background:var(--bg-filter);color:#94a3b8}
 
 /* ── Grade badges */
 .badge-master{background:#2d1a54;color:#e879f9;border:1px solid #7c3aed}
@@ -100,7 +139,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .badge-gold{background:#2d2006;color:#fbbf24;border:1px solid #92400e}
 .badge-silver{background:#1e293b;color:#94a3b8;border:1px solid #475569}
 .badge-bronze{background:#2d1a00;color:#fb923c;border:1px solid #7c2d12}
-.badge-none{background:#1a2d42;color:#4b6278;border:1px solid #1e3048}
+.badge-none{background:var(--bg-filter);color:var(--text-muted);border:1px solid var(--border)}
 
 /* ── Risk dot */
 .risk-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
@@ -109,7 +148,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .risk-dot.green{background:#10b981}
 
 /* ── Progress Bar */
-.progress-wrap{background:#0d1825;border-radius:4px;height:8px;overflow:hidden}
+.progress-wrap{background:var(--bg-section);border-radius:4px;height:8px;overflow:hidden}
 .progress-fill{height:100%;border-radius:4px;transition:width .3s}
 .progress-fill.low{background:#ef4444}
 .progress-fill.mid{background:#f59e0b}
@@ -128,46 +167,46 @@ input,select,textarea{font-family:inherit;font-size:13px}
 /* ── DoD cells */
 .dod-pos{color:#4ade80;font-weight:600}
 .dod-neg{color:#f87171;font-weight:600}
-.dod-neu{color:#8fa3b8}
+.dod-neu{color:var(--text-secondary)}
 
 /* ── Rider count */
 .rider-disp{display:inline-flex;align-items:center;gap:2px;font-size:12px}
 .rider-join{color:var(--accent-soft);font-weight:600}
-.rider-sep{color:#4b6278;font-size:10px}
+.rider-sep{color:var(--text-muted);font-size:10px}
 .rider-act{color:#4ade80;font-weight:600}
 
 /* ── Partner Detail Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto}
 .modal-overlay.open{display:flex}
-.modal{background:#111d2b;border:1px solid #1e3048;border-radius:12px;width:100%;max-width:900px;margin:auto}
-.modal-header{padding:18px 20px;border-bottom:1px solid #1e3048;display:flex;align-items:center;justify-content:space-between}
-.modal-title{font-size:16px;font-weight:700;color:#fff;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.modal-close{background:transparent;border:none;color:#8fa3b8;font-size:20px;line-height:1;padding:4px;border-radius:4px}
-.modal-close:hover{color:#fff;background:#1a2d42}
+.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;width:100%;max-width:900px;margin:auto}
+.modal-header{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-size:16px;font-weight:700;color:var(--text-strong);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.modal-close{background:transparent;border:none;color:var(--text-secondary);font-size:20px;line-height:1;padding:4px;border-radius:4px}
+.modal-close:hover{color:var(--text-strong);background:var(--bg-filter)}
 .modal-body{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.modal-section{background:#0d1825;border-radius:8px;padding:14px}
-.modal-section-title{font-size:11px;font-weight:700;color:#8fa3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
-.info-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #1a2d42}
+.modal-section{background:var(--bg-section);border-radius:8px;padding:14px}
+.modal-section-title{font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--bg-filter)}
 .info-row:last-child{border-bottom:none}
-.info-label{color:#8fa3b8;font-size:11px}
-.info-val{color:#e8edf2;font-size:12px;font-weight:500}
+.info-label{color:var(--text-secondary);font-size:11px}
+.info-val{color:var(--text-primary);font-size:12px;font-weight:500}
 .modal-full{grid-column:1/-1}
 
 /* ── Slot mini grid in modal */
 .slot-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}
-.slot-item{background:#111d2b;border-radius:6px;padding:8px;text-align:center}
-.slot-item-label{font-size:10px;color:#8fa3b8;margin-bottom:4px}
+.slot-item{background:var(--bg-card);border-radius:6px;padding:8px;text-align:center}
+.slot-item-label{font-size:10px;color:var(--text-secondary);margin-bottom:4px}
 .slot-item-val{font-size:18px;font-weight:700}
 
 /* ── Issue list */
-.issue-item{background:#111d2b;border-radius:6px;padding:10px;margin-bottom:8px;border-left:3px solid #374151}
+.issue-item{background:var(--bg-card);border-radius:6px;padding:10px;margin-bottom:8px;border-left:3px solid #374151}
 .issue-item.pending{border-left-color:#ef4444}
 .issue-item.doing{border-left-color:#f59e0b}
 .issue-item.done{border-left-color:#10b981}
 .issue-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-.issue-cat{font-size:10px;font-weight:700;color:#8fa3b8;background:#0d1825;padding:2px 6px;border-radius:4px}
-.issue-date{font-size:10px;color:#4b6278}
-.issue-content{font-size:12px;color:#c5d5e5;line-height:1.5;margin-bottom:6px}
+.issue-cat{font-size:10px;font-weight:700;color:var(--text-secondary);background:var(--bg-section);padding:2px 6px;border-radius:4px}
+.issue-date{font-size:10px;color:var(--text-muted)}
+.issue-content{font-size:12px;color:var(--text-cell);line-height:1.5;margin-bottom:6px}
 .issue-followup{font-size:11px;color:var(--accent-soft);margin-bottom:4px}
 .issue-actions{display:flex;gap:6px;justify-content:flex-end}
 .status-btn{padding:3px 8px;border:none;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer}
@@ -175,12 +214,12 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .status-btn.done{background:#14532d;color:#4ade80}
 
 /* ── Form */
-.voc-form{background:#0d1825;border-radius:8px;padding:14px}
+.voc-form{background:var(--bg-section);border-radius:8px;padding:14px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
 .form-group{display:flex;flex-direction:column;gap:4px}
 .form-group.full{grid-column:1/-1}
-.form-label{font-size:11px;color:#8fa3b8;font-weight:500}
-.form-input{background:#1a2d42;border:1px solid #1e3048;color:#e8edf2;padding:7px 10px;border-radius:6px;width:100%}
+.form-label{font-size:11px;color:var(--text-secondary);font-weight:500}
+.form-input{background:var(--bg-filter);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;width:100%}
 .form-input:focus{outline:none;border-color:var(--accent)}
 textarea.form-input{resize:vertical;min-height:60px}
 
@@ -192,16 +231,16 @@ textarea.form-input{resize:vertical;min-height:60px}
 
 /* ── Coverage view */
 .coverage-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:20px}
-.coverage-card{background:#111d2b;border:1px solid #1e3048;border-radius:10px;padding:16px}
+.coverage-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
 .cov-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
-.cov-region{font-size:13px;font-weight:600;color:#fff}
-.cov-meta{font-size:11px;color:#8fa3b8;margin-top:2px}
-.cov-pct{font-size:22px;font-weight:700;color:#fff}
-.cov-target{font-size:11px;color:#8fa3b8}
+.cov-region{font-size:13px;font-weight:600;color:var(--text-strong)}
+.cov-meta{font-size:11px;color:var(--text-secondary);margin-top:2px}
+.cov-pct{font-size:22px;font-weight:700;color:var(--text-strong)}
+.cov-target{font-size:11px;color:var(--text-secondary)}
 .cov-progress{margin:10px 0}
-.cov-bottleneck{background:#0d1825;border-radius:6px;padding:8px;margin-top:10px}
-.cov-bottleneck-title{font-size:10px;color:#8fa3b8;font-weight:700;margin-bottom:6px}
-.bottleneck-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#c5d5e5;margin-bottom:4px}
+.cov-bottleneck{background:var(--bg-section);border-radius:6px;padding:8px;margin-top:10px}
+.cov-bottleneck-title{font-size:10px;color:var(--text-secondary);font-weight:700;margin-bottom:6px}
+.bottleneck-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-cell);margin-bottom:4px}
 .bottleneck-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .bottleneck-dot.red{background:#ef4444}
 .bottleneck-dot.yellow{background:#f59e0b}
@@ -209,48 +248,48 @@ textarea.form-input{resize:vertical;min-height:60px}
 
 
 .checklist{margin-top:8px}
-.checklist-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#8fa3b8;padding:3px 0}
+.checklist-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);padding:3px 0}
 .checklist-item.done{color:#4ade80}
 .checklist-item.done::before{content:'✓';color:#4ade80;font-weight:700}
 .checklist-item.todo::before{content:'○';color:#374151}
-.week-badge{font-size:10px;background:#0d1825;color:#8fa3b8;padding:2px 6px;border-radius:4px}
+.week-badge{font-size:10px;background:var(--bg-section);color:var(--text-secondary);padding:2px 6px;border-radius:4px}
 .week-badge.delay{background:#2d1a00;color:#fb923c}
 
 /* ── Performance card (View 2) */
-.perf-card{background:#111d2b;border:1px solid #1e3048;border-radius:10px;padding:16px;position:relative;overflow:hidden}
+.perf-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;overflow:hidden}
 .perf-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#2563eb}
 .perf-card.risk::before{background:#ef4444}
 .perf-card.warn::before{background:#f59e0b}
 .perf-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
-.perf-card-name{font-size:14px;font-weight:700;color:#fff}
-.perf-card-region{font-size:11px;color:#8fa3b8;margin-top:2px}
+.perf-card-name{font-size:14px;font-weight:700;color:var(--text-strong)}
+.perf-card-region{font-size:11px;color:var(--text-secondary);margin-top:2px}
 .perf-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-.perf-metric{background:#0d1825;border-radius:6px;padding:8px;text-align:center}
-.perf-metric-label{font-size:10px;color:#8fa3b8;margin-bottom:3px}
-.perf-metric-val{font-size:16px;font-weight:700;color:#fff}
-.perf-metric-sub{font-size:9px;color:#4b6278;margin-top:1px}
+.perf-metric{background:var(--bg-section);border-radius:6px;padding:8px;text-align:center}
+.perf-metric-label{font-size:10px;color:var(--text-secondary);margin-bottom:3px}
+.perf-metric-val{font-size:16px;font-weight:700;color:var(--text-strong)}
+.perf-metric-sub{font-size:9px;color:var(--text-muted);margin-top:1px}
 .perf-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.perf-chart-block{background:#0d1825;border-radius:6px;padding:8px}
-.perf-chart-label{font-size:10px;color:#8fa3b8;margin-bottom:4px}
+.perf-chart-block{background:var(--bg-section);border-radius:6px;padding:8px}
+.perf-chart-label{font-size:10px;color:var(--text-secondary);margin-bottom:4px}
 .week-pills{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px}
-.week-pill{display:flex;align-items:center;gap:3px;font-size:10px;color:#8fa3b8;background:#111d2b;border-radius:4px;padding:2px 5px}
-.week-pill-val{font-weight:600;color:#e8edf2}
+.week-pill{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-secondary);background:var(--bg-card);border-radius:4px;padding:2px 5px}
+.week-pill-val{font-weight:600;color:var(--text-primary)}
 
 /* ── Misc */
-.empty{text-align:center;padding:40px;color:#4b6278;font-size:13px}
-#loading{position:fixed;inset:0;background:#0f1923;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px}
-.spinner{width:36px;height:36px;border:3px solid #1e3048;border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+.empty{text-align:center;padding:40px;color:var(--text-muted);font-size:13px}
+#loading{position:fixed;inset:0;background:var(--bg-page);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-#loading p{color:#8fa3b8;font-size:13px}
-#toast{position:fixed;bottom:20px;right:20px;background:var(--accent-bg);color:var(--accent-soft);border:1px solid #1e3048;border-radius:8px;padding:10px 16px;font-size:12px;z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none}
+#loading p{color:var(--text-secondary);font-size:13px}
+#toast{position:fixed;bottom:20px;right:20px;background:var(--accent-bg);color:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:12px;z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.show{opacity:1}
-.risk-row-red{background:#180808 !important}
-.risk-row-yellow{background:#181200 !important}
+.risk-row-red{background:var(--bg-row-risk-red) !important}
+.risk-row-yellow{background:var(--bg-row-risk-yellow) !important}
 
 /* ── Achievement (달성률) cells */
 .ach-cell{text-align:center;padding:6px 8px !important;min-width:72px;line-height:1.3}
 .ach-pct{display:block;font-size:13px;font-weight:700}
-.ach-cnt{display:block;font-size:10px;color:#8fa3b8;margin-top:1px}
+.ach-cnt{display:block;font-size:10px;color:var(--text-secondary);margin-top:1px}
 .ach-hi{color:#4ade80}
 .ach-mid{color:#fbbf24}
 .ach-lo{color:#f87171}
@@ -262,9 +301,9 @@ textarea.form-input{resize:vertical;min-height:60px}
 .risk-label.green{background:#052e16;color:#4ade80;border:1px solid #14532d}
 
 /* ── Modal tabs */
-.modal-tabs{display:flex;gap:2px;padding:0 20px;border-bottom:1px solid #1e3048;background:#0d1825}
-.modal-tab{padding:10px 16px;border:none;background:transparent;color:#8fa3b8;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;font-family:inherit}
-.modal-tab:hover{color:#c5d5e5}
+.modal-tabs{display:flex;gap:2px;padding:0 20px;border-bottom:1px solid var(--border);background:var(--bg-section)}
+.modal-tab{padding:10px 16px;border:none;background:transparent;color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;font-family:inherit}
+.modal-tab:hover{color:var(--text-cell)}
 .modal-tab.active{color:var(--accent-soft);border-bottom-color:var(--accent)}
 .modal-tab-content{display:none;padding:20px}
 .modal-tab-content.active{display:block}
@@ -272,28 +311,28 @@ textarea.form-input{resize:vertical;min-height:60px}
 
 /* ── 8주 퍼포먼스 table in modal */
 .perf-table{width:100%;border-collapse:collapse;font-size:12px}
-.perf-table th{background:#0a1d35;color:#8fa3b8;font-weight:600;font-size:11px;padding:8px 10px;text-align:center;border-bottom:1px solid #1e3048}
-.perf-table td{padding:7px 10px;border-bottom:1px solid #0d1825;color:#c5d5e5;text-align:center}
+.perf-table th{background:var(--bg-row-tint);color:var(--text-secondary);font-weight:600;font-size:11px;padding:8px 10px;text-align:center;border-bottom:1px solid var(--border)}
+.perf-table td{padding:7px 10px;border-bottom:1px solid var(--bg-section);color:var(--text-cell);text-align:center}
 .perf-table tbody tr:last-child td{border-bottom:none}
-.perf-table tbody tr:hover{background:#1a2d42}
+.perf-table tbody tr:hover{background:var(--bg-filter)}
 
 /* ── Inline VOC form in modal */
-.voc-inline-form{background:#0d1825;border-radius:8px;padding:14px;margin-bottom:14px}
-.voc-inline-title{font-size:11px;font-weight:700;color:#8fa3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
-.voc-log-item{background:#111d2b;border-radius:6px;padding:10px;margin-bottom:8px;border-left:3px solid #374151;position:relative}
+.voc-inline-form{background:var(--bg-section);border-radius:8px;padding:14px;margin-bottom:14px}
+.voc-inline-title{font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.voc-log-item{background:var(--bg-card);border-radius:6px;padding:10px;margin-bottom:8px;border-left:3px solid #374151;position:relative}
 .voc-log-item.type-미팅{border-left-color:var(--accent)}
 .voc-log-item.type-VOC{border-left-color:#f59e0b}
 .voc-log-item.type-이슈{border-left-color:#ef4444}
 .voc-log-item.type-온보딩상담{border-left-color:#10b981}
 .voc-log-item.type-기타{border-left-color:#8b5cf6}
 .voc-log-meta{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
-.voc-log-type{font-size:10px;font-weight:700;background:#0d1825;color:#8fa3b8;padding:1px 6px;border-radius:4px}
-.voc-log-date{font-size:10px;color:#4b6278}
+.voc-log-type{font-size:10px;font-weight:700;background:var(--bg-section);color:var(--text-secondary);padding:1px 6px;border-radius:4px}
+.voc-log-date{font-size:10px;color:var(--text-muted)}
 .voc-log-person{font-size:10px;color:var(--accent-soft)}
-.voc-log-summary{font-size:12px;color:#c5d5e5;line-height:1.5;margin-bottom:4px}
+.voc-log-summary{font-size:12px;color:var(--text-cell);line-height:1.5;margin-bottom:4px}
 .voc-log-action{font-size:11px;color:var(--accent-soft);margin-bottom:4px}
 .voc-log-controls{display:flex;gap:4px;justify-content:flex-end}
-.voc-edit-area{display:none;margin-top:8px;border-top:1px solid #1e3048;padding-top:8px}
+.voc-edit-area{display:none;margin-top:8px;border-top:1px solid var(--border);padding-top:8px}
 .voc-edit-area.open{display:block}
 </style>
 </head>
@@ -302,16 +341,16 @@ textarea.form-input{resize:vertical;min-height:60px}
 <div id="loading">
   <div class="spinner"></div>
   <p id="loading-msg">협력사 데이터 로딩 중...</p>
-  <div style="width:200px;height:3px;background:#1e3048;border-radius:2px;overflow:hidden">
+  <div style="width:200px;height:3px;background:var(--border);border-radius:2px;overflow:hidden">
     <div id="loading-progress" style="height:100%;background:var(--accent);width:0%;transition:width .4s ease"></div>
   </div>
 </div>
 
 <!-- ── 로그인 게이트 (반드시 Google 로그인을 해야 대시보드 진입) ── -->
-<div id="loginGate" style="display:none;position:fixed;inset:0;background:#0f1923;z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:18px">
+<div id="loginGate" style="display:none;position:fixed;inset:0;background:var(--bg-page);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:18px">
   <div style="font-size:32px">🚀</div>
-  <div style="font-size:20px;font-weight:700;color:#e8edf2">3PL 협력사 프로파일</div>
-  <div style="font-size:13px;color:#8fa3b8;text-align:center;max-width:360px;line-height:1.6">
+  <div style="font-size:20px;font-weight:700;color:var(--text-primary)">3PL 협력사 프로파일</div>
+  <div style="font-size:13px;color:var(--text-secondary);text-align:center;max-width:360px;line-height:1.6">
     이 대시보드는 Google 계정 로그인이 필요합니다.<br>
     구글 시트 데이터를 불러오고 활동 로그를 시트에 기록하기 위해 사용됩니다.
   </div>
@@ -335,9 +374,9 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="btn btn-primary btn-sm" onclick="openBriefingModal()" title="아침 영업 브리핑 보고서 작성"
               style="font-size:11px">📝 영업 브리핑</button>
       <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
-      <button class="btn btn-ghost btn-sm" onclick="openThemePicker()" title="테마 색상 변경">🎨</button>
+      <button class="btn btn-ghost btn-sm" id="themeToggleBtn" onclick="toggleTheme()" title="라이트/다크 모드 전환">☀️</button>
       <button class="btn btn-ghost btn-sm" onclick="openSetup()" title="연결 설정">⚙</button>
-      <button class="btn btn-sm" id="gsiBtn" onclick="gsiLogin()" style="background:var(--accent-bg);color:#8fa3b8;border:1px solid #1e3048;font-size:11px">🔑 로그인</button>
+      <button class="btn btn-sm" id="gsiBtn" onclick="gsiLogin()" style="background:var(--accent-bg);color:var(--text-secondary);border:1px solid var(--border);font-size:11px">🔑 로그인</button>
     </div>
   </div>
 
@@ -378,7 +417,7 @@ textarea.form-input{resize:vertical;min-height:60px}
       <div class="section-header">
         <div class="section-title">
           협력사별 오늘 운행현황
-          <span id="rt-date-label" style="font-size:11px;color:#4b6278;font-weight:400;margin-left:8px"></span>
+          <span id="rt-date-label" style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px"></span>
         </div>
         <div class="section-actions">
           <div id="grade-chip-realtime" style="display:inline-block"></div>
@@ -424,7 +463,7 @@ textarea.form-input{resize:vertical;min-height:60px}
       <div class="section-header">
         <div class="section-title">
           📊 협력사 퍼포먼스
-          <span id="perf-date-label" style="font-size:11px;color:#8fa3b8;font-weight:400;margin-left:8px"></span>
+          <span id="perf-date-label" style="font-size:11px;color:var(--text-secondary);font-weight:400;margin-left:8px"></span>
         </div>
         <div class="section-actions">
           <input
@@ -437,7 +476,7 @@ textarea.form-input{resize:vertical;min-height:60px}
           />
           <div id="grade-chip-perfList" style="display:inline-block"></div>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('perfList')" title="정렬/필터 모두 해제">↻ 초기화</button>
-          <span id="perf-count-label" style="font-size:11px;color:#8fa3b8;margin-left:6px"></span>
+          <span id="perf-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
         </div>
       </div>
 
@@ -457,7 +496,7 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center" data-sort="perfList:orderAch" style="cursor:pointer">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-perfList-orderAch"></span></th>
               <th class="center" data-sort="perfList:sla" style="cursor:pointer">수락률<span id="sort-perfList-sla"></span></th>
               <th class="center" data-sort="perfList:slotsAchieved" style="cursor:pointer">달성<br><span style="font-size:10px;font-weight:400">슬롯수</span><span id="sort-perfList-slotsAchieved"></span></th>
-              <th>특이사항 <span style="font-size:10px;font-weight:400;color:#4b6278">(전일 vs 전전일)</span></th>
+              <th>특이사항 <span style="font-size:10px;font-weight:400;color:var(--text-muted)">(전일 vs 전전일)</span></th>
             </tr>
           </thead>
           <tbody id="perfListBody"></tbody>
@@ -506,16 +545,6 @@ textarea.form-input{resize:vertical;min-height:60px}
   </div>
 </div>
 
-<!-- 테마 색상 변경 모달 -->
-<div class="modal-overlay" id="themeModal" onclick="closeModal(event)">
-  <div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
-    <div class="modal-header">
-      <div class="modal-title">🎨 테마 색상</div>
-      <button class="modal-close" onclick="closeThemePicker()">✕</button>
-    </div>
-    <div id="themeBody" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px"></div>
-  </div>
-</div>
 
 <!-- 통합 협력사 모달 (실시간 운행현황 + 협력사 퍼포먼스 양쪽에서 사용) -->
 <div class="modal-overlay" id="partnerModal" onclick="closeModal(event)">
@@ -535,24 +564,24 @@ textarea.form-input{resize:vertical;min-height:60px}
 
 
 <!-- Setup Panel -->
-<div id="setupPanel" style="display:none;position:fixed;inset:0;background:#0f1923;z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#111d2b;border:1px solid #1e3048;border-radius:14px;padding:32px;width:100%;max-width:480px">
-    <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:6px">🔌 Google Sheets 연결</div>
-    <div style="font-size:12px;color:#8fa3b8;margin-bottom:24px">한 번만 입력하면 이후 자동 연결됩니다.</div>
+<div id="setupPanel" style="display:none;position:fixed;inset:0;background:var(--bg-page);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:32px;width:100%;max-width:480px">
+    <div style="font-size:18px;font-weight:700;color:var(--text-strong);margin-bottom:6px">🔌 Google Sheets 연결</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:24px">한 번만 입력하면 이후 자동 연결됩니다.</div>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
-        <label style="font-size:11px;color:#8fa3b8;font-weight:600;display:block;margin-bottom:4px">📊 Spreadsheet ID 또는 시트 URL</label>
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:4px">📊 Spreadsheet ID 또는 시트 URL</label>
         <input id="setup-sheetid" class="form-input" placeholder="URL 전체 또는 ID만 붙여넣기" style="width:100%" oninput="autoExtractSheetId(this)">
-        <div style="font-size:10px;color:#4b6278;margin-top:4px">URL 전체를 붙여넣으면 ID가 자동 추출됩니다</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">URL 전체를 붙여넣으면 ID가 자동 추출됩니다</div>
       </div>
       <div>
-        <label style="font-size:11px;color:#8fa3b8;font-weight:600;display:block;margin-bottom:4px">🔑 API Key</label>
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:4px">🔑 API Key</label>
         <input id="setup-apikey" class="form-input" placeholder="AIzaSyD..." type="password" style="width:100%">
       </div>
       <div>
-        <label style="font-size:11px;color:#8fa3b8;font-weight:600;display:block;margin-bottom:4px">⚡ Apps Script URL <span style="color:#4b6278;font-weight:400">(선택 — 활동로그 자동 저장용)</span></label>
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:4px">⚡ Apps Script URL <span style="color:var(--text-muted);font-weight:400">(선택 — 활동로그 자동 저장용)</span></label>
         <input id="setup-scripturl" class="form-input" placeholder="https://script.google.com/macros/s/..." style="width:100%">
-        <div style="font-size:10px;color:#4b6278;margin-top:4px">입력하면 활동로그 저장 시 시트에 자동 기록됩니다</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">입력하면 활동로그 저장 시 시트에 자동 기록됩니다</div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:24px;justify-content:flex-end">
@@ -735,7 +764,7 @@ function updateGsiBtn(loggedIn) {
     btn.textContent = '🔑 로그인';
     btn.style.background = 'var(--accent-bg)';
     btn.style.color = '#8fa3b8';
-    btn.style.borderColor = '#1e3048';
+    btn.style.borderColor = 'var(--border)';
   }
 }
 
@@ -1535,9 +1564,9 @@ function openRgn2ManagerModal() {
   if (!body) return;
 
   body.innerHTML = `
-    <div style="font-size:11.5px;color:#8fa3b8;line-height:1.6;background:#0d1825;border-radius:6px;padding:10px 12px;margin-bottom:6px">
+    <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.6;background:var(--bg-section);border-radius:6px;padding:10px 12px;margin-bottom:6px">
       지역별 담당자를 입력하면 해당 지역의 모든 협력사 Profile에 자동 적용됩니다.<br>
-      <span style="color:#4b6278">변경 시 자동 저장</span>
+      <span style="color:var(--text-muted)">변경 시 자동 저장</span>
     </div>
     ${rgn2List.length ? rgn2List.map(r => {
       const cur = (STATE.rgn2Managers || {})[r] || '';
@@ -1546,10 +1575,10 @@ function openRgn2ManagerModal() {
         <input type="text"
                value="${cur.replace(/"/g,'&quot;')}"
                placeholder="담당자 이름"
-               style="background:#0d1825;border:1px solid #1e3048;border-radius:6px;color:#e8edf2;padding:7px 11px;font-size:12.5px;font-family:inherit;width:100%;box-sizing:border-box"
+               style="background:var(--bg-section);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:7px 11px;font-size:12.5px;font-family:inherit;width:100%;box-sizing:border-box"
                onchange="_saveRgn2Manager('${r}', this.value)">
       </div>`;
-    }).join('') : '<div class="empty" style="padding:20px;color:#4b6278;text-align:center">등록된 RGN2가 없습니다 — KPI 데이터를 먼저 불러와 주세요</div>'}
+    }).join('') : '<div class="empty" style="padding:20px;color:var(--text-muted);text-align:center">등록된 RGN2가 없습니다 — KPI 데이터를 먼저 불러와 주세요</div>'}
   `;
   document.getElementById('rgn2ManagerModal').classList.add('open');
 }
@@ -1755,11 +1784,11 @@ function _renderBriefingBody() {
   // 지역 카드 HTML
   const regionCards = _briefingState.regions.length
     ? _briefingState.regions.map(rgn2 => _renderBriefingRegionCard(rgn2, d1, d2)).join('')
-    : `<div style="color:#4b6278;text-align:center;padding:20px;background:#0d1825;border-radius:8px">지역(RGN2)을 추가해 주세요</div>`;
+    : `<div style="color:var(--text-muted);text-align:center;padding:20px;background:var(--bg-section);border-radius:8px">지역(RGN2)을 추가해 주세요</div>`;
 
   body.innerHTML = `
-    <div style="background:#0d1825;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <div style="font-size:11.5px;color:#8fa3b8">기준일 D-1: <span style="color:var(--accent-soft);font-weight:600">${d1||'-'}</span> &nbsp;|&nbsp; 비교일 D-2: <span style="color:#8fa3b8">${d2||'-'}</span></div>
+    <div style="background:var(--bg-section);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="font-size:11.5px;color:var(--text-secondary)">기준일 D-1: <span style="color:var(--accent-soft);font-weight:600">${d1||'-'}</span> &nbsp;|&nbsp; 비교일 D-2: <span style="color:var(--text-secondary)">${d2||'-'}</span></div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
         <select id="briefingAddSel" class="filter-select" style="min-width:140px">
           <option value="">${remain.length ? '지역 선택…' : '선택 가능 지역 없음'}</option>
@@ -1771,17 +1800,17 @@ function _renderBriefingBody() {
 
     <div style="display:flex;flex-direction:column;gap:10px">${regionCards}</div>
 
-    <div style="background:#0d1825;border-radius:8px;padding:12px 14px">
-      <div style="font-size:12px;color:#8fa3b8;font-weight:600;margin-bottom:6px">📌 당일 영업계획</div>
+    <div style="background:var(--bg-section);border-radius:8px;padding:12px 14px">
+      <div style="font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">📌 당일 영업계획</div>
       <textarea id="briefingPlan" rows="5"
-                style="width:100%;background:#0f1a26;border:1px solid #1e3048;border-radius:6px;color:#e8edf2;padding:10px 12px;font-size:12.5px;font-family:inherit;line-height:1.6;box-sizing:border-box;resize:vertical"
+                style="width:100%;background:var(--bg-input-2);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:10px 12px;font-size:12.5px;font-family:inherit;line-height:1.6;box-sizing:border-box;resize:vertical"
                 placeholder="• 영등포구 기존 협력사 퍼포먼스 중간 점검&#10;• 동작구 현황 체크 시작&#10;• 의왕시 협력사 인터뷰">${_briefingState.plan.replace(/</g,'&lt;')}</textarea>
-      <div style="font-size:10.5px;color:#4b6278;margin-top:4px">한 줄에 하나씩 쓰면 자동으로 글머리 기호가 붙습니다</div>
+      <div style="font-size:10.5px;color:var(--text-muted);margin-top:4px">한 줄에 하나씩 쓰면 자동으로 글머리 기호가 붙습니다</div>
     </div>
 
-    <div style="background:#0a131c;border:1px dashed #1e3048;border-radius:8px;padding:12px 14px">
-      <div style="font-size:11.5px;color:#8fa3b8;font-weight:600;margin-bottom:6px">📋 미리보기 (복사될 텍스트)</div>
-      <pre id="briefingPreview" style="white-space:pre-wrap;color:#c5d5e5;font-family:inherit;font-size:12px;line-height:1.65;margin:0">${_buildBriefingText().replace(/</g,'&lt;')}</pre>
+    <div style="background:var(--bg-section);border:1px dashed var(--border);border-radius:8px;padding:12px 14px">
+      <div style="font-size:11.5px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">📋 미리보기 (복사될 텍스트)</div>
+      <pre id="briefingPreview" style="white-space:pre-wrap;color:var(--text-cell);font-family:inherit;font-size:12px;line-height:1.65;margin:0">${_buildBriefingText().replace(/</g,'&lt;')}</pre>
     </div>
 
     <div style="display:flex;justify-content:flex-end;gap:8px">
@@ -1804,12 +1833,12 @@ function _renderBriefingRegionCard(rgn2, d1, d2) {
   const a = _briefingAggregate(rgn2, d1);
   const b = d2 ? _briefingAggregate(rgn2, d2) : null;
   if (!a) {
-    return `<div style="background:#0d1825;border:1px solid #1e3048;border-radius:8px;padding:12px 14px">
+    return `<div style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="font-size:14px;font-weight:700;color:#e8edf2">[${rgn2}]</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text-primary)">[${rgn2}]</div>
         <button class="btn btn-ghost btn-sm" style="color:#f87171" onclick="_briefingRemoveRegion('${rgn2}')">삭제</button>
       </div>
-      <div style="color:#4b6278;font-size:12px">${d1} 데이터 없음</div>
+      <div style="color:var(--text-muted);font-size:12px">${d1} 데이터 없음</div>
     </div>`;
   }
   const shareTxt = a.sharePct != null ? (a.sharePct * 100).toFixed(1) + '%' : '-';
@@ -1819,15 +1848,15 @@ function _renderBriefingRegionCard(rgn2, d1, d2) {
   const dcpoGap = (a.totalDcpo && a.flDcpo) ? (a.totalDcpo - a.flDcpo) : null;
   const gapHtml = dcpoGap !== null
     ? `<span style="color:${dcpoGap>0?'#f87171':'#4ade80'};font-size:11px">FL 대비 ${dcpoGap>0?'▲':'▼'}${Math.abs(Math.round(dcpoGap)).toLocaleString()}원</span>`
-    : `<span style="color:#4b6278;font-size:11px">FL 대비 -</span>`;
+    : `<span style="color:var(--text-muted);font-size:11px">FL 대비 -</span>`;
   const cell = (label, val, delta) => `<div style="display:flex;flex-direction:column;gap:2px;min-width:0">
-    <span style="font-size:10.5px;color:#8fa3b8">${label}</span>
-    <span style="font-size:13.5px;color:#e8edf2;font-weight:700">${val}</span>
-    ${delta?`<span style="font-size:10.5px;color:#8fa3b8">${delta}</span>`:''}
+    <span style="font-size:10.5px;color:var(--text-secondary)">${label}</span>
+    <span style="font-size:13.5px;color:var(--text-primary);font-weight:700">${val}</span>
+    ${delta?`<span style="font-size:10.5px;color:var(--text-secondary)">${delta}</span>`:''}
   </div>`;
-  return `<div style="background:#0d1825;border:1px solid #1e3048;border-radius:8px;padding:12px 14px">
+  return `<div style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:14px;font-weight:700;color:#e8edf2">[${rgn2}] <span style="color:#4b6278;font-size:11px;font-weight:400;margin-left:4px">${d1}</span></div>
+      <div style="font-size:14px;font-weight:700;color:var(--text-primary)">[${rgn2}] <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:4px">${d1}</span></div>
       <button class="btn btn-ghost btn-sm" style="color:#f87171" onclick="_briefingRemoveRegion('${rgn2}')">삭제</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px">
@@ -1845,13 +1874,13 @@ function _renderBriefingRegionCard(rgn2, d1, d2) {
 // vol = raw 물량건수, sets = 신청세트수, targetPerSet = goal per set
 function slotAchievementFmt(vol, sets, targetPerSet) {
   if (vol === null || vol === undefined || vol === '' || !sets || !targetPerSet) {
-    return `<span style="color:#4b6278">-</span>`;
+    return `<span style="color:var(--text-muted)">-</span>`;
   }
   const n   = Number(vol);
   const s   = Number(sets);
   const tgt = Number(targetPerSet);
   const goal = s * tgt;
-  if (!goal) return `<span style="color:#4b6278">-</span>`;
+  if (!goal) return `<span style="color:var(--text-muted)">-</span>`;
   const ratio = n / goal;
   const pct   = Math.round(ratio * 100);
   const cls   = pct >= 100 ? 'ach-hi' : pct >= 70 ? 'ach-mid' : 'ach-lo';
@@ -1916,7 +1945,7 @@ function slotClass(vol, riders) {
 
 function slotFmt(vol, riders) {
   // Display raw 물량 count with per-rider coloring
-  if (vol === null || vol === undefined || vol === '') return '<span style="color:#4b6278">-</span>';
+  if (vol === null || vol === undefined || vol === '') return '<span style="color:var(--text-muted)">-</span>';
   const n   = Number(vol);
   const r   = Number(riders) || 0;
   const cls = slotClass(vol, riders);
@@ -1925,7 +1954,7 @@ function slotFmt(vol, riders) {
   // bar scaled to 120건 (generous max)
   const barW   = Math.min(100, Math.round((n / 120) * 100));
   return `<span class="${cls}">${n.toLocaleString()}건</span>` +
-         `<span style="display:block;font-size:9px;color:#4b6278">${eff}건/명</span>` +
+         `<span style="display:block;font-size:9px;color:var(--text-muted)">${eff}건/명</span>` +
          `<span class="slot-bar ${barCls}" style="width:${barW}%"></span>`;
 }
 
@@ -1954,7 +1983,7 @@ function dodFmt(v) {
 }
 
 function makeSparkline(values) {
-  if (!values || !values.length) return '<span style="color:#4b6278;font-size:10px">-</span>';
+  if (!values || !values.length) return '<span style="color:var(--text-muted);font-size:10px">-</span>';
   const max = Math.max(...values), min = Math.min(...values), range = max-min || 1;
   return `<div class="spark-wrap">${values.map((v,i) => {
     const h = Math.max(4, Math.round(((v-min)/range)*24));
@@ -2111,15 +2140,15 @@ function renderRealtime() {
 
     return `<tr class="${rowCls}" onclick="openPartnerModal('${r.p['협력사ID']}')">
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
-      <td style="color:#8fa3b8;font-size:11px;white-space:nowrap">${r.regionDisp}</td>
-      <td><strong style="color:#fff">${r.p['협력사명']}</strong></td>
-      <td style="color:#4b6278;font-size:11px">${r.p['협력사ID']}</td>
-      <td style="color:#8fa3b8;font-size:11px">${r.contractType}</td>
+      <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.regionDisp}</td>
+      <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
+      <td style="color:var(--text-muted);font-size:11px">${r.p['협력사ID']}</td>
+      <td style="color:var(--text-secondary);font-size:11px">${r.contractType}</td>
       <td>${getGradeBadge(r.grade)}</td>
       <td style="text-align:center;color:var(--accent-soft);font-weight:600">${r.riderJoinN || '-'}</td>
       <td style="text-align:center;color:#4ade80;font-weight:600">${r.riderActN || '-'}</td>
-      <td style="text-align:center;color:#8fa3b8">${r.setsN || '-'}</td>
-      <td style="text-align:center;font-weight:700;color:#e8edf2">${r.kpi?r.totalVolN.toLocaleString():'-'}</td>
+      <td style="text-align:center;color:var(--text-secondary)">${r.setsN || '-'}</td>
+      <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.kpi?r.totalVolN.toLocaleString():'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.amVol,r.setsN,r.tgt.am):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.pmVol,r.setsN,r.tgt.pm):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.evVol,r.setsN,r.tgt.ev):'-'}</td>
@@ -2316,16 +2345,16 @@ function _renderGradeChip(tableKey) {
               style="color:${color};font-weight:${active.size>0?'600':'500'}">${label}</button>
       <div id="grade-menu-${tableKey}"
            style="display:none;position:absolute;right:0;top:100%;margin-top:4px;z-index:100;
-                  background:#111d2b;border:1px solid #1e3048;border-radius:6px;padding:6px;
+                  background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:6px;
                   min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,.5)">
         ${grades.map(g => `
-          <label style="display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:pointer;font-size:12px;color:#c5d5e5;border-radius:4px"
-                 onmouseover="this.style.background='#1a2d42'" onmouseout="this.style.background='transparent'">
+          <label style="display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:pointer;font-size:12px;color:var(--text-cell);border-radius:4px"
+                 onmouseover="this.style.background='var(--bg-filter)'" onmouseout="this.style.background='transparent'">
             <input type="checkbox" ${active.has(g)?'checked':''}
                    onchange="_toggleGradeFilter('${tableKey}','${g}')">
             ${g}
           </label>
-        `).join('') || '<div style="padding:8px;color:#4b6278;font-size:11px">등급 데이터 없음</div>'}
+        `).join('') || '<div style="padding:8px;color:var(--text-muted);font-size:11px">등급 데이터 없음</div>'}
       </div>
     </span>
   `;
@@ -2551,7 +2580,7 @@ function _getPrevDayWindow() {
 
 // 얇은 스파크라인 (리스트 행 내부용)
 function _sparkline(values, color) {
-  if (!values || !values.length) return '<span style="color:#4b6278">-</span>';
+  if (!values || !values.length) return '<span style="color:var(--text-muted)">-</span>';
   const w = 100, h = 26, pad = 3;
   const max = Math.max(...values, 1);
   const min = Math.min(...values, 0);
@@ -2611,7 +2640,7 @@ function _chartVolumeSLA(labels, volumes, slas) {
   for (let t = 0; t <= ticks; t++) {
     const y = padT + chartH - (t/ticks) * chartH;
     const val = Math.round((t/ticks) * maxV);
-    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#1e3048" stroke-width="1"/>
+    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
              <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="#4b6278" text-anchor="end">${val.toLocaleString()}</text>`;
   }
   // Right axis (SLA 0-100)
@@ -2649,7 +2678,7 @@ function _chartVolumeSLA(labels, volumes, slas) {
     const x = xFor(i);
     const y = padT + chartH - (Math.min(100, Math.max(0, s))/100) * chartH;
     return `<g class="chart-hov" color="#fbbf24">
-      <circle cx="${x}" cy="${y}" r="3" fill="#0d1825" stroke="#fbbf24" stroke-width="2"/>
+      <circle cx="${x}" cy="${y}" r="3" fill="var(--bg-section)" stroke="#fbbf24" stroke-width="2"/>
       <text x="${x}" y="${y-9}" font-size="9" fill="#fbbf24" text-anchor="middle" font-weight="600"
             stroke="#0d1923" stroke-width="3" paint-order="stroke">${s ? s.toFixed(1) : '-'}</text>
     </g>`;
@@ -2667,7 +2696,7 @@ function _chartVolumeSLA(labels, volumes, slas) {
       <rect x="0" y="0" width="10" height="10" fill="${AC.accent}" opacity="0.85" rx="1"/>
       <text x="14" y="9" font-size="10" fill="#c5d5e5">처리건수</text>
       <line x1="90" y1="5" x2="108" y2="5" stroke="#fbbf24" stroke-width="2"/>
-      <circle cx="99" cy="5" r="3" fill="#0d1825" stroke="#fbbf24" stroke-width="2"/>
+      <circle cx="99" cy="5" r="3" fill="var(--bg-section)" stroke="#fbbf24" stroke-width="2"/>
       <text x="114" y="9" font-size="10" fill="#c5d5e5">수락률(%)</text>
     </g>`;
 
@@ -2691,7 +2720,7 @@ function _chartAchievement(labels, series) {
   for (let t = 0; t <= ticks; t++) {
     const y = padT + chartH - (t/ticks) * chartH;
     const val = Math.round((t/ticks) * maxVal);
-    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#1e3048" stroke-width="1"/>
+    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
              <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="#4b6278" text-anchor="end">${val}%</text>`;
   }
   // 100% reference line
@@ -2742,7 +2771,7 @@ function _chartShareStacked(labels, shares) {
   let grid = '';
   for (let t = 0; t <= ticks; t++) {
     const y = padT + chartH - (t/ticks) * chartH;
-    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#1e3048" stroke-width="1"/>
+    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>
              <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="#4b6278" text-anchor="end">${(t/ticks)*100}%</text>`;
   }
 
@@ -2758,7 +2787,7 @@ function _chartShareStacked(labels, shares) {
       const bh = (v/100) * chartH;
       const y = padT + chartH - (cursor/100 + v/100) * chartH;
       const labelHtml = v >= 8
-        ? `<text x="${xFor(i)}" y="${y + bh/2 + 3}" font-size="9" fill="#0f1923" text-anchor="middle" font-weight="700">${v.toFixed(0)}%</text>`
+        ? `<text x="${xFor(i)}" y="${y + bh/2 + 3}" font-size="9" fill="var(--bg-page)" text-anchor="middle" font-weight="700">${v.toFixed(0)}%</text>`
         : '';
       bars.push(`<g class="chart-hov" color="${colors[k]}">
         <rect x="${xFor(i)-barW/2}" y="${y}" width="${barW}" height="${bh}" fill="${colors[k]}" opacity="0.9"/>
@@ -2847,17 +2876,17 @@ function renderPerfList() {
   const fmtDelta = (cur, prior, kind) => {
     if (prior === null || prior === undefined || cur === null || cur === undefined
         || isNaN(cur) || isNaN(prior)) {
-      return `<span style="color:#4b6278">-</span>`;
+      return `<span style="color:var(--text-muted)">-</span>`;
     }
     let delta, unit;
     if (kind === 'pp')         { delta = cur - prior; unit = '%p'; }
     else if (kind === 'count') { delta = cur - prior; unit = '슬롯'; }
     else {
-      if (!prior) return `<span style="color:#4b6278">-</span>`;
+      if (!prior) return `<span style="color:var(--text-muted)">-</span>`;
       delta = ((cur - prior) / prior) * 100;
       unit = '%';
     }
-    if (!isFinite(delta)) return `<span style="color:#4b6278">-</span>`;
+    if (!isFinite(delta)) return `<span style="color:var(--text-muted)">-</span>`;
     const arrow = delta > 0.05 ? '▲' : delta < -0.05 ? '▼' : '·';
     const color = delta > 0.05 ? '#4ade80' : delta < -0.05 ? '#f87171' : '#8fa3b8';
     return `<span style="color:${color};font-weight:600">${arrow}${Math.abs(delta).toFixed(1)}${unit}</span>`;
@@ -2920,10 +2949,10 @@ function renderPerfList() {
   // 3PL처리비중 셀 (공통)
   const tpl3Cell = (v) => {
     if (v === null || v === undefined || isNaN(v)) {
-      return `<td style="text-align:center;color:#4b6278" title="해당 RGN2의 3PL처리비중 데이터 없음">-</td>`;
+      return `<td style="text-align:center;color:var(--text-muted)" title="해당 RGN2의 3PL처리비중 데이터 없음">-</td>`;
     }
     const pct = v * 100;
-    return `<td style="text-align:center;color:#c5d5e5;font-weight:600">${pct.toFixed(1)}%</td>`;
+    return `<td style="text-align:center;color:var(--text-cell);font-weight:600">${pct.toFixed(1)}%</td>`;
   };
 
   // ── 렌더 ──
@@ -2932,9 +2961,9 @@ function renderPerfList() {
       return `<tr onclick="openPerfDetailModal('${r.pid}')">
         <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${r.rgn2}</td>
         ${tpl3Cell(r.tpl3)}
-        <td style="color:#8fa3b8;font-size:11px">${r.region}</td>
-        <td><strong style="color:#fff">${r.p['협력사명']}</strong></td>
-        <td style="color:#4b6278;font-size:11px">${r.pid}</td>
+        <td style="color:var(--text-secondary);font-size:11px">${r.region}</td>
+        <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
+        <td style="color:var(--text-muted);font-size:11px">${r.pid}</td>
         <td style="text-align:center">${getStatusBadge(r.p)}</td>
         <td style="text-align:center">${getGradeBadge(r.grade)}</td>
         <td colspan="6" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
@@ -2946,35 +2975,35 @@ function renderPerfList() {
     const ordColor  = prev.orderAch === null ? '#4b6278' : _achColor(prev.orderAch);
 
     const orderCell = prev.orderAch === null
-      ? `<td style="text-align:center;color:#4b6278" title="발주물량 컬럼에 값이 없습니다">-</td>`
+      ? `<td style="text-align:center;color:var(--text-muted)" title="발주물량 컬럼에 값이 없습니다">-</td>`
       : `<td style="text-align:center;color:${ordColor};font-weight:600">${prev.orderAch.toFixed(1)}%</td>`;
 
     // 슬롯 셀: "X.X / Y" 달성/가능
     const slotCell = (prev.slotsAchieved !== null && prev.slotsAchieved !== undefined)
       ? `<td style="text-align:center;color:${slotColor};font-weight:600">
-           ${prev.slotsAchieved.toFixed(1)}<span style="color:#4b6278;font-weight:400;font-size:11px"> / ${prev.slotsPossible || '-'}</span>
+           ${prev.slotsAchieved.toFixed(1)}<span style="color:var(--text-muted);font-weight:400;font-size:11px"> / ${prev.slotsPossible || '-'}</span>
          </td>`
-      : `<td style="text-align:center;color:#4b6278">-</td>`;
+      : `<td style="text-align:center;color:var(--text-muted)">-</td>`;
 
     const notable = `
       <div style="display:grid;grid-template-columns:max-content max-content;gap:2px 8px;font-size:11px;line-height:1.45;white-space:nowrap">
-        <span style="color:#8fa3b8">처리건수</span>   ${fmtDelta(prev.totalVol,      prior ? prior.totalVol      : null, 'rel')}
-        <span style="color:#8fa3b8">발주 달성률</span> ${fmtDelta(prev.orderAch,      prior ? prior.orderAch      : null, 'rel')}
-        <span style="color:#8fa3b8">수락률</span>     ${fmtDelta(prev.sla,           prior ? prior.sla           : null, 'pp')}
-        <span style="color:#8fa3b8">달성 슬롯수</span> ${fmtDelta(prev.slotsAchieved, prior ? prior.slotsAchieved : null, 'count')}
+        <span style="color:var(--text-secondary)">처리건수</span>   ${fmtDelta(prev.totalVol,      prior ? prior.totalVol      : null, 'rel')}
+        <span style="color:var(--text-secondary)">발주 달성률</span> ${fmtDelta(prev.orderAch,      prior ? prior.orderAch      : null, 'rel')}
+        <span style="color:var(--text-secondary)">수락률</span>     ${fmtDelta(prev.sla,           prior ? prior.sla           : null, 'pp')}
+        <span style="color:var(--text-secondary)">달성 슬롯수</span> ${fmtDelta(prev.slotsAchieved, prior ? prior.slotsAchieved : null, 'count')}
       </div>`;
 
     return `<tr onclick="openPerfDetailModal('${r.pid}')" style="cursor:pointer">
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       ${tpl3Cell(r.tpl3)}
-      <td style="color:#8fa3b8;font-size:11px;white-space:nowrap">${r.region}</td>
-      <td><strong style="color:#fff">${r.p['협력사명']}</strong>
-        <span style="color:#4b6278;margin-left:4px;font-size:10px">›</span></td>
-      <td style="color:#4b6278;font-size:11px">${r.pid}</td>
+      <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.region}</td>
+      <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>
+        <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
+      <td style="color:var(--text-muted);font-size:11px">${r.pid}</td>
       <td style="text-align:center">${getStatusBadge(r.p)}</td>
       <td style="text-align:center">${getGradeBadge(r.grade)}</td>
-      <td style="text-align:center;color:#c5d5e5;font-weight:600">${prev.sets ? prev.sets.toFixed(1) : '-'}</td>
-      <td style="text-align:center;font-weight:700;color:#e8edf2">${(prev.totalVol||0).toLocaleString()}</td>
+      <td style="text-align:center;color:var(--text-cell);font-weight:600">${prev.sets ? prev.sets.toFixed(1) : '-'}</td>
+      <td style="text-align:center;font-weight:700;color:var(--text-primary)">${(prev.totalVol||0).toLocaleString()}</td>
       ${orderCell}
       <td style="text-align:center;color:${slaColor};font-weight:600">${prev.sla ? prev.sla.toFixed(1)+'%' : '-'}</td>
       ${slotCell}
@@ -3007,7 +3036,7 @@ function _renderPerfWeekly(body, hist, tgt) {
 
   // 세부 테이블 (최신 위) — 일자별과 동일 양식
   const volTd = v =>
-    `<td style="text-align:center;color:#c5d5e5">${(v||0).toLocaleString()}</td>`;
+    `<td style="text-align:center;color:var(--text-cell)">${(v||0).toLocaleString()}</td>`;
 
   const tableRows = weeks.map(w => {
     const riderAct  = w.riderActAvg  || 0;
@@ -3016,22 +3045,22 @@ function _renderPerfWeekly(body, hist, tgt) {
     const setsTxt   = w.sets ? w.sets.toFixed(1) : '-';
     return `<tr>
       <td style="font-weight:700;padding:9px 6px;color:var(--accent-soft);white-space:nowrap">${_formatWeek(w.week)}
-        <span style="color:#4b6278;font-size:10px;margin-left:4px">(${w.days}일)</span></td>
-      <td style="text-align:center;color:#c5d5e5">${setsTxt}</td>
-      <td style="text-align:center;font-weight:700;color:#e8edf2">${w.totalVol.toLocaleString()}</td>
+        <span style="color:var(--text-muted);font-size:10px;margin-left:4px">(${w.days}일)</span></td>
+      <td style="text-align:center;color:var(--text-cell)">${setsTxt}</td>
+      <td style="text-align:center;font-weight:700;color:var(--text-primary)">${w.totalVol.toLocaleString()}</td>
       ${volTd(w.amVol)}
       ${volTd(w.pmVol)}
       ${volTd(w.evVol)}
       ${volTd(w.niVol)}
       <td style="text-align:center;color:${_slaColor(w.sla)};font-weight:600">${w.sla ? w.sla.toFixed(1)+'%' : '-'}</td>
       <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct ? riderAct.toFixed(1) : '-'}명
-        <span style="color:#8fa3b8;font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
+        <span style="color:var(--text-secondary);font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
     </tr>`;
   }).join('');
 
   body.innerHTML = `
     <div class="modal-section">
-      <div class="modal-section-title">📅 주차별 세부 지표 <span style="color:#4b6278;font-size:11px;font-weight:400;margin-left:6px">최근 ${weeks.length}주</span></div>
+      <div class="modal-section-title">📅 주차별 세부 지표 <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">최근 ${weeks.length}주</span></div>
       <div class="table-wrap table-scroll">
         <table class="data-table" style="min-width:960px">
           <thead>
@@ -3081,13 +3110,13 @@ function _renderPerfDaily(body, hist, tgt) {
   });
 
   const shareTd = (v, total) => total
-    ? `<td style="text-align:center;color:#8fa3b8">${((v/total)*100).toFixed(1)}%</td>`
-    : `<td style="text-align:center;color:#4b6278">-</td>`;
+    ? `<td style="text-align:center;color:var(--text-secondary)">${((v/total)*100).toFixed(1)}%</td>`
+    : `<td style="text-align:center;color:var(--text-muted)">-</td>`;
   const volTd = v =>
-    `<td style="text-align:center;color:#c5d5e5">${(v||0).toLocaleString()}</td>`;
+    `<td style="text-align:center;color:var(--text-cell)">${(v||0).toLocaleString()}</td>`;
   const achTd = (v, t) => t
     ? `<td style="text-align:center;color:${_achColor((v/t)*100)};font-weight:600">${((v/t)*100).toFixed(1)}%</td>`
-    : `<td style="text-align:center;color:#4b6278">-</td>`;
+    : `<td style="text-align:center;color:var(--text-muted)">-</td>`;
 
   const tableRows = dailyDesc.map(r => {
     const date = _kpiDateOf(r);
@@ -3107,22 +3136,22 @@ function _renderPerfDaily(body, hist, tgt) {
 
     return `<tr>
       <td style="white-space:nowrap;padding:9px 6px;font-weight:600;color:${dateColor}">${date}
-        <span style="color:#8fa3b8;font-weight:400;margin-left:4px">(${dow})</span></td>
-      <td style="text-align:center;color:#c5d5e5">${sets || '-'}</td>
-      <td style="text-align:center;font-weight:700;color:#e8edf2">${totalVol.toLocaleString()}</td>
+        <span style="color:var(--text-secondary);font-weight:400;margin-left:4px">(${dow})</span></td>
+      <td style="text-align:center;color:var(--text-cell)">${sets || '-'}</td>
+      <td style="text-align:center;font-weight:700;color:var(--text-primary)">${totalVol.toLocaleString()}</td>
       ${volTd(amVol)}
       ${volTd(pmVol)}
       ${volTd(evVol)}
       ${volTd(niVol)}
       <td style="text-align:center;color:${_slaColor(sla)};font-weight:600">${sla ? sla.toFixed(1)+'%' : '-'}</td>
       <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct}명
-        <span style="color:#8fa3b8;font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
+        <span style="color:var(--text-secondary);font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
     </tr>`;
   }).join('');
 
   body.innerHTML = `
     <div class="modal-section">
-      <div class="modal-section-title">📆 일자별 세부 지표 <span style="color:#4b6278;font-size:11px;font-weight:400;margin-left:6px">최근 ${dailyDesc.length}일</span></div>
+      <div class="modal-section-title">📆 일자별 세부 지표 <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">최근 ${dailyDesc.length}일</span></div>
       <div class="table-wrap table-scroll">
         <table class="data-table" style="min-width:960px">
           <thead>
@@ -3168,13 +3197,13 @@ function openPartnerModal(pid) {
   const grade    = p['등급'] || (kpi && kpi['등급']) || '-';
   const headerSets = Number((kpi && (kpi['신청세트수']||kpi['세트수'])) || p['현재세트수'] || 0);
   const setsBadge  = headerSets
-    ? `<span style="background:var(--accent-bg);color:var(--accent-soft);padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;border:1px solid #1e3048">${headerSets}세트</span>`
+    ? `<span style="background:var(--accent-bg);color:var(--accent-soft);padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;border:1px solid var(--border)">${headerSets}세트</span>`
     : '';
 
   // ── Header (협력사 퍼포먼스 모달과 동일 형식) ──
   document.getElementById('modalTitle').innerHTML = `
-    <strong style="color:#fff">${p['협력사명']}</strong>
-    <span style="color:#8fa3b8;font-size:12px;margin-left:4px">${pid} · ${region}</span>
+    <strong style="color:var(--text-strong)">${p['협력사명']}</strong>
+    <span style="color:var(--text-secondary);font-size:12px;margin-left:4px">${pid} · ${region}</span>
     ${getGradeBadge(grade)} ${setsBadge} ${getStatusBadge(p)}
   `;
 
@@ -3216,10 +3245,10 @@ function _renderPartnerProfile(body, pid) {
   const managerHtml = `
     <div class="info-row">
       <span class="info-label">담당 매니저
-        <span style="color:#4b6278;font-weight:400;font-size:10px;margin-left:4px">(${rgn2 || '-'} 기준)</span>
+        <span style="color:var(--text-muted);font-weight:400;font-size:10px;margin-left:4px">(${rgn2 || '-'} 기준)</span>
       </span>
       <span class="info-val">
-        ${managerVal ? `<strong style="color:#e8edf2">${managerVal}</strong>` : '<span style="color:#4b6278">-</span>'}
+        ${managerVal ? `<strong style="color:var(--text-primary)">${managerVal}</strong>` : '<span style="color:var(--text-muted)">-</span>'}
       </span>
     </div>
   `;
@@ -3236,7 +3265,7 @@ function _renderPartnerProfile(body, pid) {
       </div>
       <textarea id="partner-note-form" rows="3"
                 placeholder="협력사 애로사항을 입력하세요"
-                style="width:100%;background:#0d1825;border:1px solid #1e3048;border-radius:6px;color:#e8edf2;padding:8px 10px;font-size:12px;font-family:inherit;resize:vertical;line-height:1.5;box-sizing:border-box">${(p['주요애로사항']||'').replace(/</g,'&lt;')}</textarea>
+                style="width:100%;background:var(--bg-section);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px 10px;font-size:12px;font-family:inherit;resize:vertical;line-height:1.5;box-sizing:border-box">${(p['주요애로사항']||'').replace(/</g,'&lt;')}</textarea>
     </div>
   `;
 
@@ -3261,7 +3290,7 @@ function _renderPartnerProfile(body, pid) {
     return `<div class="slot-item">
       <div class="slot-item-label">${label}</div>
       <div class="slot-item-val ${cls}" style="font-size:16px">${pct!==null?pct+'%':'-'}</div>
-      <div style="font-size:10px;color:#8fa3b8;margin-top:2px">${n.toLocaleString()}건</div>
+      <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${n.toLocaleString()}건</div>
     </div>`;
   }).join('') : '';
 
@@ -3278,34 +3307,34 @@ function _renderPartnerProfile(body, pid) {
       <div class="slot-item">
         <div class="slot-item-label">운행라이더</div>
         <div class="slot-item-val" style="font-size:16px;color:#4ade80">${kpi['운행라이더수']||'-'}명</div>
-        <div style="font-size:10px;color:#8fa3b8">계약 ${kpi['계약중라이더수']||'-'}명</div>
+        <div style="font-size:10px;color:var(--text-secondary)">계약 ${kpi['계약중라이더수']||'-'}명</div>
       </div>
     </div>
-    <div style="font-size:11px;font-weight:700;color:#8fa3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">시간대별 달성</div>
+    <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">시간대별 달성</div>
     <div class="slot-grid">${slotGridHtml}</div>
-  ` : '<div style="color:#4b6278;text-align:center;padding:20px">KPI 데이터 없음</div>';
+  ` : '<div style="color:var(--text-muted);text-align:center;padding:20px">KPI 데이터 없음</div>';
 
   // KPI 기준 일자 (있을 때만 제목 옆에 표시)
   const kpiDate = (kpi && (kpi['일자'] || kpi['주차시작일'])) || '';
   const kpiTitleHtml = kpiDate
-    ? `실시간 운영 지표 <span style="font-size:10px;color:#4b6278;font-weight:400;margin-left:6px;text-transform:none;letter-spacing:0">${kpiDate} 기준</span>`
+    ? `실시간 운영 지표 <span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-left:6px;text-transform:none;letter-spacing:0">${kpiDate} 기준</span>`
     : `실시간 운영 지표`;
 
   // ── Profile 탭 본문 조립: 기본정보 + 실시간KPI + 활동로그 ──
   body.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="modal-section" style="background:#0d1825;border-radius:8px;padding:14px">
+      <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
         <div class="modal-section-title">기본 정보</div>
         ${infoHtml}
       </div>
-      <div class="modal-section" style="background:#0d1825;border-radius:8px;padding:14px">
+      <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
         <div class="modal-section-title">${kpiTitleHtml}</div>
         ${kpiSnapshotHtml}
       </div>
     </div>
 
     <!-- 활동 로그 -->
-    <div class="modal-section" style="background:#0d1825;border-radius:8px;padding:14px" id="voc-section">
+    <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px" id="voc-section">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div class="modal-section-title" style="margin-bottom:0">활동 로그</div>
         <button class="btn btn-primary btn-sm" onclick="toggleNewLogForm('${pid}')">+ 새 활동 로그</button>
@@ -3430,7 +3459,7 @@ function aggregateByWeekFull(kpiRows) {
 }
 
 function makeSparklineLabeled(values, labels) {
-  if (!values||!values.length) return '<span style="color:#4b6278">-</span>';
+  if (!values||!values.length) return '<span style="color:var(--text-muted)">-</span>';
   const max=Math.max(...values), min=Math.min(...values), range=max-min||1;
   return `<div style="display:flex;align-items:flex-end;gap:4px;height:40px">
     ${values.map((v,i)=>{
@@ -3438,7 +3467,7 @@ function makeSparklineLabeled(values, labels) {
       const col=v>=0.45?'#4ade80':'#f87171';
       return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:2px">
         <div style="width:100%;height:${h}px;background:${col};border-radius:2px 2px 0 0;min-width:8px" title="${(v*100).toFixed(1)}%"></div>
-        <div style="font-size:9px;color:#4b6278;white-space:nowrap">${(labels[i]||'').replace(/^\d{4}W/,'W')}</div>
+        <div style="font-size:9px;color:var(--text-muted);white-space:nowrap">${(labels[i]||'').replace(/^\d{4}W/,'W')}</div>
       </div>`;
     }).join('')}
   </div>`;
@@ -3471,7 +3500,7 @@ function renderVOCList(pid) {
 
   el.innerHTML = allLogs.length
     ? allLogs.map(v => renderVOCLogItem(v, pid)).join('')
-    : '<div style="color:#4b6278;text-align:center;padding:20px">활동 기록 없음</div>';
+    : '<div style="color:var(--text-muted);text-align:center;padding:20px">활동 기록 없음</div>';
 }
 
 function renderVOCLogItem(v, pid) {
@@ -3485,14 +3514,14 @@ function renderVOCLogItem(v, pid) {
       ? 'background:#14532d;color:#4ade80'
     : stRaw === '진행중'
       ? 'background:#5b4318;color:#fbbf24'
-      : 'background:#243240;color:#8fa3b8';
+      : 'background:#243240;color:var(--text-secondary)';
   const stLabel = stRaw === '완료' ? '✅ 완료' : stRaw;
   const statusBadge = `<span style="font-size:9.5px;${stStyle};padding:2px 6px;border-radius:3px;margin-left:4px;font-weight:600">${stLabel}</span>`;
   return `<div class="voc-log-item ${typeClass}" id="vocitem-${v._id}">
     <div class="voc-log-meta">
       <span class="voc-log-type">${v.type||'-'}</span>
       <span class="voc-log-date">${v.date||''}</span>
-      ${v.method?`<span style="font-size:10px;color:#8fa3b8">${v.method}</span>`:''}
+      ${v.method?`<span style="font-size:10px;color:var(--text-secondary)">${v.method}</span>`:''}
       ${v.person?`<span class="voc-log-person">${v.person}</span>`:''}
       ${statusBadge}
       ${src}
@@ -3751,180 +3780,41 @@ function switchPerfTab(tab)         { switchPartnerTab(tab); }
 function closeModal(e) { if(e.target.classList.contains('modal-overlay')) e.target.classList.remove('open'); }
 
 // ═══════════════════════════════════════════════════
-// 테마 (포인트 색상) 변경
+// 라이트/다크 모드 토글
 // ═══════════════════════════════════════════════════
-const LS_THEME_KEY = '3pl_theme_v1';
+const LS_THEME_KEY = '3pl_theme_v2';
 
-// 프리셋 — accent / soft(밝은톤) / bg(어두운톤)
-const THEME_PRESETS = [
-  { name: '파랑',   accent: '#3b82f6', soft: '#60a5fa', bg: '#1e3a5f' },
-  { name: '하늘',   accent: '#0ea5e9', soft: '#38bdf8', bg: '#0c3a55' },
-  { name: '청록',   accent: '#14b8a6', soft: '#2dd4bf', bg: '#0f3d3a' },
-  { name: '초록',   accent: '#10b981', soft: '#34d399', bg: '#0f3a2d' },
-  { name: '연두',   accent: '#84cc16', soft: '#a3e635', bg: '#3a4d11' },
-  { name: '주황',   accent: '#f59e0b', soft: '#fbbf24', bg: '#5a3a0d' },
-  { name: '빨강',   accent: '#ef4444', soft: '#f87171', bg: '#5b1818' },
-  { name: '분홍',   accent: '#ec4899', soft: '#f472b6', bg: '#5e1241' },
-  { name: '보라',   accent: '#8b5cf6', soft: '#a78bfa', bg: '#3b1f6e' },
-  { name: '자주',   accent: '#a855f7', soft: '#c084fc', bg: '#43166c' },
-  { name: '회청',   accent: '#64748b', soft: '#94a3b8', bg: '#2a3440' },
-  { name: '그레이', accent: '#6b7280', soft: '#9ca3af', bg: '#2c3138' },
-];
-
-// hex → HSL → 변형(밝게/어둡게) → hex (커스텀 색상에서 soft/bg 자동 산출)
-function _hexToHsl(hex) {
-  hex = hex.replace('#','');
-  if (hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
-  const r = parseInt(hex.substr(0,2),16)/255;
-  const g = parseInt(hex.substr(2,2),16)/255;
-  const b = parseInt(hex.substr(4,2),16)/255;
-  const mx = Math.max(r,g,b), mn = Math.min(r,g,b);
-  let h, s, l = (mx+mn)/2;
-  if (mx === mn) { h = s = 0; }
-  else {
-    const d = mx-mn;
-    s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
-    switch (mx) {
-      case r: h = ((g-b)/d + (g<b?6:0)); break;
-      case g: h = ((b-r)/d + 2); break;
-      case b: h = ((r-g)/d + 4); break;
-    }
-    h /= 6;
-  }
-  return [h*360, s*100, l*100];
+function getCurrentTheme() {
+  try { return localStorage.getItem(LS_THEME_KEY) || 'dark'; }
+  catch (_) { return 'dark'; }
 }
-function _hslToHex(h, s, l) {
-  s /= 100; l /= 100;
-  const c = (1 - Math.abs(2*l - 1)) * s;
-  const x = c * (1 - Math.abs((h/60) % 2 - 1));
-  const m = l - c/2;
-  let r=0,g=0,b=0;
-  if (0   <= h && h < 60)  { r=c; g=x; b=0; }
-  else if (60  <= h && h < 120) { r=x; g=c; b=0; }
-  else if (120 <= h && h < 180) { r=0; g=c; b=x; }
-  else if (180 <= h && h < 240) { r=0; g=x; b=c; }
-  else if (240 <= h && h < 300) { r=x; g=0; b=c; }
-  else                          { r=c; g=0; b=x; }
-  const to2 = v => Math.round((v+m)*255).toString(16).padStart(2,'0');
-  return '#' + to2(r) + to2(g) + to2(b);
-}
-function _deriveThemeFromAccent(accent) {
-  const [h, s, l] = _hexToHsl(accent);
-  const soft = _hslToHex(h, Math.min(100, s + 5), Math.min(75, l + 12));
-  const bg   = _hslToHex(h, Math.max(20, s * 0.6),  Math.max(15, Math.min(28, l * 0.45)));
-  return { accent, soft, bg };
-}
-
-function applyTheme(theme) {
-  // theme = {accent, soft, bg}
-  const root = document.documentElement;
-  root.style.setProperty('--accent',      theme.accent);
-  root.style.setProperty('--accent-soft', theme.soft);
-  root.style.setProperty('--accent-bg',   theme.bg);
-  // 차트는 SVG fill 속성을 정적으로 박았기 때문에 다시 그려줘야 색상 갱신됨
+function setThemeMode(mode) {
+  const m = (mode === 'light') ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', m);
+  try { localStorage.setItem(LS_THEME_KEY, m); } catch (_) {}
+  // 토픽바 버튼 아이콘 업데이트
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = (m === 'light') ? '🌙' : '☀️';
+  // 차트 SVG는 정적 fill — 재렌더링 필요
   try {
     if (typeof applyFilters === 'function' && CONFIG && CONFIG.isReady) applyFilters();
   } catch (_) {}
 }
-
-function saveThemePref(theme) {
-  try { localStorage.setItem(LS_THEME_KEY, JSON.stringify(theme)); } catch (_) {}
-}
-function loadThemePref() {
-  try {
-    const s = localStorage.getItem(LS_THEME_KEY);
-    if (!s) return null;
-    const o = JSON.parse(s);
-    return (o && o.accent) ? o : null;
-  } catch (_) { return null; }
+function toggleTheme() {
+  setThemeMode(getCurrentTheme() === 'light' ? 'dark' : 'light');
 }
 
-// 페이지 로드 직후 가능한 한 빨리 테마 적용 (FOUC 방지)
+// 페이지 로드 직후 즉시 테마 적용 (FOUC 방지)
 (function _initThemeOnLoad() {
-  const saved = loadThemePref();
-  if (saved) applyTheme(saved);
+  const saved = (function(){ try { return localStorage.getItem(LS_THEME_KEY); } catch(_) { return null; } })();
+  const m = saved === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', m);
+  // DOM ready 후 토글 버튼 아이콘도 동기화
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) btn.textContent = (m === 'light') ? '🌙' : '☀️';
+  });
 })();
-
-function openThemePicker() {
-  const body = document.getElementById('themeBody');
-  const cur  = loadThemePref() || THEME_PRESETS[0];
-  const isMatch = (p) => p.accent.toLowerCase() === (cur.accent || '').toLowerCase();
-
-  const swatches = THEME_PRESETS.map(p => {
-    const sel = isMatch(p) ? '✓' : '';
-    return `<button onclick="_pickPresetTheme('${p.accent}')" title="${p.name}"
-              style="position:relative;width:56px;height:56px;border-radius:50%;border:2px solid ${isMatch(p)?'#fff':'transparent'};
-                     background:conic-gradient(${p.accent} 0 33%, ${p.soft} 33% 66%, ${p.bg} 66% 100%);
-                     cursor:pointer;padding:0;transition:transform .12s"
-              onmouseover="this.style.transform='scale(1.08)'"
-              onmouseout="this.style.transform='scale(1)'">
-      <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;text-shadow:0 1px 2px rgba(0,0,0,.6)">${sel}</span>
-    </button>`;
-  }).join('');
-
-  body.innerHTML = `
-    <div style="font-size:11.5px;color:#8fa3b8;line-height:1.6">
-      포인트 색상을 변경합니다. 다크 배경은 그대로 유지되고 버튼·링크·강조선·차트 색상이 적용됩니다.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;justify-items:center;padding:6px 0">
-      ${swatches}
-    </div>
-    <div style="border-top:1px solid #1e3048;padding-top:14px;display:flex;align-items:center;gap:10px">
-      <span style="font-size:12px;color:#8fa3b8;font-weight:600">커스텀 색상</span>
-      <input type="color" id="themeCustomColor" value="${cur.accent}"
-             onchange="_pickCustomTheme(this.value)"
-             style="width:48px;height:36px;border:1px solid #1e3048;border-radius:6px;background:#0d1825;cursor:pointer;padding:2px">
-      <input type="text" id="themeCustomHex" value="${cur.accent}" placeholder="#3b82f6"
-             onchange="_pickCustomTheme(this.value)"
-             style="flex:1;background:#0d1825;border:1px solid #1e3048;border-radius:6px;color:#e8edf2;padding:7px 10px;font-family:ui-monospace,monospace;font-size:12px">
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px">
-      <button class="btn btn-ghost btn-sm" onclick="_resetTheme()">기본값으로</button>
-      <button class="btn btn-primary btn-sm" onclick="closeThemePicker()">완료</button>
-    </div>
-  `;
-  document.getElementById('themeModal').classList.add('open');
-}
-function closeThemePicker() {
-  document.getElementById('themeModal').classList.remove('open');
-}
-
-function _pickPresetTheme(accentHex) {
-  const p = THEME_PRESETS.find(x => x.accent.toLowerCase() === accentHex.toLowerCase());
-  if (!p) return;
-  applyTheme(p);
-  saveThemePref(p);
-  // 미니 토스트
-  showToast(`테마 적용: ${p.name}`);
-  // 모달 다시 그려서 체크 표시 갱신
-  openThemePicker();
-}
-
-function _pickCustomTheme(hex) {
-  // hex 검증
-  let v = (hex || '').trim();
-  if (!v.startsWith('#')) v = '#' + v;
-  if (!/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(v)) {
-    showToast('올바른 hex 색상 코드가 아닙니다');
-    return;
-  }
-  const theme = _deriveThemeFromAccent(v);
-  applyTheme(theme);
-  saveThemePref(theme);
-  showToast(`커스텀 테마 적용: ${v}`);
-  // input 동기화
-  const c = document.getElementById('themeCustomColor');
-  const h = document.getElementById('themeCustomHex');
-  if (c) c.value = v;
-  if (h) h.value = v;
-}
-
-function _resetTheme() {
-  applyTheme(THEME_PRESETS[0]);
-  saveThemePref(THEME_PRESETS[0]);
-  showToast('기본 테마로 복원');
-  openThemePicker();
-}
 
 function updateStatus(logId, newStatus) {
   const v = (STATE.logs||[]).find(x=>x['로그ID']===logId);
