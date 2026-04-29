@@ -2195,16 +2195,24 @@ function _dowKor(dateStr) {
   return ['일','월','화','수','목','금','토'][d.getDay()];
 }
 
+// 슬롯 달성률 색상 (≥100% 초록, ≥80% 노랑, <80% 빨강)
 function _achColor(pct) {
   if (pct >= 100) return '#4ade80';
   if (pct >= 80)  return '#fbbf24';
   return '#f87171';
 }
 
+// SLA 수락률 색상 (≥90% 초록, ≥80% 노랑, <80% 빨강)
 function _slaColor(pct) {
-  if (pct >= 85) return '#4ade80';
-  if (pct >= 70) return '#fbbf24';
+  if (pct >= 90) return '#4ade80';
+  if (pct >= 80) return '#fbbf24';
   return '#f87171';
+}
+
+// 발주물량 달성률 색상 (≥100% 초록, <100% 빨강 — 노랑 단계 없음)
+function _orderAchColor(pct) {
+  if (pct === null || pct === undefined || isNaN(pct)) return 'var(--text-muted)';
+  return pct >= 100 ? '#4ade80' : '#f87171';
 }
 
 function _slaOf(row) {
@@ -3002,7 +3010,7 @@ function renderPerfList() {
     const { prev, prior } = r;
     const slaColor  = _slaColor(prev.sla || 0);
     const slotColor = _achColor(prev.slotsRatio || 0);
-    const ordColor  = prev.orderAch === null ? '#4b6278' : _achColor(prev.orderAch);
+    const ordColor  = _orderAchColor(prev.orderAch);
 
     const orderCell = prev.orderAch === null
       ? `<td style="text-align:center;color:var(--text-muted)" title="발주물량 컬럼에 값이 없습니다">-</td>`
@@ -3064,24 +3072,33 @@ function _renderPerfWeekly(body, hist, tgt) {
     ni: asc.map(w => w.totalVol ? (w.niVol/w.totalVol)*100 : 0),
   });
 
-  // 세부 테이블 (최신 위) — 일자별과 동일 양식
-  const volTd = v =>
-    `<td style="text-align:center;color:var(--text-cell)">${(v||0).toLocaleString()}</td>`;
+  // 세부 테이블 (최신 위) — 처리건수/목표건수 형식 (달성률 색상)
+  const volTargetTd = (v, target) => {
+    if (!target) return `<td style="text-align:center;color:var(--text-cell)">${(v||0).toLocaleString()}</td>`;
+    const pct = (v / target) * 100;
+    const color = _achColor(pct);
+    return `<td style="text-align:center"><span style="color:${color};font-weight:700">${(v||0).toLocaleString()}</span><span style="color:var(--text-muted);font-weight:400">/${Math.round(target).toLocaleString()}</span></td>`;
+  };
 
   const tableRows = weeks.map(w => {
     const riderAct  = w.riderActAvg  || 0;
     const riderJoin = w.riderJoinAvg || 0;
     const actShare  = riderJoin ? (riderAct/riderJoin)*100 : 0;
     const setsTxt   = w.sets ? w.sets.toFixed(1) : '-';
+    // 주차 슬롯 목표 = 평균 sets × per-set 목표 × days
+    const tAm = (w.sets || 0) * (tgt.am || 0) * (w.days || 0);
+    const tPm = (w.sets || 0) * (tgt.pm || 0) * (w.days || 0);
+    const tEv = (w.sets || 0) * (tgt.ev || 0) * (w.days || 0);
+    const tNi = (w.sets || 0) * (tgt.ni || 0) * (w.days || 0);
     return `<tr>
       <td style="font-weight:700;padding:9px 6px;color:var(--accent-soft);white-space:nowrap">${_formatWeek(w.week)}
         <span style="color:var(--text-muted);font-size:10px;margin-left:4px">(${w.days}일)</span></td>
       <td style="text-align:center;color:var(--text-cell)">${setsTxt}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${w.totalVol.toLocaleString()}</td>
-      ${volTd(w.amVol)}
-      ${volTd(w.pmVol)}
-      ${volTd(w.evVol)}
-      ${volTd(w.niVol)}
+      ${volTargetTd(w.amVol, tAm)}
+      ${volTargetTd(w.pmVol, tPm)}
+      ${volTargetTd(w.evVol, tEv)}
+      ${volTargetTd(w.niVol, tNi)}
       <td style="text-align:center;color:${_slaColor(w.sla)};font-weight:600">${w.sla ? w.sla.toFixed(1)+'%' : '-'}</td>
       <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct ? Number(riderAct.toFixed(1)).toLocaleString() : '-'}명
         <span style="color:var(--text-secondary);font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
@@ -3139,14 +3156,14 @@ function _renderPerfDaily(body, hist, tgt) {
     ni: asc.map(r => { const t = Number(r['총처리건수']||0); return t ? Number(r['심야논피크_물량']||0)  /t*100 : 0; }),
   });
 
-  const shareTd = (v, total) => total
-    ? `<td style="text-align:center;color:var(--text-secondary)">${((v/total)*100).toFixed(1)}%</td>`
-    : `<td style="text-align:center;color:var(--text-muted)">-</td>`;
-  const volTd = v =>
-    `<td style="text-align:center;color:var(--text-cell)">${(v||0).toLocaleString()}</td>`;
-  const achTd = (v, t) => t
-    ? `<td style="text-align:center;color:${_achColor((v/t)*100)};font-weight:600">${((v/t)*100).toFixed(1)}%</td>`
-    : `<td style="text-align:center;color:var(--text-muted)">-</td>`;
+  // "처리건수/목표건수" 형식 셀 (목표 = sets × per-set 목표)
+  // 달성률에 따라 처리건수 색상 구분 (≥100% 초록 / ≥80% 노랑 / <80% 빨강)
+  const volTargetTd = (v, target) => {
+    if (!target) return `<td style="text-align:center;color:var(--text-cell)">${(v||0).toLocaleString()}</td>`;
+    const pct = (v / target) * 100;
+    const color = _achColor(pct);
+    return `<td style="text-align:center"><span style="color:${color};font-weight:700">${(v||0).toLocaleString()}</span><span style="color:var(--text-muted);font-weight:400">/${Math.round(target).toLocaleString()}</span></td>`;
+  };
 
   const tableRows = dailyDesc.map(r => {
     const date = _kpiDateOf(r);
@@ -3163,16 +3180,21 @@ function _renderPerfDaily(body, hist, tgt) {
     const actShare  = riderJoin ? (riderAct/riderJoin)*100 : 0;
     const isWeekend = dow === '토' || dow === '일';
     const dateColor = isWeekend ? '#fbbf24' : 'var(--text-primary)';
+    // 슬롯 목표 — per-set 목표는 행에 함께 저장됨
+    const tAm = sets * Number(r['목표_아침점심'] || tgt.am || 0);
+    const tPm = sets * Number(r['목표_오후']     || tgt.pm || 0);
+    const tEv = sets * Number(r['목표_저녁']     || tgt.ev || 0);
+    const tNi = sets * Number(r['목표_심야']     || tgt.ni || 0);
 
     return `<tr>
       <td style="white-space:nowrap;padding:9px 6px;font-weight:600;color:${dateColor}">${date}
         <span style="color:var(--text-secondary);font-weight:400;margin-left:4px">(${dow})</span></td>
       <td style="text-align:center;color:var(--text-cell)">${sets || '-'}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${totalVol.toLocaleString()}</td>
-      ${volTd(amVol)}
-      ${volTd(pmVol)}
-      ${volTd(evVol)}
-      ${volTd(niVol)}
+      ${volTargetTd(amVol, tAm)}
+      ${volTargetTd(pmVol, tPm)}
+      ${volTargetTd(evVol, tEv)}
+      ${volTargetTd(niVol, tNi)}
       <td style="text-align:center;color:${_slaColor(sla)};font-weight:600">${sla ? sla.toFixed(1)+'%' : '-'}</td>
       <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct.toLocaleString()}명
         <span style="color:var(--text-secondary);font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
