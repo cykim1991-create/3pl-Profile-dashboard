@@ -6,6 +6,13 @@
 <title>3PL 협력사 프로파일 대시보드</title>
 <script src="https://accounts.google.com/gsi/client" async defer onload="typeof initGSI==='function'&&initGSI()"></script>
 <style>
+:root{
+  /* ── 테마 포인트 색상 (테마 변경 시 JS가 갱신) ── */
+  --accent: #3b82f6;       /* 메인 액센트 (버튼/링크/차트 막대) */
+  --accent-soft: #60a5fa;  /* 밝은 톤 (텍스트, 활성 탭, 날짜 등) */
+  --accent-bg: #1e3a5f;    /* 어두운 톤 (active 배경, 토픽 뱃지) */
+  --accent-border: #1e3048;/* 보더(현재 다크 베이스 유지) */
+}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;background:#0f1923;color:#e8edf2;font-size:13px;min-height:100vh}
 a{color:inherit;text-decoration:none}
@@ -15,15 +22,15 @@ input,select,textarea{font-family:inherit;font-size:13px}
 #app{display:flex;flex-direction:column;height:100vh}
 .topbar{background:#111d2b;border-bottom:1px solid #1e3048;padding:0 20px;display:flex;align-items:center;gap:16px;height:52px;flex-shrink:0;z-index:100}
 .topbar-logo{font-size:15px;font-weight:700;color:#fff;white-space:nowrap}
-.topbar-logo span{color:#3b82f6}
+.topbar-logo span{color:var(--accent)}
 .topbar-nav{display:flex;gap:2px;flex:1}
 .nav-btn{padding:6px 14px;border:none;background:transparent;color:#8fa3b8;border-radius:6px;font-size:13px;font-weight:500;transition:all .15s}
 .nav-btn:hover{background:#1e3048;color:#e8edf2}
-.nav-btn.active{background:#1e3a5f;color:#60a5fa;font-weight:600}
+.nav-btn.active{background:var(--accent-bg);color:var(--accent-soft);font-weight:600}
 .topbar-filters{display:flex;align-items:center;gap:8px}
-.filter-select{background:#1a2d42;border:1px solid #1e3a5f;color:#c5d5e5;padding:5px 10px;border-radius:6px;font-size:12px}
-.filter-select:focus{outline:none;border-color:#3b82f6}
-.region-badge{background:#1e3a5f;color:#60a5fa;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.filter-select{background:#1a2d42;border:1px solid var(--accent-bg);color:#c5d5e5;padding:5px 10px;border-radius:6px;font-size:12px}
+.filter-select:focus{outline:none;border-color:var(--accent)}
+.region-badge{background:var(--accent-bg);color:var(--accent-soft);padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600}
 
 .main{flex:1;overflow:auto;padding:20px}
 .view{display:none}
@@ -33,7 +40,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
 .kpi-card{background:#111d2b;border:1px solid #1e3048;border-radius:10px;padding:16px 18px;position:relative;overflow:hidden}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
-.kpi-card.blue::before{background:#3b82f6}
+.kpi-card.blue::before{background:var(--accent)}
 .kpi-card.red::before{background:#ef4444}
 .kpi-card.orange::before{background:#f59e0b}
 .kpi-card.green::before{background:#10b981}
@@ -64,7 +71,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .data-table tbody tr{transition:background .1s}
 .data-table tbody tr:hover{background:#1a2d42;cursor:pointer}
 .data-table tbody tr:last-child td{border-bottom:none}
-.data-table th.slot-group{text-align:center;background:#0a1d35;border-bottom:2px solid #3b82f6;letter-spacing:.3px}
+.data-table th.slot-group{text-align:center;background:#0a1d35;border-bottom:2px solid var(--accent);letter-spacing:.3px}
 
 /* ── SVG 차트 호버 효과 (데이터 포인트·라벨 개별 하이라이트) ── */
 .chart-hov{transition:filter .12s ease,opacity .12s ease;cursor:pointer}
@@ -83,7 +90,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .badge-pending{background:#2d0606;color:#f87171}
 .badge-doing{background:#2d2006;color:#fbbf24}
 .badge-done{background:#052e16;color:#4ade80}
-.badge-tier1{background:#1e3a5f;color:#60a5fa}
+.badge-tier1{background:var(--accent-bg);color:var(--accent-soft)}
 .badge-tier2{background:#2d1854;color:#a78bfa}
 .badge-tier3{background:#1a2d42;color:#94a3b8}
 
@@ -125,7 +132,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 
 /* ── Rider count */
 .rider-disp{display:inline-flex;align-items:center;gap:2px;font-size:12px}
-.rider-join{color:#60a5fa;font-weight:600}
+.rider-join{color:var(--accent-soft);font-weight:600}
 .rider-sep{color:#4b6278;font-size:10px}
 .rider-act{color:#4ade80;font-weight:600}
 
@@ -161,7 +168,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .issue-cat{font-size:10px;font-weight:700;color:#8fa3b8;background:#0d1825;padding:2px 6px;border-radius:4px}
 .issue-date{font-size:10px;color:#4b6278}
 .issue-content{font-size:12px;color:#c5d5e5;line-height:1.5;margin-bottom:6px}
-.issue-followup{font-size:11px;color:#60a5fa;margin-bottom:4px}
+.issue-followup{font-size:11px;color:var(--accent-soft);margin-bottom:4px}
 .issue-actions{display:flex;gap:6px;justify-content:flex-end}
 .status-btn{padding:3px 8px;border:none;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer}
 .status-btn.doing{background:#78350f;color:#fbbf24}
@@ -174,12 +181,12 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .form-group.full{grid-column:1/-1}
 .form-label{font-size:11px;color:#8fa3b8;font-weight:500}
 .form-input{background:#1a2d42;border:1px solid #1e3048;color:#e8edf2;padding:7px 10px;border-radius:6px;width:100%}
-.form-input:focus{outline:none;border-color:#3b82f6}
+.form-input:focus{outline:none;border-color:var(--accent)}
 textarea.form-input{resize:vertical;min-height:60px}
 
 /* ── Spark */
 .spark-wrap{display:flex;align-items:flex-end;gap:2px;height:28px}
-.spark-bar{width:6px;border-radius:2px 2px 0 0;background:#3b82f6;transition:height .2s}
+.spark-bar{width:6px;border-radius:2px 2px 0 0;background:var(--accent);transition:height .2s}
 .spark-bar.down{background:#ef4444}
 .spark-bar.up{background:#10b981}
 
@@ -232,10 +239,10 @@ textarea.form-input{resize:vertical;min-height:60px}
 /* ── Misc */
 .empty{text-align:center;padding:40px;color:#4b6278;font-size:13px}
 #loading{position:fixed;inset:0;background:#0f1923;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px}
-.spinner{width:36px;height:36px;border:3px solid #1e3048;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite}
+.spinner{width:36px;height:36px;border:3px solid #1e3048;border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 #loading p{color:#8fa3b8;font-size:13px}
-#toast{position:fixed;bottom:20px;right:20px;background:#1e3a5f;color:#60a5fa;border:1px solid #1e3048;border-radius:8px;padding:10px 16px;font-size:12px;z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast{position:fixed;bottom:20px;right:20px;background:var(--accent-bg);color:var(--accent-soft);border:1px solid #1e3048;border-radius:8px;padding:10px 16px;font-size:12px;z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.show{opacity:1}
 .risk-row-red{background:#180808 !important}
 .risk-row-yellow{background:#181200 !important}
@@ -258,7 +265,7 @@ textarea.form-input{resize:vertical;min-height:60px}
 .modal-tabs{display:flex;gap:2px;padding:0 20px;border-bottom:1px solid #1e3048;background:#0d1825}
 .modal-tab{padding:10px 16px;border:none;background:transparent;color:#8fa3b8;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;font-family:inherit}
 .modal-tab:hover{color:#c5d5e5}
-.modal-tab.active{color:#60a5fa;border-bottom-color:#3b82f6}
+.modal-tab.active{color:var(--accent-soft);border-bottom-color:var(--accent)}
 .modal-tab-content{display:none;padding:20px}
 .modal-tab-content.active{display:block}
 .modal-body-tabs{padding:0}
@@ -274,7 +281,7 @@ textarea.form-input{resize:vertical;min-height:60px}
 .voc-inline-form{background:#0d1825;border-radius:8px;padding:14px;margin-bottom:14px}
 .voc-inline-title{font-size:11px;font-weight:700;color:#8fa3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
 .voc-log-item{background:#111d2b;border-radius:6px;padding:10px;margin-bottom:8px;border-left:3px solid #374151;position:relative}
-.voc-log-item.type-미팅{border-left-color:#3b82f6}
+.voc-log-item.type-미팅{border-left-color:var(--accent)}
 .voc-log-item.type-VOC{border-left-color:#f59e0b}
 .voc-log-item.type-이슈{border-left-color:#ef4444}
 .voc-log-item.type-온보딩상담{border-left-color:#10b981}
@@ -282,9 +289,9 @@ textarea.form-input{resize:vertical;min-height:60px}
 .voc-log-meta{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
 .voc-log-type{font-size:10px;font-weight:700;background:#0d1825;color:#8fa3b8;padding:1px 6px;border-radius:4px}
 .voc-log-date{font-size:10px;color:#4b6278}
-.voc-log-person{font-size:10px;color:#60a5fa}
+.voc-log-person{font-size:10px;color:var(--accent-soft)}
 .voc-log-summary{font-size:12px;color:#c5d5e5;line-height:1.5;margin-bottom:4px}
-.voc-log-action{font-size:11px;color:#60a5fa;margin-bottom:4px}
+.voc-log-action{font-size:11px;color:var(--accent-soft);margin-bottom:4px}
 .voc-log-controls{display:flex;gap:4px;justify-content:flex-end}
 .voc-edit-area{display:none;margin-top:8px;border-top:1px solid #1e3048;padding-top:8px}
 .voc-edit-area.open{display:block}
@@ -296,7 +303,7 @@ textarea.form-input{resize:vertical;min-height:60px}
   <div class="spinner"></div>
   <p id="loading-msg">협력사 데이터 로딩 중...</p>
   <div style="width:200px;height:3px;background:#1e3048;border-radius:2px;overflow:hidden">
-    <div id="loading-progress" style="height:100%;background:#3b82f6;width:0%;transition:width .4s ease"></div>
+    <div id="loading-progress" style="height:100%;background:var(--accent);width:0%;transition:width .4s ease"></div>
   </div>
 </div>
 
@@ -328,8 +335,9 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="btn btn-primary btn-sm" onclick="openBriefingModal()" title="아침 영업 브리핑 보고서 작성"
               style="font-size:11px">📝 영업 브리핑</button>
       <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
+      <button class="btn btn-ghost btn-sm" onclick="openThemePicker()" title="테마 색상 변경">🎨</button>
       <button class="btn btn-ghost btn-sm" onclick="openSetup()" title="연결 설정">⚙</button>
-      <button class="btn btn-sm" id="gsiBtn" onclick="gsiLogin()" style="background:#1e3a5f;color:#8fa3b8;border:1px solid #1e3048;font-size:11px">🔑 로그인</button>
+      <button class="btn btn-sm" id="gsiBtn" onclick="gsiLogin()" style="background:var(--accent-bg);color:#8fa3b8;border:1px solid #1e3048;font-size:11px">🔑 로그인</button>
     </div>
   </div>
 
@@ -464,14 +472,14 @@ textarea.form-input{resize:vertical;min-height:60px}
   <!-- 우측 하단 floating action button — 지역 담당자 관리 -->
   <button id="rgn2ManagerFab" onclick="openRgn2ManagerModal()" title="지역 담당자 관리"
           style="position:fixed;right:24px;bottom:24px;z-index:50;
-                 background:#1e3a5f;color:#60a5fa;
-                 border:1px solid #3b82f6;border-radius:24px;
+                 background:var(--accent-bg);color:var(--accent-soft);
+                 border:1px solid var(--accent);border-radius:24px;
                  padding:11px 18px;font-size:12.5px;font-weight:600;
                  cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);
                  font-family:inherit;display:inline-flex;align-items:center;gap:7px;
                  transition:transform .12s,background .15s"
           onmouseover="this.style.background='#1e4a7a';this.style.transform='translateY(-1px)'"
-          onmouseout="this.style.background='#1e3a5f';this.style.transform='translateY(0)'">
+          onmouseout="this.style.background='var(--accent-bg)';this.style.transform='translateY(0)'">
     <span>🧑‍💼</span><span>지역 담당자 관리</span>
   </button>
 </div><!-- /app -->
@@ -495,6 +503,17 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="modal-close" onclick="closeBriefingModal()">✕</button>
     </div>
     <div id="briefingBody" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px;max-height:82vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- 테마 색상 변경 모달 -->
+<div class="modal-overlay" id="themeModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">🎨 테마 색상</div>
+      <button class="modal-close" onclick="closeThemePicker()">✕</button>
+    </div>
+    <div id="themeBody" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px"></div>
   </div>
 </div>
 
@@ -714,7 +733,7 @@ function updateGsiBtn(loggedIn) {
     btn.style.borderColor = '#14532d';
   } else {
     btn.textContent = '🔑 로그인';
-    btn.style.background = '#1e3a5f';
+    btn.style.background = 'var(--accent-bg)';
     btn.style.color = '#8fa3b8';
     btn.style.borderColor = '#1e3048';
   }
@@ -1523,7 +1542,7 @@ function openRgn2ManagerModal() {
     ${rgn2List.length ? rgn2List.map(r => {
       const cur = (STATE.rgn2Managers || {})[r] || '';
       return `<div style="display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center;padding:6px 4px">
-        <span style="color:#60a5fa;font-weight:600;font-size:13px">${r}</span>
+        <span style="color:var(--accent-soft);font-weight:600;font-size:13px">${r}</span>
         <input type="text"
                value="${cur.replace(/"/g,'&quot;')}"
                placeholder="담당자 이름"
@@ -1740,7 +1759,7 @@ function _renderBriefingBody() {
 
   body.innerHTML = `
     <div style="background:#0d1825;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <div style="font-size:11.5px;color:#8fa3b8">기준일 D-1: <span style="color:#60a5fa;font-weight:600">${d1||'-'}</span> &nbsp;|&nbsp; 비교일 D-2: <span style="color:#8fa3b8">${d2||'-'}</span></div>
+      <div style="font-size:11.5px;color:#8fa3b8">기준일 D-1: <span style="color:var(--accent-soft);font-weight:600">${d1||'-'}</span> &nbsp;|&nbsp; 비교일 D-2: <span style="color:#8fa3b8">${d2||'-'}</span></div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
         <select id="briefingAddSel" class="filter-select" style="min-width:140px">
           <option value="">${remain.length ? '지역 선택…' : '선택 가능 지역 없음'}</option>
@@ -2091,13 +2110,13 @@ function renderRealtime() {
     const outOk  = r.outSLA !== null && r.outSLA >= 0.3;
 
     return `<tr class="${rowCls}" onclick="openPartnerModal('${r.p['협력사ID']}')">
-      <td style="font-weight:700;color:#60a5fa;font-size:12px;white-space:nowrap">${r.rgn2}</td>
+      <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       <td style="color:#8fa3b8;font-size:11px;white-space:nowrap">${r.regionDisp}</td>
       <td><strong style="color:#fff">${r.p['협력사명']}</strong></td>
       <td style="color:#4b6278;font-size:11px">${r.p['협력사ID']}</td>
       <td style="color:#8fa3b8;font-size:11px">${r.contractType}</td>
       <td>${getGradeBadge(r.grade)}</td>
-      <td style="text-align:center;color:#60a5fa;font-weight:600">${r.riderJoinN || '-'}</td>
+      <td style="text-align:center;color:var(--accent-soft);font-weight:600">${r.riderJoinN || '-'}</td>
       <td style="text-align:center;color:#4ade80;font-weight:600">${r.riderActN || '-'}</td>
       <td style="text-align:center;color:#8fa3b8">${r.setsN || '-'}</td>
       <td style="text-align:center;font-weight:700;color:#e8edf2">${r.kpi?r.totalVolN.toLocaleString():'-'}</td>
@@ -2262,7 +2281,7 @@ function _updateSortIndicators(tableKey, colKeys) {
       el.innerHTML = '<span style="color:#3b4a5f;font-size:9px;margin-left:3px">⇅</span>';
     } else {
       const arrow = st.sortDir === 'asc' ? '▲' : '▼';
-      el.innerHTML = `<span style="color:#60a5fa;font-size:10px;margin-left:3px;font-weight:700">${arrow}</span>`;
+      el.innerHTML = `<span style="color:var(--accent-soft);font-size:10px;margin-left:3px;font-weight:700">${arrow}</span>`;
     }
   });
 }
@@ -2289,7 +2308,7 @@ function _renderGradeChip(tableKey) {
   const st = _tblState[tableKey];
   const active = st.filterGrades;
   const label = active.size === 0 ? '등급 ▾' : `등급: ${active.size}개 ▾`;
-  const color = active.size === 0 ? '#8fa3b8' : '#60a5fa';
+  const color = active.size === 0 ? '#8fa3b8' : 'var(--accent-soft)';
 
   container.innerHTML = `
     <span data-grade-chip style="position:relative;display:inline-block">
@@ -2563,8 +2582,19 @@ function _svgFrame(title, w, h, inner) {
   </svg>`;
 }
 
+// 현재 테마의 액센트 색상 값을 CSS 변수에서 읽어옴 (SVG fill 속성용)
+function _accentColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return {
+    accent: (cs.getPropertyValue('--accent')      || '').trim() || '#3b82f6',
+    soft:   (cs.getPropertyValue('--accent-soft') || '').trim() || '#60a5fa',
+    bg:     (cs.getPropertyValue('--accent-bg')   || '').trim() || '#1e3a5f',
+  };
+}
+
 // 바+라인 콤보 (처리건수 bar + 수락률 line)
 function _chartVolumeSLA(labels, volumes, slas) {
+  const AC = _accentColors();
   const w = 900, h = 280;
   const padL = 50, padR = 50, padT = 64, padB = 38;
   const chartW = w - padL - padR;
@@ -2599,8 +2629,8 @@ function _chartVolumeSLA(labels, volumes, slas) {
     const inside = bh >= 26;
     const labelY = inside ? y + 14 : y - 5;
     const labelFill = inside ? '#ffffff' : '#e8edf2';
-    return `<g class="chart-hov" color="#3b82f6">
-      <rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="#3b82f6" opacity="0.85" rx="2"/>
+    return `<g class="chart-hov" color="${AC.accent}">
+      <rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="${AC.accent}" opacity="0.85" rx="2"/>
       <text x="${x+barW/2}" y="${labelY}" font-size="9.5" fill="${labelFill}" text-anchor="middle" font-weight="700"
             stroke="#0d1923" stroke-width="2.5" paint-order="stroke">${v.toLocaleString()}</text>
     </g>`;
@@ -2634,7 +2664,7 @@ function _chartVolumeSLA(labels, volumes, slas) {
   // Legend (제목 아래에 별도 행으로 배치)
   const legend = `
     <g transform="translate(${padL}, 38)">
-      <rect x="0" y="0" width="10" height="10" fill="#3b82f6" opacity="0.85" rx="1"/>
+      <rect x="0" y="0" width="10" height="10" fill="${AC.accent}" opacity="0.85" rx="1"/>
       <text x="14" y="9" font-size="10" fill="#c5d5e5">처리건수</text>
       <line x1="90" y1="5" x2="108" y2="5" stroke="#fbbf24" stroke-width="2"/>
       <circle cx="99" cy="5" r="3" fill="#0d1825" stroke="#fbbf24" stroke-width="2"/>
@@ -2900,7 +2930,7 @@ function renderPerfList() {
   body.innerHTML = records.map(r => {
     if (r.empty) {
       return `<tr onclick="openPerfDetailModal('${r.pid}')">
-        <td style="font-weight:700;color:#60a5fa;font-size:12px">${r.rgn2}</td>
+        <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${r.rgn2}</td>
         ${tpl3Cell(r.tpl3)}
         <td style="color:#8fa3b8;font-size:11px">${r.region}</td>
         <td><strong style="color:#fff">${r.p['협력사명']}</strong></td>
@@ -2935,7 +2965,7 @@ function renderPerfList() {
       </div>`;
 
     return `<tr onclick="openPerfDetailModal('${r.pid}')" style="cursor:pointer">
-      <td style="font-weight:700;color:#60a5fa;font-size:12px;white-space:nowrap">${r.rgn2}</td>
+      <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       ${tpl3Cell(r.tpl3)}
       <td style="color:#8fa3b8;font-size:11px;white-space:nowrap">${r.region}</td>
       <td><strong style="color:#fff">${r.p['협력사명']}</strong>
@@ -2985,7 +3015,7 @@ function _renderPerfWeekly(body, hist, tgt) {
     const actShare  = riderJoin ? (riderAct/riderJoin)*100 : 0;
     const setsTxt   = w.sets ? w.sets.toFixed(1) : '-';
     return `<tr>
-      <td style="font-weight:700;padding:9px 6px;color:#60a5fa;white-space:nowrap">${_formatWeek(w.week)}
+      <td style="font-weight:700;padding:9px 6px;color:var(--accent-soft);white-space:nowrap">${_formatWeek(w.week)}
         <span style="color:#4b6278;font-size:10px;margin-left:4px">(${w.days}일)</span></td>
       <td style="text-align:center;color:#c5d5e5">${setsTxt}</td>
       <td style="text-align:center;font-weight:700;color:#e8edf2">${w.totalVol.toLocaleString()}</td>
@@ -3138,7 +3168,7 @@ function openPartnerModal(pid) {
   const grade    = p['등급'] || (kpi && kpi['등급']) || '-';
   const headerSets = Number((kpi && (kpi['신청세트수']||kpi['세트수'])) || p['현재세트수'] || 0);
   const setsBadge  = headerSets
-    ? `<span style="background:#1e3a5f;color:#60a5fa;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;border:1px solid #1e3048">${headerSets}세트</span>`
+    ? `<span style="background:var(--accent-bg);color:var(--accent-soft);padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;border:1px solid #1e3048">${headerSets}세트</span>`
     : '';
 
   // ── Header (협력사 퍼포먼스 모달과 동일 형식) ──
@@ -3447,7 +3477,7 @@ function renderVOCList(pid) {
 function renderVOCLogItem(v, pid) {
   const typeClass = 'type-'+(v.type||'기타');
   const src = v._src === 'local'
-    ? '<span style="font-size:9px;background:#1e3a5f;color:#60a5fa;padding:1px 4px;border-radius:3px;margin-left:4px">로컬</span>'
+    ? '<span style="font-size:9px;background:var(--accent-bg);color:var(--accent-soft);padding:1px 4px;border-radius:3px;margin-left:4px">로컬</span>'
     : '';
   // 상태 뱃지 (완료=초록, 진행중=노랑, 미완료=회색)
   const stRaw = (v.status || '미완료').replace('✅','').trim();
@@ -3719,6 +3749,182 @@ function openPerfDetailModal(pid)   { openPartnerModal(pid); }
 function closePerfDetailModal()     { closePartnerModal(); }
 function switchPerfTab(tab)         { switchPartnerTab(tab); }
 function closeModal(e) { if(e.target.classList.contains('modal-overlay')) e.target.classList.remove('open'); }
+
+// ═══════════════════════════════════════════════════
+// 테마 (포인트 색상) 변경
+// ═══════════════════════════════════════════════════
+const LS_THEME_KEY = '3pl_theme_v1';
+
+// 프리셋 — accent / soft(밝은톤) / bg(어두운톤)
+const THEME_PRESETS = [
+  { name: '파랑',   accent: '#3b82f6', soft: '#60a5fa', bg: '#1e3a5f' },
+  { name: '하늘',   accent: '#0ea5e9', soft: '#38bdf8', bg: '#0c3a55' },
+  { name: '청록',   accent: '#14b8a6', soft: '#2dd4bf', bg: '#0f3d3a' },
+  { name: '초록',   accent: '#10b981', soft: '#34d399', bg: '#0f3a2d' },
+  { name: '연두',   accent: '#84cc16', soft: '#a3e635', bg: '#3a4d11' },
+  { name: '주황',   accent: '#f59e0b', soft: '#fbbf24', bg: '#5a3a0d' },
+  { name: '빨강',   accent: '#ef4444', soft: '#f87171', bg: '#5b1818' },
+  { name: '분홍',   accent: '#ec4899', soft: '#f472b6', bg: '#5e1241' },
+  { name: '보라',   accent: '#8b5cf6', soft: '#a78bfa', bg: '#3b1f6e' },
+  { name: '자주',   accent: '#a855f7', soft: '#c084fc', bg: '#43166c' },
+  { name: '회청',   accent: '#64748b', soft: '#94a3b8', bg: '#2a3440' },
+  { name: '그레이', accent: '#6b7280', soft: '#9ca3af', bg: '#2c3138' },
+];
+
+// hex → HSL → 변형(밝게/어둡게) → hex (커스텀 색상에서 soft/bg 자동 산출)
+function _hexToHsl(hex) {
+  hex = hex.replace('#','');
+  if (hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+  const r = parseInt(hex.substr(0,2),16)/255;
+  const g = parseInt(hex.substr(2,2),16)/255;
+  const b = parseInt(hex.substr(4,2),16)/255;
+  const mx = Math.max(r,g,b), mn = Math.min(r,g,b);
+  let h, s, l = (mx+mn)/2;
+  if (mx === mn) { h = s = 0; }
+  else {
+    const d = mx-mn;
+    s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
+    switch (mx) {
+      case r: h = ((g-b)/d + (g<b?6:0)); break;
+      case g: h = ((b-r)/d + 2); break;
+      case b: h = ((r-g)/d + 4); break;
+    }
+    h /= 6;
+  }
+  return [h*360, s*100, l*100];
+}
+function _hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const c = (1 - Math.abs(2*l - 1)) * s;
+  const x = c * (1 - Math.abs((h/60) % 2 - 1));
+  const m = l - c/2;
+  let r=0,g=0,b=0;
+  if (0   <= h && h < 60)  { r=c; g=x; b=0; }
+  else if (60  <= h && h < 120) { r=x; g=c; b=0; }
+  else if (120 <= h && h < 180) { r=0; g=c; b=x; }
+  else if (180 <= h && h < 240) { r=0; g=x; b=c; }
+  else if (240 <= h && h < 300) { r=x; g=0; b=c; }
+  else                          { r=c; g=0; b=x; }
+  const to2 = v => Math.round((v+m)*255).toString(16).padStart(2,'0');
+  return '#' + to2(r) + to2(g) + to2(b);
+}
+function _deriveThemeFromAccent(accent) {
+  const [h, s, l] = _hexToHsl(accent);
+  const soft = _hslToHex(h, Math.min(100, s + 5), Math.min(75, l + 12));
+  const bg   = _hslToHex(h, Math.max(20, s * 0.6),  Math.max(15, Math.min(28, l * 0.45)));
+  return { accent, soft, bg };
+}
+
+function applyTheme(theme) {
+  // theme = {accent, soft, bg}
+  const root = document.documentElement;
+  root.style.setProperty('--accent',      theme.accent);
+  root.style.setProperty('--accent-soft', theme.soft);
+  root.style.setProperty('--accent-bg',   theme.bg);
+  // 차트는 SVG fill 속성을 정적으로 박았기 때문에 다시 그려줘야 색상 갱신됨
+  try {
+    if (typeof applyFilters === 'function' && CONFIG && CONFIG.isReady) applyFilters();
+  } catch (_) {}
+}
+
+function saveThemePref(theme) {
+  try { localStorage.setItem(LS_THEME_KEY, JSON.stringify(theme)); } catch (_) {}
+}
+function loadThemePref() {
+  try {
+    const s = localStorage.getItem(LS_THEME_KEY);
+    if (!s) return null;
+    const o = JSON.parse(s);
+    return (o && o.accent) ? o : null;
+  } catch (_) { return null; }
+}
+
+// 페이지 로드 직후 가능한 한 빨리 테마 적용 (FOUC 방지)
+(function _initThemeOnLoad() {
+  const saved = loadThemePref();
+  if (saved) applyTheme(saved);
+})();
+
+function openThemePicker() {
+  const body = document.getElementById('themeBody');
+  const cur  = loadThemePref() || THEME_PRESETS[0];
+  const isMatch = (p) => p.accent.toLowerCase() === (cur.accent || '').toLowerCase();
+
+  const swatches = THEME_PRESETS.map(p => {
+    const sel = isMatch(p) ? '✓' : '';
+    return `<button onclick="_pickPresetTheme('${p.accent}')" title="${p.name}"
+              style="position:relative;width:56px;height:56px;border-radius:50%;border:2px solid ${isMatch(p)?'#fff':'transparent'};
+                     background:conic-gradient(${p.accent} 0 33%, ${p.soft} 33% 66%, ${p.bg} 66% 100%);
+                     cursor:pointer;padding:0;transition:transform .12s"
+              onmouseover="this.style.transform='scale(1.08)'"
+              onmouseout="this.style.transform='scale(1)'">
+      <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;text-shadow:0 1px 2px rgba(0,0,0,.6)">${sel}</span>
+    </button>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="font-size:11.5px;color:#8fa3b8;line-height:1.6">
+      포인트 색상을 변경합니다. 다크 배경은 그대로 유지되고 버튼·링크·강조선·차트 색상이 적용됩니다.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;justify-items:center;padding:6px 0">
+      ${swatches}
+    </div>
+    <div style="border-top:1px solid #1e3048;padding-top:14px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:12px;color:#8fa3b8;font-weight:600">커스텀 색상</span>
+      <input type="color" id="themeCustomColor" value="${cur.accent}"
+             onchange="_pickCustomTheme(this.value)"
+             style="width:48px;height:36px;border:1px solid #1e3048;border-radius:6px;background:#0d1825;cursor:pointer;padding:2px">
+      <input type="text" id="themeCustomHex" value="${cur.accent}" placeholder="#3b82f6"
+             onchange="_pickCustomTheme(this.value)"
+             style="flex:1;background:#0d1825;border:1px solid #1e3048;border-radius:6px;color:#e8edf2;padding:7px 10px;font-family:ui-monospace,monospace;font-size:12px">
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px">
+      <button class="btn btn-ghost btn-sm" onclick="_resetTheme()">기본값으로</button>
+      <button class="btn btn-primary btn-sm" onclick="closeThemePicker()">완료</button>
+    </div>
+  `;
+  document.getElementById('themeModal').classList.add('open');
+}
+function closeThemePicker() {
+  document.getElementById('themeModal').classList.remove('open');
+}
+
+function _pickPresetTheme(accentHex) {
+  const p = THEME_PRESETS.find(x => x.accent.toLowerCase() === accentHex.toLowerCase());
+  if (!p) return;
+  applyTheme(p);
+  saveThemePref(p);
+  // 미니 토스트
+  showToast(`테마 적용: ${p.name}`);
+  // 모달 다시 그려서 체크 표시 갱신
+  openThemePicker();
+}
+
+function _pickCustomTheme(hex) {
+  // hex 검증
+  let v = (hex || '').trim();
+  if (!v.startsWith('#')) v = '#' + v;
+  if (!/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(v)) {
+    showToast('올바른 hex 색상 코드가 아닙니다');
+    return;
+  }
+  const theme = _deriveThemeFromAccent(v);
+  applyTheme(theme);
+  saveThemePref(theme);
+  showToast(`커스텀 테마 적용: ${v}`);
+  // input 동기화
+  const c = document.getElementById('themeCustomColor');
+  const h = document.getElementById('themeCustomHex');
+  if (c) c.value = v;
+  if (h) h.value = v;
+}
+
+function _resetTheme() {
+  applyTheme(THEME_PRESETS[0]);
+  saveThemePref(THEME_PRESETS[0]);
+  showToast('기본 테마로 복원');
+  openThemePicker();
+}
 
 function updateStatus(logId, newStatus) {
   const v = (STATE.logs||[]).find(x=>x['로그ID']===logId);
