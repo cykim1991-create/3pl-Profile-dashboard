@@ -2135,7 +2135,8 @@ function renderRealtime() {
   // ── 렌더 ──
   tbody.innerHTML = records.map(r => {
     const rowCls = r.rLvl==='red'?'risk-row-red':r.rLvl==='yellow'?'risk-row-yellow':'';
-    const slaOk  = r.slaRaw !== null && r.slaRaw >= 45;
+    // SLA수락률 색상은 일자별/주차별과 동일 기준: ≥90% 초록 / ≥80% 노랑 / <80% 빨강
+    const slaColor = r.slaRaw !== null ? _slaColor(r.slaRaw) : 'var(--text-secondary)';
     const inOk   = r.inSLA  !== null && r.inSLA  >= 0.7;
     const outOk  = r.outSLA !== null && r.outSLA >= 0.3;
 
@@ -2154,7 +2155,7 @@ function renderRealtime() {
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.pmVol,r.setsN,r.tgt.pm):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.evVol,r.setsN,r.tgt.ev):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.niVol,r.setsN,r.tgt.ni):'-'}</td>
-      <td style="text-align:center;color:${slaOk?'#4ade80':'#f87171'};font-weight:600">${r.slaRaw!==null?r.slaRaw.toFixed(1)+'%':'-'}</td>
+      <td style="text-align:center;color:${slaColor};font-weight:600">${r.slaRaw!==null?r.slaRaw.toFixed(1)+'%':'-'}</td>
       <td style="text-align:center;color:${r.inSLA!==null?(inOk?'#4ade80':'#f87171'):'#8fa3b8'};font-weight:600">${r.inSLA!==null?(r.inSLA*100).toFixed(1)+'%':'-'}</td>
       <td style="text-align:center;color:${r.outSLA!==null?(outOk?'#4ade80':'#f87171'):'#8fa3b8'}">${r.outSLA!==null?(r.outSLA*100).toFixed(1)+'%':'-'}</td>
       <td style="text-align:center">${getRiskLabel(r.p)}</td>
@@ -3362,7 +3363,7 @@ function _renderPartnerProfile(body, pid) {
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
       <div class="slot-item">
         <div class="slot-item-label">SLA 수락률</div>
-        <div class="slot-item-val" style="color:${slaRaw!==null&&slaRaw>=45?'#4ade80':'#f87171'};font-size:18px">${slaRaw!==null?slaRaw.toFixed(1)+'%':'-'}</div>
+        <div class="slot-item-val" style="color:${slaRaw!==null?_slaColor(slaRaw):'var(--text-secondary)'};font-size:18px">${slaRaw!==null?slaRaw.toFixed(1)+'%':'-'}</div>
       </div>
       <div class="slot-item">
         <div class="slot-item-label">총 처리건수</div>
