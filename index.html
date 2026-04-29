@@ -2524,15 +2524,27 @@ function _aggregateRange(hist, startDate, endDate, tgt) {
   const latest = rows.slice().sort((a,b)=> _kpiDateOf(b) > _kpiDateOf(a) ? 1 : -1)[0];
   const grade  = latest && latest['등급'] ? latest['등급'] : '-';
 
-  // ── 시간대별 달성률 합산 (= 달성 슬롯수) ──
-  // 각 시간대마다 [처리량 ÷ 슬롯목표]로 환산해 합산
-  // 예: AM 105% + PM 85% + EV 110% + NI 95% = 3.95 슬롯/세트/일
-  const slotsAchieved =
-      (tgt.am > 0 ? amVol / tgt.am : 0)
-    + (tgt.pm > 0 ? pmVol / tgt.pm : 0)
-    + (tgt.ev > 0 ? evVol / tgt.ev : 0)
-    + (tgt.ni > 0 ? niVol / tgt.ni : 0);
-  const slotsPossible = sets * 4 * days;   // 세트수 × 4(시간대) × 일수
+  // ── 달성 슬롯수 (이진 합산 방식) ──
+  // 각 일자 × 시간대 단위로 처리량 ≥ 목표(=세트수×1세트당 목표)이면 1, 아니면 0
+  // 모든 일자의 4슬롯을 모두 합산 → 그 기간 동안 "목표를 채운 슬롯 수"
+  let slotsAchieved = 0;
+  rows.forEach(r => {
+    const daySets = Number(r['신청세트수'] || r['세트수'] || 0);
+    if (daySets <= 0) return;
+    const amV = Number(r['아침점심피크_물량'] || 0);
+    const pmV = Number(r['오후논피크_물량']   || 0);
+    const evV = Number(r['저녁피크_물량']     || 0);
+    const niV = Number(r['심야논피크_물량']   || 0);
+    const tAm = Number(r['목표_아침점심'] || tgt.am || 0);
+    const tPm = Number(r['목표_오후']     || tgt.pm || 0);
+    const tEv = Number(r['목표_저녁']     || tgt.ev || 0);
+    const tNi = Number(r['목표_심야']     || tgt.ni || 0);
+    if (tAm > 0 && amV >= daySets * tAm) slotsAchieved += 1;
+    if (tPm > 0 && pmV >= daySets * tPm) slotsAchieved += 1;
+    if (tEv > 0 && evV >= daySets * tEv) slotsAchieved += 1;
+    if (tNi > 0 && niV >= daySets * tNi) slotsAchieved += 1;
+  });
+  const slotsPossible = 4 * days;          // 4시간대 × 일수
   const slotsRatio    = slotsPossible > 0 ? (slotsAchieved / slotsPossible) * 100 : 0;
 
   return {
@@ -3016,10 +3028,10 @@ function renderPerfList() {
       ? `<td style="text-align:center;color:var(--text-muted)" title="발주물량 컬럼에 값이 없습니다">-</td>`
       : `<td style="text-align:center;color:${ordColor};font-weight:600">${prev.orderAch.toFixed(1)}%</td>`;
 
-    // 슬롯 셀: "X.X / Y" 달성/가능
+    // 슬롯 셀: "X / Y" 달성/가능 (이진 합산 — 정수)
     const slotCell = (prev.slotsAchieved !== null && prev.slotsAchieved !== undefined)
       ? `<td style="text-align:center;color:${slotColor};font-weight:600">
-           ${prev.slotsAchieved.toFixed(1)}<span style="color:var(--text-muted);font-weight:400;font-size:11px"> / ${prev.slotsPossible || '-'}</span>
+           ${prev.slotsAchieved}<span style="color:var(--text-muted);font-weight:400;font-size:11px"> / ${prev.slotsPossible || '-'}</span>
          </td>`
       : `<td style="text-align:center;color:var(--text-muted)">-</td>`;
 
