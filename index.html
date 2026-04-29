@@ -1338,14 +1338,28 @@ function getRiskLabel(p) {
   return `<span class="risk-label ${lvl}">${text}</span>`;
 }
 
-// Extract RGN2 district code from 운영지역 string
-// e.g. "표준서울구로A" → "구로구",  "표준서울강남A" → "강남구"
+// 운영지역 → RGN2 시구명 추출
+//   광역시 prefix(서울/부산/대구/인천/광주/대전/울산): 자치구 단위 → "양천구", "북구"
+//   도/세종 prefix:                                  : 시 또는 시구 통합 → "김해시", "당진", "성남수정구"
+//   "표준서울양천A"  → "양천구"
+//   "표준광주북A"   → "북구"
+//   "표준경남김해A" → "김해시"
+//   "표준충남당진A" → "당진시"
+//   "표준경기성남수정A" → "성남수정구"
 function getRGN2(operArea) {
   if (!operArea) return '-';
-  const m = operArea.match(/^표준(?:서울|인천|경기|부산|대구|광주|대전|울산)([가-힣]+)[A-Z]$/);
-  if (m) return m[1] + '구';
-  // fallback: strip prefix and trailing letters
-  return operArea.replace(/^표준(?:서울|인천|경기|부산)/,'').replace(/[A-Z]+$/,'') || operArea;
+  let m = operArea.match(/^표준(서울|부산|대구|인천|광주|대전|울산)(.+?)([A-Z]+)$/);
+  if (m) return m[2] + '구';
+  m = operArea.match(/^표준(세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)(.+?)([A-Z]+)$/);
+  if (m) {
+    const middle = m[2];
+    // "성남수정", "일산서" 등 끝이 시구 합성형이면 '구' 부착, 단독 도시명이면 '시' 부착
+    if (/(수정|중원|분당|덕양|일산[가-힣]?|권선|장안|영통|팔달|상록|단원|만안|동안|소사|오정|원미)/.test(middle))
+      return middle + '구';
+    return middle + '시';
+  }
+  // fallback
+  return operArea.replace(/^표준[가-힣]+/, '').replace(/[A-Z]+$/, '') || operArea;
 }
 
 // 실시간운행현황 시트 (영문 snake_case 컬럼) → 대시보드 표준 한글 필드명으로 정규화
