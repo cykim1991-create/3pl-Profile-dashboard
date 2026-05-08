@@ -134,13 +134,20 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .badge-tier2{background:#2d1854;color:#a78bfa}
 .badge-tier3{background:var(--bg-filter);color:#94a3b8}
 
-/* ── Grade badges */
+/* ── Grade badges (Dark) */
 .badge-master{background:#2d1a54;color:#e879f9;border:1px solid #7c3aed}
 .badge-diamond{background:#062035;color:#67e8f9;border:1px solid #0e7490}
 .badge-gold{background:#2d2006;color:#fbbf24;border:1px solid #92400e}
 .badge-silver{background:#1e293b;color:#94a3b8;border:1px solid #475569}
 .badge-bronze{background:#2d1a00;color:#fb923c;border:1px solid #7c2d12}
 .badge-none{background:var(--bg-filter);color:var(--text-muted);border:1px solid var(--border)}
+/* ── Grade badges (Light 모드 오버라이드) */
+[data-theme="light"] .badge-master {background:#f3e8ff;color:#7c3aed;border:1px solid #c4b5fd}
+[data-theme="light"] .badge-diamond{background:#cffafe;color:#0891b2;border:1px solid #67e8f9}
+[data-theme="light"] .badge-gold   {background:#fef3c7;color:#b45309;border:1px solid #fcd34d}
+[data-theme="light"] .badge-silver {background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}
+[data-theme="light"] .badge-bronze {background:#ffedd5;color:#9a3412;border:1px solid #fdba74}
+[data-theme="light"] .badge-none   {background:#f1f5f9;color:#94a3b8;border:1px solid #e2e8f0}
 
 /* ── Risk dot */
 .risk-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
@@ -486,7 +493,6 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center" data-sort="perfList:tpl3Share" style="cursor:pointer">3PL<br><span style="font-size:10px;font-weight:400">처리비중</span><span id="sort-perfList-tpl3Share"></span></th>
               <th data-sort="perfList:region" style="cursor:pointer">권역<span id="sort-perfList-region"></span></th>
               <th data-sort="perfList:partnerName" style="cursor:pointer">협력사명<span id="sort-perfList-partnerName"></span></th>
-              <th class="center" data-sort="perfList:status" style="cursor:pointer">상태<span id="sort-perfList-status"></span></th>
               <th class="center" data-sort="perfList:grade" style="cursor:pointer">등급<span id="sort-perfList-grade"></span></th>
               <th class="center" data-sort="perfList:sets" style="cursor:pointer">세트수<span id="sort-perfList-sets"></span></th>
               <th class="center" data-sort="perfList:riderAct" style="cursor:pointer">Active<br><span style="font-size:10px;font-weight:400">라이더(평균)</span><span id="sort-perfList-riderAct"></span></th>
@@ -1321,12 +1327,16 @@ function getStatusBadge(p) {
 
 function getGradeBadge(grade) {
   const map = {
-    '마스터': 'badge-master', '다이아': 'badge-diamond',
-    '골드':   'badge-gold',   '실버':   'badge-silver',
-    '브론즈': 'badge-bronze'
+    '마스터':   'badge-master',
+    '다이아':   'badge-diamond',
+    '골드':     'badge-gold',
+    '실버':     'badge-silver',
+    '브론즈':   'badge-bronze',
+    '등급없음': 'badge-none',
   };
-  const cls = map[grade] || 'badge-none';
-  return `<span class="badge ${cls}">${grade || '-'}</span>`;
+  const g   = grade || '등급없음';
+  const cls = map[g] || 'badge-none';
+  return `<span class="badge ${cls}">${g}</span>`;
 }
 
 function getTierBadge(tier) {
@@ -3022,7 +3032,7 @@ function renderPerformance() {
   renderPerfList();
 }
 
-const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','partnerName','status','grade','sets','riderAct','totalVol','orderAch','sla','slotsAchieved'];
+const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','partnerName','grade','sets','riderAct','totalVol','orderAch','sla','slotsAchieved'];
 
 function renderPerfList() {
   const body   = document.getElementById('perfListBody');
@@ -3183,7 +3193,6 @@ function renderPerfList() {
         ${tpl3Cell(r.tpl3)}
         <td style="color:var(--text-secondary);font-size:11px">${r.region}</td>
         <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
-        <td style="text-align:center">${getStatusBadge(r.p)}</td>
         <td style="text-align:center">${getGradeBadge(r.grade)}</td>
         <td colspan="7" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
       </tr>`;
@@ -3218,9 +3227,8 @@ function renderPerfList() {
       <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.region}</td>
       <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>
         <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
-      <td style="text-align:center">${getStatusBadge(r.p)}</td>
       <td style="text-align:center">${getGradeBadge(r.grade)}</td>
-      <td style="text-align:center;color:var(--text-cell);font-weight:600">${prev.sets ? prev.sets.toFixed(1) : '-'}</td>
+      <td style="text-align:center;color:var(--text-cell);font-weight:600">${prev.sets ? Math.round(prev.sets).toLocaleString() : '-'}</td>
       <td style="text-align:center;color:#4ade80;font-weight:600">${prev.riderActAvg ? Number(prev.riderActAvg.toFixed(1)).toLocaleString() : '-'}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${(prev.totalVol||0).toLocaleString()}</td>
       ${orderCell}
@@ -3266,7 +3274,7 @@ function _renderPerfWeekly(body, hist, tgt) {
     const riderAct  = w.riderActAvg  || 0;
     const riderJoin = w.riderJoinAvg || 0;
     const actShare  = riderJoin ? (riderAct/riderJoin)*100 : 0;
-    const setsTxt   = w.sets ? w.sets.toFixed(1) : '-';
+    const setsTxt   = w.sets ? Math.round(w.sets).toLocaleString() : '-';
     // 주차 슬롯 목표 = 평균 sets × per-set 목표 × days
     const tAm = (w.sets || 0) * (tgt.am || 0) * (w.days || 0);
     const tPm = (w.sets || 0) * (tgt.pm || 0) * (w.days || 0);
