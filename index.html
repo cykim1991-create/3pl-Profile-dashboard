@@ -2459,9 +2459,27 @@ function renderRealtime() {
 
   // ── 렌더 ──
   const slotPhase = _getSlotPhase();      // 현재 시각 기준 4슬롯 진행 상태
+  // 행 위험 표시 기준 — SLA < 80%  OR  이미 종료된 슬롯의 달성률 < 100%
+  const isRowRisk = (r) => {
+    if (r.slaRaw !== null && r.slaRaw < 80) return true;
+    const sets = Number(r.setsN) || 0;
+    if (!sets) return false;
+    const checks = [
+      { phase: slotPhase.am, vol: r.amVol, tgt: r.tgt.am },
+      { phase: slotPhase.pm, vol: r.pmVol, tgt: r.tgt.pm },
+      { phase: slotPhase.ev, vol: r.evVol, tgt: r.tgt.ev },
+      { phase: slotPhase.ni, vol: r.niVol, tgt: r.tgt.ni },
+    ];
+    for (const c of checks) {
+      if (c.phase !== 'past') continue;
+      const goal = sets * Number(c.tgt || 0);
+      if (!goal) continue;
+      if ((Number(c.vol)||0) / goal * 100 < 100) return true;
+    }
+    return false;
+  };
   tbody.innerHTML = records.map(r => {
-    // 행 배경색은 적용하지 않음 (위험 협력사 표시는 위험만 필터/뱃지로만)
-    const rowCls = '';
+    const rowCls = isRowRisk(r) ? 'risk-row-red' : '';
     // SLA수락률 색상은 일자별/주차별과 동일 기준: ≥90% 초록 / ≥80% 노랑 / <80% 빨강
     const slaColor = r.slaRaw !== null ? _slaColor(r.slaRaw) : 'var(--text-secondary)';
     const inOk   = r.inSLA  !== null && r.inSLA  >= 0.7;
