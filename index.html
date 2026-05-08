@@ -2799,13 +2799,17 @@ function _aggregateRange(hist, startDate, endDate, tgt) {
   const slotsPossible = 4 * days;          // 4시간대 × 일수
   const slotsRatio    = slotsPossible > 0 ? (slotsAchieved / slotsPossible) * 100 : 0;
 
-  // Active 라이더수 평균 (운행라이더수 일별 평균 — 0 제외)
-  const riderActAvg = avg('운행라이더수');
+  // Active 라이더수 / 계약중 라이더수 평균 (일별 평균 — 0 제외)
+  const riderActAvg  = avg('운행라이더수');
+  const riderJoinAvg = (() => {
+    const vals = rows.map(r => Number(r['계약중라이더수']||r['가입라이더수']||0)).filter(v => !isNaN(v) && v > 0);
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  })();
 
   return {
     startDate, endDate, days, sets, grade,
     totalVol, amVol, pmVol, evVol, niVol, sla,
-    riderActAvg,
+    riderActAvg, riderJoinAvg,
     orderVol: hasOrderVol ? orderVol : null,
     orderAch: hasOrderVol && orderVol ? (totalVol/orderVol)*100 : null,
     totalAch: tgtTotal ? (totalVol/tgtTotal)*100 : 0,
@@ -3347,6 +3351,7 @@ function renderPerfList() {
     if (kind === 'pp')         { delta = cur - prior; unit = '%p'; }
     else if (kind === 'count') { delta = cur - prior; unit = '슬롯'; decimals = 0; }
     else if (kind === 'vol')   { delta = cur - prior; unit = '건'; decimals = 0; useCommas = true; }
+    else if (kind === 'rider') { delta = cur - prior; unit = '명'; decimals = 0; useCommas = true; }
     else {
       if (!prior) return `<span style="color:var(--text-muted)">-</span>`;
       delta = ((cur - prior) / prior) * 100;
@@ -3483,18 +3488,18 @@ function renderPerfList() {
 
     const notable = `
       <div style="display:grid;grid-template-columns:max-content max-content;gap:2px 8px;font-size:11px;line-height:1.45;white-space:nowrap">
-        <span style="color:var(--text-secondary)">처리건수</span>   ${fmtDelta(prev.totalVol,      prior ? prior.totalVol      : null, 'vol')}
-        <span style="color:var(--text-secondary)">발주 달성률</span> ${fmtDelta(prev.orderAch,      prior ? prior.orderAch      : null, 'rel')}
-        <span style="color:var(--text-secondary)">수락률</span>     ${fmtDelta(prev.sla,           prior ? prior.sla           : null, 'pp')}
-        <span style="color:var(--text-secondary)">달성 슬롯수</span> ${fmtDelta(prev.slotsAchieved, prior ? prior.slotsAchieved : null, 'count')}
+        <span style="color:var(--text-secondary)">처리건수</span>     ${fmtDelta(prev.totalVol,      prior ? prior.totalVol      : null, 'vol')}
+        <span style="color:var(--text-secondary)">Active 라이더</span> ${fmtDelta(prev.riderActAvg,   prior ? prior.riderActAvg   : null, 'rider')}
+        <span style="color:var(--text-secondary)">수락률</span>       ${fmtDelta(prev.sla,           prior ? prior.sla           : null, 'pp')}
+        <span style="color:var(--text-secondary)">달성 슬롯수</span>   ${fmtDelta(prev.slotsAchieved, prior ? prior.slotsAchieved : null, 'count')}
       </div>`;
     const { priorWeek } = r;
     const notableWk = `
       <div style="display:grid;grid-template-columns:max-content max-content;gap:2px 8px;font-size:11px;line-height:1.45;white-space:nowrap">
-        <span style="color:var(--text-secondary)">처리건수</span>   ${fmtDelta(prev.totalVol,      priorWeek ? priorWeek.totalVol      : null, 'vol')}
-        <span style="color:var(--text-secondary)">발주 달성률</span> ${fmtDelta(prev.orderAch,      priorWeek ? priorWeek.orderAch      : null, 'rel')}
-        <span style="color:var(--text-secondary)">수락률</span>     ${fmtDelta(prev.sla,           priorWeek ? priorWeek.sla           : null, 'pp')}
-        <span style="color:var(--text-secondary)">달성 슬롯수</span> ${fmtDelta(prev.slotsAchieved, priorWeek ? priorWeek.slotsAchieved : null, 'count')}
+        <span style="color:var(--text-secondary)">처리건수</span>     ${fmtDelta(prev.totalVol,      priorWeek ? priorWeek.totalVol      : null, 'vol')}
+        <span style="color:var(--text-secondary)">Active 라이더</span> ${fmtDelta(prev.riderActAvg,   priorWeek ? priorWeek.riderActAvg   : null, 'rider')}
+        <span style="color:var(--text-secondary)">수락률</span>       ${fmtDelta(prev.sla,           priorWeek ? priorWeek.sla           : null, 'pp')}
+        <span style="color:var(--text-secondary)">달성 슬롯수</span>   ${fmtDelta(prev.slotsAchieved, priorWeek ? priorWeek.slotsAchieved : null, 'count')}
       </div>`;
 
     return `<tr onclick="openPerfDetailModal('${r.pid}')" style="cursor:pointer">
@@ -3567,11 +3572,17 @@ function _renderPerfWeekly(body, hist, tgt) {
     const tPm = (w.sets || 0) * (tgt.pm || 0) * (w.days || 0);
     const tEv = (w.sets || 0) * (tgt.ev || 0) * (w.days || 0);
     const tNi = (w.sets || 0) * (tgt.ni || 0) * (w.days || 0);
+    // 발주물량 달성률
+    const orderAch = w.orderAch;
+    const orderCell = (orderAch === null || orderAch === undefined)
+      ? `<td style="text-align:center;color:var(--text-muted)">-</td>`
+      : `<td style="text-align:center"><span style="color:${_orderAchColor(orderAch)};font-weight:700">${orderAch.toFixed(1)}%</span><span style="display:block;color:var(--text-muted);font-size:10px;margin-top:1px">${(w.totalVol||0).toLocaleString()}/${Math.round(w.orderVol||0).toLocaleString()}</span></td>`;
     return `<tr>
       <td style="font-weight:700;padding:9px 6px;color:var(--accent-soft);white-space:nowrap">${_formatWeek(w.week)}
         <span style="color:var(--text-muted);font-size:10px;margin-left:4px">(${w.days}일)</span></td>
       <td style="text-align:center;color:var(--text-cell)">${setsTxt}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${w.totalVol.toLocaleString()}</td>
+      ${orderCell}
       ${volTargetTd(w.amVol, tAm)}
       ${volTargetTd(w.pmVol, tPm)}
       ${volTargetTd(w.evVol, tEv)}
@@ -3591,12 +3602,13 @@ function _renderPerfWeekly(body, hist, tgt) {
     <div class="modal-section">
       <div class="modal-section-title">📅 주차별 세부 지표 <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">최근 ${weeks.length}주</span></div>
       <div class="table-wrap table-scroll">
-        <table class="data-table" style="min-width:960px">
+        <table class="data-table" style="min-width:1040px">
           <thead>
             <tr>
               <th rowspan="2" style="padding:9px 6px">주차</th>
               <th rowspan="2" class="center">세트수<br><span style="font-size:10px;font-weight:400">(평균)</span></th>
               <th rowspan="2" class="center">전체<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
+              <th rowspan="2" class="center">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span></th>
               <th colspan="4" class="center slot-group">시간대별 처리건수</th>
               <th rowspan="2" class="center">수락률</th>
               <th rowspan="2" class="center">Active<br><span style="font-size:10px;font-weight:400">라이더수 / 계약 (비중)</span></th>
@@ -3672,11 +3684,19 @@ function _renderPerfDaily(body, hist, tgt) {
     const tEv = sets * Number(r['목표_저녁']     || tgt.ev || 0);
     const tNi = sets * Number(r['목표_심야']     || tgt.ni || 0);
 
+    // 발주물량 달성률
+    const orderVol = _orderVolumeOf(r);
+    const orderAch = (orderVol && totalVol) ? (totalVol/orderVol)*100 : null;
+    const orderCell = orderAch === null
+      ? `<td style="text-align:center;color:var(--text-muted)">-</td>`
+      : `<td style="text-align:center"><span style="color:${_orderAchColor(orderAch)};font-weight:700">${orderAch.toFixed(1)}%</span><span style="display:block;color:var(--text-muted);font-size:10px;margin-top:1px">${totalVol.toLocaleString()}/${Math.round(orderVol).toLocaleString()}</span></td>`;
+
     return `<tr>
       <td style="white-space:nowrap;padding:9px 6px;font-weight:600;color:${dateColor}">${date}
         <span style="color:var(--text-secondary);font-weight:400;margin-left:4px">(${dow})</span></td>
       <td style="text-align:center;color:var(--text-cell)">${sets || '-'}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${totalVol.toLocaleString()}</td>
+      ${orderCell}
       ${volTargetTd(amVol, tAm)}
       ${volTargetTd(pmVol, tPm)}
       ${volTargetTd(evVol, tEv)}
@@ -3696,12 +3716,13 @@ function _renderPerfDaily(body, hist, tgt) {
     <div class="modal-section">
       <div class="modal-section-title">📆 일자별 세부 지표 <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">최근 ${dailyDesc.length}일</span></div>
       <div class="table-wrap table-scroll">
-        <table class="data-table" style="min-width:960px">
+        <table class="data-table" style="min-width:1040px">
           <thead>
             <tr>
               <th rowspan="2" style="padding:9px 6px">일자</th>
               <th rowspan="2" class="center">세트수</th>
               <th rowspan="2" class="center">전체<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
+              <th rowspan="2" class="center">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span></th>
               <th colspan="4" class="center slot-group">시간대별 처리건수</th>
               <th rowspan="2" class="center">수락률</th>
               <th rowspan="2" class="center">Active<br><span style="font-size:10px;font-weight:400">라이더수 / 계약 (비중)</span></th>
