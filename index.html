@@ -449,9 +449,9 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center slot-group" data-sort="realtime:pmAch" style="cursor:pointer">오후<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-pmAch"></span></th>
               <th class="center slot-group" data-sort="realtime:evAch" style="cursor:pointer">저녁<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-evAch"></span></th>
               <th class="center slot-group" data-sort="realtime:niAch" style="cursor:pointer">심야<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-niAch"></span></th>
-              <th class="center" data-sort="realtime:sla" style="cursor:pointer">SLA수락률<br><span style="font-size:10px;font-weight:400">(배달)</span><span id="sort-realtime-sla"></span></th>
-              <th class="center" data-sort="realtime:inSLA" style="cursor:pointer">권내수락률<br><span style="font-size:10px;font-weight:400">(배차)</span><span id="sort-realtime-inSLA"></span></th>
-              <th class="center" data-sort="realtime:outSLA" style="cursor:pointer">권외수락률<br><span style="font-size:10px;font-weight:400">(배차)</span><span id="sort-realtime-outSLA"></span></th>
+              <th class="center" data-sort="realtime:sla" style="cursor:pointer">SLA수락률<span id="sort-realtime-sla"></span></th>
+              <th class="center" data-sort="realtime:inSLA" style="cursor:pointer">권내수락률<span id="sort-realtime-inSLA"></span></th>
+              <th class="center" data-sort="realtime:outSLA" style="cursor:pointer">권외수락률<span id="sort-realtime-outSLA"></span></th>
             </tr>
           </thead>
           <tbody id="realtimeBody"></tbody>
@@ -495,7 +495,7 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th data-sort="perfList:partnerName" style="cursor:pointer">협력사명<span id="sort-perfList-partnerName"></span></th>
               <th class="center" data-sort="perfList:grade" style="cursor:pointer">등급<span id="sort-perfList-grade"></span></th>
               <th class="center" data-sort="perfList:sets" style="cursor:pointer">세트수<span id="sort-perfList-sets"></span></th>
-              <th class="center" data-sort="perfList:riderAct" style="cursor:pointer">Active<br><span style="font-size:10px;font-weight:400">라이더(평균)</span><span id="sort-perfList-riderAct"></span></th>
+              <th class="center" data-sort="perfList:riderAct" style="cursor:pointer">Active<br><span style="font-size:10px;font-weight:400">라이더수</span><span id="sort-perfList-riderAct"></span></th>
               <th class="center" data-sort="perfList:totalVol" style="cursor:pointer">처리건수<span id="sort-perfList-totalVol"></span></th>
               <th class="center" data-sort="perfList:orderAch" style="cursor:pointer">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-perfList-orderAch"></span></th>
               <th class="center" data-sort="perfList:sla" style="cursor:pointer">수락률<span id="sort-perfList-sla"></span></th>
@@ -2025,18 +2025,26 @@ function _renderBriefingRegionCard(rgn2, d1, d2) {
 
 // 달성률 cell: stacked "212%" on top, "34건" below
 // vol = raw 물량건수, sets = 신청세트수, targetPerSet = goal per set
+//   - vol 자체가 없으면 "-"
+//   - sets가 0이면 (운영 안 한 협력사) 처리건수만 표시 (달성률 비표시)
+//   - 정상이면 달성률 % + 건수
 function slotAchievementFmt(vol, sets, targetPerSet) {
-  if (vol === null || vol === undefined || vol === '' || !sets || !targetPerSet) {
+  if (vol === null || vol === undefined || vol === '') {
     return `<span style="color:var(--text-muted)">-</span>`;
   }
-  const n   = Number(vol);
-  const s   = Number(sets);
-  const tgt = Number(targetPerSet);
+  const n = Number(vol);
+  const s = Number(sets) || 0;
+  const tgt = Number(targetPerSet) || 0;
+  // 세트수가 0이면 처리건수만 노출
+  if (!s) {
+    return `<span class="ach-cnt" style="font-size:13px;color:var(--text-cell);font-weight:700">${n.toLocaleString()}건</span>`;
+  }
   const goal = s * tgt;
-  if (!goal) return `<span style="color:var(--text-muted)">-</span>`;
-  const ratio = n / goal;
-  const pct   = Math.round(ratio * 100);
-  const cls   = pct >= 100 ? 'ach-hi' : pct >= 70 ? 'ach-mid' : 'ach-lo';
+  if (!goal) {
+    return `<span class="ach-cnt" style="font-size:13px;color:var(--text-cell);font-weight:700">${n.toLocaleString()}건</span>`;
+  }
+  const pct = Math.round((n / goal) * 100);
+  const cls = pct >= 100 ? 'ach-hi' : pct >= 70 ? 'ach-mid' : 'ach-lo';
   return `<span class="ach-pct ${cls}">${pct}%</span><span class="ach-cnt">${n.toLocaleString()}건</span>`;
 }
 
@@ -3227,8 +3235,9 @@ function renderPerfList() {
     const slotColor = _achColor(prev.slotsRatio || 0);
     const ordColor  = _orderAchColor(prev.orderAch);
 
-    const orderCell = prev.orderAch === null
-      ? `<td style="text-align:center;color:var(--text-muted)" title="발주물량 컬럼에 값이 없습니다">-</td>`
+    // 세트수가 0이면 운영 안 한 기간 → 발주물량 달성률은 "-" 로 비활성화
+    const orderCell = (!prev.sets || prev.orderAch === null)
+      ? `<td style="text-align:center;color:var(--text-muted)" title="${!prev.sets ? '신청세트수 0' : '발주물량 컬럼에 값이 없습니다'}">-</td>`
       : `<td style="text-align:center;color:${ordColor};font-weight:600">${prev.orderAch.toFixed(1)}%</td>`;
 
     // 슬롯 셀: "X / Y" 달성/가능 (이진 합산 — 정수)
