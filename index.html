@@ -386,6 +386,9 @@ textarea.form-input{resize:vertical;min-height:60px}
       <select class="filter-select" id="regionFilter" onchange="applyFilters()">
         <option value="">전체 RGN2</option>
       </select>
+      <select class="filter-select" id="managerFilter" onchange="applyFilters()">
+        <option value="">전체 담당자</option>
+      </select>
       <button class="btn btn-primary btn-sm" onclick="openBriefingModal()" title="아침 영업 브리핑 보고서 작성"
               style="font-size:11px">📝 영업 브리핑</button>
       <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
@@ -1285,20 +1288,53 @@ function populateRegionFilter() {
     o.textContent = r;
     sel.appendChild(o);
   });
+
+  // 담당자 필터 — RGN2_담당자 매핑에서 unique 담당자 목록
+  const mgrSel = document.getElementById('managerFilter');
+  if (mgrSel) {
+    const mgrSet = new Set();
+    Object.values(STATE.rgn2Managers || {}).forEach(name => {
+      const v = (name || '').trim();
+      if (v) mgrSet.add(v);
+    });
+    const mgrList = [...mgrSet].sort();
+    while (mgrSel.options.length > 1) mgrSel.remove(1);
+    if (mgrSel.options[0]) mgrSel.options[0].textContent = '전체 담당자';
+    mgrList.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m;
+      o.textContent = m;
+      mgrSel.appendChild(o);
+    });
+  }
 }
 
 function applyFilters() {
   currentRegionFilter = document.getElementById('regionFilter').value;  // 이제 RGN2 값
-  // filtered = 상단 RGN2 필터만 적용 (위험만 필터는 테이블에서만 적용 → KPI 카드는 영향 안 받음)
+  const mgrSel = document.getElementById('managerFilter');
+  const currentManagerFilter = mgrSel ? mgrSel.value : '';
+  // 담당자 필터 → 해당 담당자가 관리하는 RGN2 셋
+  let mgrRgn2Set = null;
+  if (currentManagerFilter) {
+    mgrRgn2Set = new Set();
+    Object.entries(STATE.rgn2Managers || {}).forEach(([rgn2, name]) => {
+      if ((name || '').trim() === currentManagerFilter) mgrRgn2Set.add(rgn2);
+    });
+  }
+  // filtered = 상단 RGN2 + 담당자 필터 적용 (위험만 필터는 테이블에서만 적용)
   filtered = STATE.partners.filter(p => {
-    if (!currentRegionFilter) return true;
-    // 협력사의 운영지역/권역명에서 RGN2 추출 후 비교
+    // 협력사의 RGN2 결정
     const partnerArea = p['권역명'] || '';
-    if (getRGN2(partnerArea) === currentRegionFilter) return true;
-    // KPI 데이터의 운영지역으로도 매칭
-    return STATE.kpi.some(k =>
-      k['협력사명'] === p['협력사명'] && getRGN2(k['운영지역']) === currentRegionFilter
-    );
+    let partnerRgn2 = getRGN2(partnerArea);
+    if (!partnerRgn2 || partnerRgn2 === '-') {
+      const k = STATE.kpi.find(x => x['협력사명'] === p['협력사명']);
+      if (k) partnerRgn2 = getRGN2(k['운영지역']);
+    }
+    // RGN2 필터
+    if (currentRegionFilter && partnerRgn2 !== currentRegionFilter) return false;
+    // 담당자 필터 — 담당자가 매핑된 RGN2 의 협력사만 통과
+    if (mgrRgn2Set && !mgrRgn2Set.has(partnerRgn2)) return false;
+    return true;
   });
   renderRealtime();
   renderPerformance();
@@ -2346,25 +2382,34 @@ function renderRealtime() {
 // ═══════════════════════════════════════════════════
 
 // 주차 키 생성 (YYYYWW) — 시트값 우선, 없으면 일자에서 계산
+// 주차 키 — 회사 기준 "수요일 시작 ~ 화요일 종료"
+//   row['주차'] 필드가 비어있지 않으면 해당 값을 그대로 사용 (예: "5월 1주차")
+//   없으면 일자가 속한 주의 수요일 일자를 "YYYY-MM-DD" 형식으로 키 생성
 function _weekKey(row) {
   const raw = row['주차'];
-  if (raw !== undefined && raw !== '') {
-    const s = String(raw).trim();
-    if (/^\d{6}$/.test(s)) return s;
-    if (/^\d{4}W\d{2}$/.test(s)) return s.replace('W','');
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+    return String(raw).trim();
   }
   const d = new Date(row['일자']||'');
   if (isNaN(d)) return '?';
-  const target = new Date(d.valueOf());
-  const dayNr  = (d.getDay() + 6) % 7;           // Mon=0..Sun=6
-  target.setDate(target.getDate() - dayNr + 3);  // Thursday of ISO week
-  const jan4 = new Date(target.getFullYear(), 0, 4);
-  const wk   = 1 + Math.round(((target - jan4) / 86400000 - 3 + ((jan4.getDay()+6)%7)) / 7);
-  return `${target.getFullYear()}${String(wk).padStart(2,'0')}`;
+  const wedTs = d.getTime() - _wedOffset(d.getDay()) * 86400000;
+  const wed = new Date(wedTs);
+  const pad = n => String(n).padStart(2,'0');
+  return `${wed.getFullYear()}-${pad(wed.getMonth()+1)}-${pad(wed.getDate())}`;
 }
 
 function _formatWeek(w) {
-  if (/^\d{6}$/.test(w)) return `${w.slice(0,4)}-W${w.slice(4)}`;
+  // 신규: "YYYY-MM-DD" (수요일) → "M/D~M/D" 표시
+  if (/^\d{4}-\d{2}-\d{2}$/.test(w)) {
+    const d = new Date(w);
+    if (!isNaN(d)) {
+      const end = new Date(d.getTime() + 6 * 86400000);
+      return `${d.getMonth()+1}/${d.getDate()}~${end.getMonth()+1}/${end.getDate()}`;
+    }
+  }
+  // 레거시 호환
+  if (/^\d{6}$/.test(w))      return `${w.slice(0,4)}-W${w.slice(4)}`;
+  if (/^\d{4}W\d{2}$/.test(w)) return w;
   return w;
 }
 
@@ -2764,13 +2809,42 @@ function _operationalToday() {
   return now;
 }
 
-// 이번 주차 범위 (월요일 ~ 운영일 today) — "이번 주차에 처리건수 1건 이상" 필터용
+// 주차 정의: "수요일 시작 ~ 다음주 화요일 종료" (회사 내부 기준)
+// dow: 일=0, 월=1, 화=2, 수=3, 목=4, 금=5, 토=6
+// 수=3 시작 → 어떤 날짜가 있을 때 그 주의 시작(수요일) 까지 며칠 빼야 하는지:
+//   dow >= 3 (수~토)  → dow - 3
+//   dow <  3 (일/월/화) → dow + 4   (지난주 수요일로)
+function _wedOffset(dow) {
+  return dow >= 3 ? (dow - 3) : (dow + 4);
+}
+
+// 이번 주차 범위 (수요일 ~ 운영일 today) — "이번 주차에 처리건수 1건 이상" 필터용
+//   3단계 폴백:
+//   ① 정상: 운영일 today 기준 [수요일, 운영일today]
+//   ② 데이터가 운영일보다 뒤처져 있으면 max(데이터)+1 을 임시 운영일로
+//   ③ 그래도 이번 주차 안에 데이터가 한 건도 없으면 (수요일 새벽 등)
+//      → max(데이터 일자)가 속한 주차 [수, max] 로 폴백
 function _getThisWeekRange() {
-  const today = _operationalToday();
-  const dow   = today.getDay();           // 일=0, 월=1, ..., 토=6
-  const monOffset = (dow === 0) ? 6 : (dow - 1);
-  const monTs = today.getTime() - monOffset * _DAY_MS;
-  return { start: _fmtDate(monTs), end: _fmtDate(today.getTime()) };
+  const todayBase = _operationalToday().getTime();
+  const dates = (STATE.kpi || []).map(r => _kpiDateOf(r)).filter(Boolean).sort();
+  const dataMaxTs = dates.length ? new Date(dates[dates.length - 1]).getTime() : 0;
+  // ② 폴백
+  const baseTs = (todayBase - _DAY_MS) <= dataMaxTs
+    ? todayBase
+    : (dataMaxTs + _DAY_MS);
+  const today  = new Date(baseTs);
+  const wedTs  = today.getTime() - _wedOffset(today.getDay()) * _DAY_MS;
+  const startStr = _fmtDate(wedTs);
+  const endStr   = _fmtDate(today.getTime());
+
+  // ③ 이번 주차 안에 데이터가 한 건도 없으면 → max(데이터)가 속한 주차로 폴백
+  const hasAny = dates.some(d => d >= startStr && d <= endStr);
+  if (!hasAny && dataMaxTs) {
+    const dMax = new Date(dataMaxTs);
+    const dWed = dataMaxTs - _wedOffset(dMax.getDay()) * _DAY_MS;
+    return { start: _fmtDate(dWed), end: _fmtDate(dataMaxTs) };
+  }
+  return { start: startStr, end: endStr };
 }
 const _DAY_MS = 86400000;
 const _fmtDate = ms => {
@@ -2985,9 +3059,9 @@ function _chartVolumeSLA(labels, volumes, slas, _unusedRiders) {
 function _chartActiveRiders(labels, active, contracted) {
   const TC = _themeTextColors();
   const BC = _themeBgColors();
-  // 채도 높은 색으로 변경 — 라이트/다크 모두에서 잘 보이도록
-  const ACTIVE_COLOR = '#22c55e';   // 진한 그린 (Active 막대)
-  const RATIO_COLOR  = '#f97316';   // 주황 (Active/계약 비중 라인 — 그린과 보색)
+  // 막대 = 민트색 / 비중 라인 = 노랑
+  const ACTIVE_COLOR = '#14b8a6';   // 민트 (Active 막대)
+  const RATIO_COLOR  = '#facc15';   // 노랑 (Active/계약 비중 라인)
   const w = 900, h = 240;
   const padL = 50, padR = 50, padT = 60, padB = 38;
   const chartW = w - padL - padR;
