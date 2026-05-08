@@ -501,7 +501,7 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th data-sort="perfList:partnerName" style="cursor:pointer">협력사명<span id="sort-perfList-partnerName"></span></th>
               <th class="center" data-sort="perfList:grade" style="cursor:pointer">등급<span id="sort-perfList-grade"></span></th>
               <th class="center" data-sort="perfList:sets" style="cursor:pointer">세트수<span id="sort-perfList-sets"></span></th>
-              <th class="center" data-sort="perfList:riderAct" style="cursor:pointer">Active<br><span style="font-size:10px;font-weight:400">라이더수</span><span id="sort-perfList-riderAct"></span></th>
+              <th class="center" data-sort="perfList:riderAct" style="cursor:pointer">Active<br><span style="font-size:10px;font-weight:400">라이더수 / 계약 (비중)</span><span id="sort-perfList-riderAct"></span></th>
               <th class="center" data-sort="perfList:totalVol" style="cursor:pointer">처리건수<span id="sort-perfList-totalVol"></span></th>
               <th class="center" data-sort="perfList:orderAch" style="cursor:pointer">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-perfList-orderAch"></span></th>
               <th class="center" data-sort="perfList:sla" style="cursor:pointer">수락률<span id="sort-perfList-sla"></span></th>
@@ -2763,6 +2763,15 @@ function _operationalToday() {
   now.setHours(0, 0, 0, 0);
   return now;
 }
+
+// 이번 주차 범위 (월요일 ~ 운영일 today) — "이번 주차에 처리건수 1건 이상" 필터용
+function _getThisWeekRange() {
+  const today = _operationalToday();
+  const dow   = today.getDay();           // 일=0, 월=1, ..., 토=6
+  const monOffset = (dow === 0) ? 6 : (dow - 1);
+  const monTs = today.getTime() - monOffset * _DAY_MS;
+  return { start: _fmtDate(monTs), end: _fmtDate(today.getTime()) };
+}
 const _DAY_MS = 86400000;
 const _fmtDate = ms => {
   const d = (ms instanceof Date) ? ms : new Date(ms);
@@ -2976,10 +2985,11 @@ function _chartVolumeSLA(labels, volumes, slas, _unusedRiders) {
 function _chartActiveRiders(labels, active, contracted) {
   const TC = _themeTextColors();
   const BC = _themeBgColors();
-  const ACTIVE_COLOR = '#4ade80';   // 초록
-  const RATIO_COLOR  = '#a78bfa';   // 보라 (라이더 활성 비중 라인)
-  const w = 900, h = 230;
-  const padL = 50, padR = 50, padT = 56, padB = 38;
+  // 채도 높은 색으로 변경 — 라이트/다크 모두에서 잘 보이도록
+  const ACTIVE_COLOR = '#22c55e';   // 진한 그린 (Active 막대)
+  const RATIO_COLOR  = '#f97316';   // 주황 (Active/계약 비중 라인 — 그린과 보색)
+  const w = 900, h = 240;
+  const padL = 50, padR = 50, padT = 60, padB = 38;
   const chartW = w - padL - padR;
   const chartH = h - padT - padB;
   const n = labels.length || 1;
@@ -3009,18 +3019,16 @@ function _chartActiveRiders(labels, active, contracted) {
     }
   }
 
-  // Active 라이더수 막대 (호버 시 라벨 함께 강조)
+  // Active 라이더수 막대 — 라벨은 항상 막대 위에 표시
   const bars = active.map((v,i) => {
     const x  = xFor(i) - barW/2;
     const bh = (v/maxAct) * chartH;
     const y  = padT + chartH - bh;
-    const inside = bh >= 26;
-    const labelY = inside ? y + 14 : y - 5;
-    const labelFill = inside ? '#062014' : ACTIVE_COLOR;
+    const labelY = y - 5;  // 항상 막대 바깥 위쪽
     return `<g class="chart-hov" color="${ACTIVE_COLOR}">
-      <rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="${ACTIVE_COLOR}" opacity="0.85" rx="2"/>
-      <text x="${x+barW/2}" y="${labelY}" font-size="9.5" fill="${labelFill}" text-anchor="middle" font-weight="700"
-            stroke="#0d1923" stroke-width="2.5" paint-order="stroke">${v.toLocaleString()}</text>
+      <rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="${ACTIVE_COLOR}" opacity="0.9" rx="2"/>
+      <text x="${x+barW/2}" y="${labelY}" font-size="10" fill="${ACTIVE_COLOR}" text-anchor="middle" font-weight="700"
+            stroke="${BC.card}" stroke-width="3" paint-order="stroke">${v.toLocaleString()}</text>
     </g>`;
   }).join('');
 
@@ -3038,9 +3046,9 @@ function _chartActiveRiders(labels, active, contracted) {
     }
     ratioPoints = pts.map(p =>
       `<g class="chart-hov" color="${RATIO_COLOR}">
-        <circle cx="${p.x}" cy="${p.y}" r="3" fill="${BC.section}" stroke="${RATIO_COLOR}" stroke-width="2"/>
-        <text x="${p.x}" y="${p.y-9}" font-size="9" fill="${RATIO_COLOR}" text-anchor="middle" font-weight="600"
-              stroke="#0d1923" stroke-width="3" paint-order="stroke">${p.r.toFixed(0)}%</text>
+        <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${BC.card}" stroke="${RATIO_COLOR}" stroke-width="2.2"/>
+        <text x="${p.x}" y="${p.y-9}" font-size="9.5" fill="${RATIO_COLOR}" text-anchor="middle" font-weight="700"
+              stroke="${BC.card}" stroke-width="3" paint-order="stroke">${p.r.toFixed(0)}%</text>
       </g>`
     ).join('');
   }
@@ -3052,12 +3060,12 @@ function _chartActiveRiders(labels, active, contracted) {
 
   // 범례
   const legend = `
-    <g transform="translate(${padL}, 32)">
-      <rect x="0" y="0" width="10" height="10" fill="${ACTIVE_COLOR}" opacity="0.85" rx="1"/>
+    <g transform="translate(${padL}, 38)">
+      <rect x="0" y="0" width="10" height="10" fill="${ACTIVE_COLOR}" opacity="0.9" rx="1"/>
       <text x="14" y="9" font-size="10" fill="${TC.cell}">Active 라이더수</text>
       ${hasRatio ? `
         <line x1="120" y1="5" x2="138" y2="5" stroke="${RATIO_COLOR}" stroke-width="2"/>
-        <circle cx="129" cy="5" r="3" fill="${BC.section}" stroke="${RATIO_COLOR}" stroke-width="2"/>
+        <circle cx="129" cy="5" r="3.5" fill="${BC.card}" stroke="${RATIO_COLOR}" stroke-width="2.2"/>
         <text x="144" y="9" font-size="10" fill="${TC.cell}">비중 (Active / 계약 %)</text>
       ` : ''}
     </g>`;
@@ -3260,6 +3268,9 @@ function renderPerfList() {
     return `<span style="color:${color};font-weight:600">${arrow}${num}${unit}</span>`;
   };
 
+  // 이번 주차(월~운영일today) 처리건수가 1건이라도 있는 협력사만 노출
+  const thisWeek = _getThisWeekRange();
+
   // ── 레코드 빌드: 정렬/렌더에 필요한 필드 모두 추출 ──
   const records = partnersBase.map(p => {
     const pid  = p['협력사ID'];
@@ -3274,8 +3285,13 @@ function renderPerfList() {
     const prev      = hist.length ? _aggregateRange(hist, window.prev.start,      window.prev.end,      tgt) : null;
     const prior     = hist.length ? _aggregateRange(hist, window.prior.start,     window.prior.end,     tgt) : null;
     const priorWeek = (hist.length && window.priorWeek) ? _aggregateRange(hist, window.priorWeek.start, window.priorWeek.end, tgt) : null;
+    // 이번 주차에 처리건수 1건 이상 있는지 (월요일 ~ 운영일today)
+    const hasVolThisWeek = !!(thisWeek && hist.some(r => {
+      const d = _kpiDateOf(r);
+      return d && d >= thisWeek.start && d <= thisWeek.end && Number(r['총처리건수']||0) >= 1;
+    }));
     return {
-      p, pid, rgn2, tpl3, region, grade, prev, prior, priorWeek,
+      p, pid, rgn2, tpl3, region, grade, prev, prior, priorWeek, hasVolThisWeek,
       // sort keys
       partnerName: p['협력사명']||'',
       partnerId:   pid||'',
@@ -3294,8 +3310,10 @@ function renderPerfList() {
     };
   });
 
-  // ── '해당 기간 데이터 없음'(empty) 행은 표시하지 않음 ──
-  let recordsFiltered = records.filter(r => !r.empty);
+  // ── 노출 기준 ──
+  //   1) '해당 기간 데이터 없음'(empty) 행 제외
+  //   2) 이번 주차(월~운영일 today)에 처리건수가 1건이라도 있는 협력사만
+  let recordsFiltered = records.filter(r => !r.empty && r.hasVolThisWeek);
 
   // ── 위험만 필터 (퍼포먼스 리스트 전용) ──
   // 기준: prev.sla < 80% (수락률 80% 미만)  OR  prev.slotsAchieved < 4 (달성슬롯수 4개 미만)
@@ -3394,7 +3412,15 @@ function renderPerfList() {
         <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
       <td style="text-align:center">${getGradeBadge(r.grade)}</td>
       <td style="text-align:center;color:var(--text-cell);font-weight:600">${prev.sets ? Math.round(prev.sets).toLocaleString() : '-'}</td>
-      <td style="text-align:center;color:#4ade80;font-weight:600">${prev.riderActAvg ? Number(prev.riderActAvg.toFixed(1)).toLocaleString() : '-'}</td>
+      <td style="text-align:center;color:#4ade80;font-weight:600;white-space:nowrap">${(() => {
+        const a = prev.riderActAvg  || 0;
+        const c = prev.riderJoinAvg || 0;
+        if (!a && !c) return '-';
+        const aTxt = a ? Number(a.toFixed(1)).toLocaleString() : '-';
+        const cTxt = c ? Number(c.toFixed(1)).toLocaleString() : '-';
+        const ratio = (a && c) ? Math.round((a/c)*100) + '%' : '-';
+        return `${aTxt}<span style="color:var(--text-muted);font-weight:600"> / ${cTxt}</span> <span style="color:var(--text-secondary);font-size:11px">(${ratio})</span>`;
+      })()}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${(prev.totalVol||0).toLocaleString()}</td>
       ${orderCell}
       <td style="text-align:center;color:${slaColor};font-weight:600">${prev.sla ? prev.sla.toFixed(1)+'%' : '-'}</td>
@@ -3458,8 +3484,13 @@ function _renderPerfWeekly(body, hist, tgt) {
       ${volTargetTd(w.evVol, tEv)}
       ${volTargetTd(w.niVol, tNi)}
       <td style="text-align:center;color:${_slaColor(w.sla)};font-weight:600">${w.sla ? w.sla.toFixed(1)+'%' : '-'}</td>
-      <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct ? Number(riderAct.toFixed(1)).toLocaleString() : '-'}명
-        <span style="color:var(--text-secondary);font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
+      <td style="text-align:center;color:#4ade80;font-weight:600;white-space:nowrap">${(() => {
+        if (!riderAct && !riderJoin) return '-';
+        const aTxt = riderAct  ? Number(riderAct.toFixed(1)).toLocaleString()  : '-';
+        const cTxt = riderJoin ? Number(riderJoin.toFixed(1)).toLocaleString() : '-';
+        const ratio = (riderAct && riderJoin) ? Math.round((riderAct/riderJoin)*100) + '%' : '-';
+        return `${aTxt}<span style="color:var(--text-muted);font-weight:600"> / ${cTxt}</span> <span style="color:var(--text-secondary);font-size:11px">(${ratio})</span>`;
+      })()}</td>
     </tr>`;
   }).join('');
 
@@ -3475,7 +3506,7 @@ function _renderPerfWeekly(body, hist, tgt) {
               <th rowspan="2" class="center">전체<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
               <th colspan="4" class="center slot-group">시간대별 처리건수</th>
               <th rowspan="2" class="center">수락률</th>
-              <th rowspan="2" class="center">Active<br><span style="font-size:10px;font-weight:400">라이더 (평균)</span></th>
+              <th rowspan="2" class="center">Active<br><span style="font-size:10px;font-weight:400">라이더수 / 계약 (비중)</span></th>
             </tr>
             <tr>
               <th class="center">아침점심</th><th class="center">오후</th><th class="center">저녁피크</th><th class="center">심야</th>
@@ -3558,8 +3589,13 @@ function _renderPerfDaily(body, hist, tgt) {
       ${volTargetTd(evVol, tEv)}
       ${volTargetTd(niVol, tNi)}
       <td style="text-align:center;color:${_slaColor(sla)};font-weight:600">${sla ? sla.toFixed(1)+'%' : '-'}</td>
-      <td style="text-align:center;color:#4ade80;font-weight:600">${riderAct.toLocaleString()}명
-        <span style="color:var(--text-secondary);font-weight:400;font-size:11px;margin-left:3px">(${riderJoin ? actShare.toFixed(0)+'%' : '-'})</span></td>
+      <td style="text-align:center;color:#4ade80;font-weight:600;white-space:nowrap">${(() => {
+        if (!riderAct && !riderJoin) return '-';
+        const aTxt = riderAct  ? riderAct.toLocaleString()  : '-';
+        const cTxt = riderJoin ? riderJoin.toLocaleString() : '-';
+        const ratio = (riderAct && riderJoin) ? Math.round((riderAct/riderJoin)*100) + '%' : '-';
+        return `${aTxt}<span style="color:var(--text-muted);font-weight:600"> / ${cTxt}</span> <span style="color:var(--text-secondary);font-size:11px">(${ratio})</span>`;
+      })()}</td>
     </tr>`;
   }).join('');
 
@@ -3575,7 +3611,7 @@ function _renderPerfDaily(body, hist, tgt) {
               <th rowspan="2" class="center">전체<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
               <th colspan="4" class="center slot-group">시간대별 처리건수</th>
               <th rowspan="2" class="center">수락률</th>
-              <th rowspan="2" class="center">Active<br><span style="font-size:10px;font-weight:400">라이더</span></th>
+              <th rowspan="2" class="center">Active<br><span style="font-size:10px;font-weight:400">라이더수 / 계약 (비중)</span></th>
             </tr>
             <tr>
               <th class="center">아침점심</th><th class="center">오후</th><th class="center">저녁피크</th><th class="center">심야</th>
@@ -3760,8 +3796,6 @@ function _renderPartnerProfile(body, pid) {
       </div>
     </div>
 
-    ${contactsHtml}
-
     <!-- 활동 로그 -->
     <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px" id="voc-section">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -3829,6 +3863,8 @@ function _renderPartnerProfile(body, pid) {
       <!-- 로그 목록 -->
       <div id="voc-log-list"></div>
     </div>
+
+    ${contactsHtml}
   `;
 
   // 로그 목록 렌더링
