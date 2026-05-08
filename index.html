@@ -1272,15 +1272,11 @@ function startAutoRefresh() {
 // FILTERS
 // ═══════════════════════════════════════════════════
 function populateRegionFilter() {
-  // RGN2 후보를 모음 — 1순위는 협력사기본정보 시트의 RGN2 컬럼
+  // RGN2 드롭다운은 협력사기본정보 시트의 RGN2 컬럼(우선) / 권역명에서 추출된 값만 노출
+  // (데일리·실시간 시트의 운영지역 자동 추출은 옵션에 포함하지 않음)
   const set = new Set();
   (STATE.partners || []).forEach(p => {
     const v = getPartnerRgn2(p);
-    if (v && v !== '-') set.add(v);
-  });
-  // 협력사기본정보에 누락된 RGN2도 데이터 기반으로 보완
-  (STATE.kpi || []).forEach(k => {
-    const v = getRGN2(k['운영지역']);
     if (v && v !== '-') set.add(v);
   });
   const rgn2List = [...set].sort();
