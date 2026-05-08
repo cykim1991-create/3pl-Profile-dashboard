@@ -422,7 +422,6 @@ textarea.form-input{resize:vertical;min-height:60px}
         </div>
         <div class="section-actions">
           <div id="grade-chip-realtime" style="display:inline-block"></div>
-          <button class="btn btn-ghost btn-sm" onclick="filterRiskOnly()">⚠️ 위험만</button>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('realtime')" title="정렬/필터 모두 해제">↻ 초기화</button>
         </div>
       </div>
@@ -446,7 +445,6 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center" data-sort="realtime:sla" style="cursor:pointer">SLA수락률<br><span style="font-size:10px;font-weight:400">(배달)</span><span id="sort-realtime-sla"></span></th>
               <th class="center" data-sort="realtime:inSLA" style="cursor:pointer">권내수락률<br><span style="font-size:10px;font-weight:400">(배차)</span><span id="sort-realtime-inSLA"></span></th>
               <th class="center" data-sort="realtime:outSLA" style="cursor:pointer">권외수락률<br><span style="font-size:10px;font-weight:400">(배차)</span><span id="sort-realtime-outSLA"></span></th>
-              <th class="center" data-sort="realtime:risk" style="cursor:pointer">위험도<span id="sort-realtime-risk"></span></th>
             </tr>
           </thead>
           <tbody id="realtimeBody"></tbody>
@@ -474,6 +472,7 @@ textarea.form-input{resize:vertical;min-height:60px}
             style="min-width:260px;padding:6px 12px;font-size:12.5px"
           />
           <div id="grade-chip-perfList" style="display:inline-block"></div>
+          <button class="btn btn-ghost btn-sm" onclick="filterRiskOnly()" title="수락률 80% 미만 또는 달성슬롯수 4개 미만">⚠️ 위험만</button>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('perfList')" title="정렬/필터 모두 해제">↻ 초기화</button>
           <span id="perf-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
         </div>
@@ -487,7 +486,6 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center" data-sort="perfList:tpl3Share" style="cursor:pointer">3PL<br><span style="font-size:10px;font-weight:400">처리비중</span><span id="sort-perfList-tpl3Share"></span></th>
               <th data-sort="perfList:region" style="cursor:pointer">권역<span id="sort-perfList-region"></span></th>
               <th data-sort="perfList:partnerName" style="cursor:pointer">협력사명<span id="sort-perfList-partnerName"></span></th>
-              <th data-sort="perfList:partnerId" style="cursor:pointer">협력사 ID<span id="sort-perfList-partnerId"></span></th>
               <th class="center" data-sort="perfList:status" style="cursor:pointer">상태<span id="sort-perfList-status"></span></th>
               <th class="center" data-sort="perfList:grade" style="cursor:pointer">등급<span id="sort-perfList-grade"></span></th>
               <th class="center" data-sort="perfList:sets" style="cursor:pointer">세트수<span id="sort-perfList-sets"></span></th>
@@ -1100,13 +1098,15 @@ async function init() {
   try {
     // v9 시트 구조: row1=제목, row2=헤더, row3+=데이터 (0-indexed: header=1, data=2)
     // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
-    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals] = await Promise.all([
-      fetchSheet('협력사기본정보',     'A:P'),    // 16열 (전화번호 + 담당자 추가 여유 포함)
+    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals] = await Promise.all([
+      fetchSheet('협력사기본정보',     'A:L'),    // 12열 (마스터 — 전화번호는 별도 시트)
       fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
       fetchSheet('실시간운행현황',     'A:AA'),   // 27열 (영문 snake_case 컬럼, 헤더 row1, 데이터 row2+)
       fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
       fetchSheet('RGN2_담당자',        'A:C'),    // 3열 (RGN2, 담당자, 변경일시)
       fetchSheet('RGN2_일별지표',      'A:H'),    // 8열 (RGN2 × 일자 단위 영업브리핑 지표, 최근 7일)
+      // 협력사연락처는 선택 시트 — 없거나 권한 없으면 빈 배열로 폴백
+      fetchSheet('협력사연락처',       'A:I').catch(() => []),
     ]);
     STATE.partners     = parseSheet(partnerVals,  1, 2);
     const allKPI       = parseSheet(kpiVals, 1, 2);
@@ -1165,6 +1165,13 @@ async function init() {
     STATE.settings     = {};
     STATE.promo        = [];
     STATE.pipeline     = [];
+
+    // 협력사연락처 시트 (헤더 row1, 데이터 row2+) — 사장님/관리자 1행 = 1명
+    try {
+      STATE.contacts = parseSheet(contactVals, 0, 1);
+    } catch (_) {
+      STATE.contacts = [];
+    }
 
     // 시트에 이미 올라간 로컬 로그(같은 로그ID)는 로컬에서 정리 → "로컬" 뱃지 중복 방지
     try {
@@ -1374,6 +1381,80 @@ function getRealtimeKPI(pid) {
     if (!merged['계약형태'] && partner['계약형태']) merged['계약형태'] = partner['계약형태'];
   }
   return merged;
+}
+
+// 협력사연락처 시트에서 해당 협력사의 사장님/관리자 연락처 행들을 반환
+// 한 협력사ID에 사장님 1명 + 관리자 N명이 있을 수 있음
+function getContactsForPartner(pid) {
+  if (!pid) return [];
+  return (STATE.contacts || []).filter(c =>
+    (c['협력사아이디'] || c['협력사ID']) === pid
+  );
+}
+
+// 사장님/담당자 연락처 섹션 HTML — 모달의 "실시간 운영 지표" 아래에 표시
+function _renderPartnerContactsSection(pid) {
+  const contacts = getContactsForPartner(pid);
+  if (!contacts.length) {
+    return `
+      <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
+        <div class="modal-section-title">📞 사장님 / 담당자 연락처</div>
+        <div style="color:var(--text-muted);text-align:center;padding:14px;font-size:12px">
+          협력사연락처 시트에 등록된 정보가 없습니다
+        </div>
+      </div>`;
+  }
+  // 사장님이 먼저, 관리자는 그 다음 (이름 가나다순)
+  const sorted = contacts.slice().sort((a,b) => {
+    const ra = (a['사장님/관리자 여부'] || '').includes('사장') ? 0 : 1;
+    const rb = (b['사장님/관리자 여부'] || '').includes('사장') ? 0 : 1;
+    if (ra !== rb) return ra - rb;
+    return String(a['사장님/관리자 이름']||'').localeCompare(String(b['사장님/관리자 이름']||''));
+  });
+  const fmtPhone = (raw) => {
+    if (!raw) return '-';
+    const d = String(raw).replace(/[^\d]/g,'');
+    if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`;
+    if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`;
+    return raw;
+  };
+  const rows = sorted.map(c => {
+    const role = c['사장님/관리자 여부'] || '-';
+    const isOwner = role.includes('사장');
+    const roleBadge = isOwner
+      ? '<span style="background:#5b4318;color:#fbbf24;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">사장님</span>'
+      : '<span style="background:var(--accent-bg);color:var(--accent-soft);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600">관리자</span>';
+    const name  = c['사장님/관리자 이름'] || '-';
+    const phone = c['사장님/관리자 전화번호'] || '';
+    const phoneClean = String(phone).replace(/[^\d+\-]/g,'');
+    const bizId = c['사장님/관리자 비즈회원 아이디'] || '';
+    const phoneCell = phone
+      ? `<a href="tel:${phoneClean}" style="color:var(--accent-soft);text-decoration:none;font-weight:600">${fmtPhone(phone)}</a>`
+      : '<span style="color:var(--text-muted)">-</span>';
+    return `<tr>
+      <td style="padding:8px 10px;white-space:nowrap">${roleBadge}</td>
+      <td style="padding:8px 10px;color:var(--text-primary);font-weight:600">${name}</td>
+      <td style="padding:8px 10px">${phoneCell}</td>
+      <td style="padding:8px 10px;color:var(--text-muted);font-size:11px">${bizId || '-'}</td>
+    </tr>`;
+  }).join('');
+  return `
+    <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
+      <div class="modal-section-title">📞 사장님 / 담당자 연락처
+        <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">(${sorted.length}명)</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" style="width:100%;font-size:12.5px">
+          <thead><tr>
+            <th style="width:90px">구분</th>
+            <th style="width:130px">이름</th>
+            <th>전화번호</th>
+            <th>비즈회원 ID</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 function getKPIHistory(pid) {
@@ -2065,9 +2146,9 @@ function makeDCPOSpark(values) {
 // VIEW 1: 실시간 운행현황
 // ═══════════════════════════════════════════════════
 const _RT_SORT_KEYS = [
-  'rgn2','region','partnerName','partnerId','contract','grade',
+  'rgn2','region','partnerName','grade',
   'riderJoin','riderAct','sets','totalVol','amAch','pmAch','evAch','niAch',
-  'sla','inSLA','outSLA','risk'
+  'sla','inSLA','outSLA'
 ];
 
 function renderRealtime() {
@@ -2099,11 +2180,11 @@ function renderRealtime() {
   const el = document.getElementById('rt-date-label');
   if (el && dates.length) el.textContent = dates[0]+' 기준';
 
-  // 테이블용: 위험만 필터를 여기서만 적용 (KPI 카드에는 영향 없음)
-  const tableSrc = riskOnlyMode ? all.filter(p => getRiskLevel(p) === 'red') : all;
+  // 위험만 필터는 협력사 퍼포먼스 탭 전용 — 실시간 운행현황에는 적용 X
+  const tableSrc = all;
 
   const tbody = document.getElementById('realtimeBody');
-  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="16" class="empty">데이터 없음</td></tr>`; return; }
+  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="15" class="empty">데이터 없음</td></tr>`; return; }
 
   const st = _tblState.realtime;
 
@@ -2187,7 +2268,7 @@ function renderRealtime() {
   }
 
   if (!records.length) {
-    tbody.innerHTML = `<tr><td colspan="16" class="empty">필터 결과가 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="15" class="empty">필터 결과가 없습니다</td></tr>`;
     return;
   }
 
@@ -2215,7 +2296,6 @@ function renderRealtime() {
       <td style="text-align:center;color:${slaColor};font-weight:600">${r.slaRaw!==null?r.slaRaw.toFixed(1)+'%':'-'}</td>
       <td style="text-align:center;color:${r.inSLA!==null?(inOk?'#4ade80':'#f87171'):'#8fa3b8'};font-weight:600">${r.inSLA!==null?(r.inSLA*100).toFixed(1)+'%':'-'}</td>
       <td style="text-align:center;color:${r.outSLA!==null?(outOk?'#4ade80':'#f87171'):'#8fa3b8'}">${r.outSLA!==null?(r.outSLA*100).toFixed(1)+'%':'-'}</td>
-      <td style="text-align:center">${getRiskLabel(r.p)}</td>
     </tr>`;
   }).join('');
 }
@@ -2728,12 +2808,13 @@ function _themeBgColors() {
 }
 
 // 바+라인 콤보 (처리건수 bar + 수락률 line)
-function _chartVolumeSLA(labels, volumes, slas) {
+function _chartVolumeSLA(labels, volumes, slas, riders) {
   const AC = _accentColors();
   const TC = _themeTextColors();
   const BC = _themeBgColors();
-  const w = 900, h = 280;
-  const padL = 50, padR = 50, padT = 64, padB = 38;
+  const hasRiders = Array.isArray(riders) && riders.some(v => v != null);
+  const w = 900, h = hasRiders ? 296 : 280;
+  const padL = 50, padR = 50, padT = 64, padB = hasRiders ? 54 : 38;
   const chartW = w - padL - padR;
   const chartH = h - padT - padB;
   const n = labels.length || 1;
@@ -2792,13 +2873,21 @@ function _chartVolumeSLA(labels, volumes, slas) {
     </g>`;
   }).join('');
 
-  // X labels
+  // X labels (날짜 + 선택적 Active 라이더 라벨)
   const xlabels = labels.map((l,i) => {
     const x = xFor(i);
-    return `<text x="${x}" y="${h-padB+14}" font-size="10" fill="${TC.secondary}" text-anchor="middle">${l}</text>`;
+    const dateText = `<text x="${x}" y="${h-padB+14}" font-size="10" fill="${TC.secondary}" text-anchor="middle">${l}</text>`;
+    if (!hasRiders || riders[i] == null) return dateText;
+    const r = Math.round(Number(riders[i]) || 0);
+    const riderText = `<text x="${x}" y="${h-padB+30}" font-size="9.5" fill="#4ade80" text-anchor="middle" font-weight="600">${r.toLocaleString()}명</text>`;
+    return dateText + riderText;
   }).join('');
 
   // Legend (제목 아래에 별도 행으로 배치)
+  const riderLegend = hasRiders
+    ? `<text x="195" y="9" font-size="10" fill="#4ade80" font-weight="600">●</text>
+       <text x="206" y="9" font-size="10" fill="${TC.cell}">Active 라이더(명)</text>`
+    : '';
   const legend = `
     <g transform="translate(${padL}, 38)">
       <rect x="0" y="0" width="10" height="10" fill="${AC.accent}" opacity="0.85" rx="1"/>
@@ -2806,6 +2895,7 @@ function _chartVolumeSLA(labels, volumes, slas) {
       <line x1="90" y1="5" x2="108" y2="5" stroke="#fbbf24" stroke-width="2"/>
       <circle cx="99" cy="5" r="3" fill="${BC.section}" stroke="#fbbf24" stroke-width="2"/>
       <text x="114" y="9" font-size="10" fill="${TC.cell}">수락률(%)</text>
+      ${riderLegend}
     </g>`;
 
   // 렌더 순서: 격자 → 바(rect+라벨 g) → SLA 선 → SLA 점(circle+라벨 g) → x축 라벨
@@ -2932,7 +3022,7 @@ function renderPerformance() {
   renderPerfList();
 }
 
-const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','partnerName','partnerId','status','grade','sets','riderAct','totalVol','orderAch','sla','slotsAchieved'];
+const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','partnerName','status','grade','sets','riderAct','totalVol','orderAch','sla','slotsAchieved'];
 
 function renderPerfList() {
   const body   = document.getElementById('perfListBody');
@@ -2945,9 +3035,9 @@ function renderPerfList() {
   _updateSortIndicators('perfList', _PERF_SORT_KEYS);
 
   // 슬롯 목표는 협력사 권역별로 다르므로 records.map 안에서 lookup
-  // 퍼포먼스 리스트도 위험만 필터를 여기서만 적용 (상단 KPI 카드는 영향 X)
+  // 위험만 필터는 record 빌드 후 prev.sla / prev.slotsAchieved 기준으로 적용 (아래에서 처리)
   const baseList = (filtered && filtered.length) ? filtered : (STATE.partners || []);
-  const source   = riskOnlyMode ? baseList.filter(p => getRiskLevel(p) === 'red') : baseList;
+  const source   = baseList;
   const st       = _tblState.perfList;
 
   // 검색 + 등급 필터
@@ -3041,6 +3131,18 @@ function renderPerfList() {
     };
   });
 
+  // ── 위험만 필터 (퍼포먼스 리스트 전용) ──
+  // 기준: prev.sla < 80% (수락률 80% 미만)  OR  prev.slotsAchieved < 4 (달성슬롯수 4개 미만)
+  let recordsFiltered = records;
+  if (riskOnlyMode) {
+    recordsFiltered = records.filter(r => {
+      if (!r.prev) return false;
+      const slaLow = (r.prev.sla != null) && (r.prev.sla < 80);
+      const slotsLow = (r.prev.slotsAchieved != null) && (r.prev.slotsAchieved < 4);
+      return slaLow || slotsLow;
+    });
+  }
+
   // ── 정렬 적용 ──
   if (st.sortKey) {
     const keyMap = {
@@ -3059,9 +3161,9 @@ function renderPerfList() {
       slotsAchieved: r => r.slotsAchieved,
     };
     const getter = keyMap[st.sortKey];
-    if (getter) records.sort((a,b) => _sortCompare(getter(a), getter(b), st.sortDir));
+    if (getter) recordsFiltered.sort((a,b) => _sortCompare(getter(a), getter(b), st.sortDir));
   } else {
-    records.sort((a,b) => a.partnerName.localeCompare(b.partnerName));
+    recordsFiltered.sort((a,b) => a.partnerName.localeCompare(b.partnerName));
   }
 
   // 3PL처리비중 셀 (공통)
@@ -3074,14 +3176,13 @@ function renderPerfList() {
   };
 
   // ── 렌더 ──
-  body.innerHTML = records.map(r => {
+  body.innerHTML = recordsFiltered.map(r => {
     if (r.empty) {
       return `<tr onclick="openPerfDetailModal('${r.pid}')">
         <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${r.rgn2}</td>
         ${tpl3Cell(r.tpl3)}
         <td style="color:var(--text-secondary);font-size:11px">${r.region}</td>
         <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
-        <td style="color:var(--text-muted);font-size:11px">${r.pid}</td>
         <td style="text-align:center">${getStatusBadge(r.p)}</td>
         <td style="text-align:center">${getGradeBadge(r.grade)}</td>
         <td colspan="7" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
@@ -3117,7 +3218,6 @@ function renderPerfList() {
       <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.region}</td>
       <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>
         <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
-      <td style="color:var(--text-muted);font-size:11px">${r.pid}</td>
       <td style="text-align:center">${getStatusBadge(r.p)}</td>
       <td style="text-align:center">${getGradeBadge(r.grade)}</td>
       <td style="text-align:center;color:var(--text-cell);font-weight:600">${prev.sets ? prev.sets.toFixed(1) : '-'}</td>
@@ -3144,8 +3244,9 @@ function _renderPerfWeekly(body, hist, tgt) {
   const labels = asc.map(w => _formatWeek(w.week));
   const vols   = asc.map(w => w.totalVol);
   const slas   = asc.map(w => w.sla);
+  const riders = asc.map(w => w.riderActAvg || 0);
 
-  const chart1 = _chartVolumeSLA(labels, vols, slas);
+  const chart1 = _chartVolumeSLA(labels, vols, slas, riders);
   const chart3 = _chartShareStacked(labels, {
     am: asc.map(w => w.totalVol ? (w.amVol/w.totalVol)*100 : 0),
     pm: asc.map(w => w.totalVol ? (w.pmVol/w.totalVol)*100 : 0),
@@ -3226,10 +3327,11 @@ function _renderPerfDaily(body, hist, tgt) {
     const d = _kpiDateOf(r);
     return d ? d.slice(5) : '';  // MM-DD
   });
-  const vols = asc.map(r => Number(r['총처리건수']||0));
-  const slas = asc.map(r => _slaOf(r));
+  const vols    = asc.map(r => Number(r['총처리건수']||0));
+  const slas    = asc.map(r => _slaOf(r));
+  const riders  = asc.map(r => Number(r['운행라이더수']||0));
 
-  const chart1 = _chartVolumeSLA(labels, vols, slas);
+  const chart1 = _chartVolumeSLA(labels, vols, slas, riders);
   const chart3 = _chartShareStacked(labels, {
     am: asc.map(r => { const t = Number(r['총처리건수']||0); return t ? Number(r['아침점심피크_물량']||0)/t*100 : 0; }),
     pm: asc.map(r => { const t = Number(r['총처리건수']||0); return t ? Number(r['오후논피크_물량']||0)  /t*100 : 0; }),
@@ -3358,20 +3460,11 @@ function _renderPartnerProfile(body, pid) {
   const operArea = (kpi && kpi['운영지역']) || p['권역명'] || '';
 
   // ── SECTION 1: 기본 정보 ────────────────────────
-  // 전화번호 → tel 링크 (휴대폰에서 누르면 전화 걸림)
-  const telLink = (v) => {
-    if (!v || v === '-') return '<span style="color:var(--text-muted)">-</span>';
-    const clean = String(v).replace(/[^\d+\-]/g,'');
-    return `<a href="tel:${clean}" style="color:var(--accent-soft);text-decoration:none">${v}</a>`;
-  };
   const fixedFields = [
     ['협력사명',         p['협력사명']||'-'],
     ['협력사 ID',        p['협력사ID']||'-'],
     ['사업자명',         p['사업자명']||'-'],
     ['사업자번호',       p['사업자번호']||'-'],
-    ['사장님 연락처',    telLink(p['사장님연락처'] || p['사장님전화번호'] || '-')],
-    ['협력사 담당자',    p['협력사담당자']||'-'],
-    ['담당자 연락처',    telLink(p['담당자연락처'] || p['담당자전화번호'] || '-')],
     ['계정 생성일',      p['계정생성일']||'-'],
     ['적용 권역',        operArea.replace('표준서울','서울 ')||'-'],
     ['운영 상태',        p['운영상태']||'-'],
@@ -3461,7 +3554,10 @@ function _renderPartnerProfile(body, pid) {
     ? `실시간 운영 지표 <span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-left:6px;text-transform:none;letter-spacing:0">${kpiDate} 기준</span>`
     : `실시간 운영 지표`;
 
-  // ── Profile 탭 본문 조립: 기본정보 + 실시간KPI + 활동로그 ──
+  // ── 사장님/담당자 연락처 섹션 ──
+  const contactsHtml = _renderPartnerContactsSection(pid);
+
+  // ── Profile 탭 본문 조립: 기본정보 + 실시간KPI + 연락처 + 활동로그 ──
   body.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
@@ -3473,6 +3569,8 @@ function _renderPartnerProfile(body, pid) {
         ${kpiSnapshotHtml}
       </div>
     </div>
+
+    ${contactsHtml}
 
     <!-- 활동 로그 -->
     <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px" id="voc-section">
