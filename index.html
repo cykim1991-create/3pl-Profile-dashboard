@@ -507,8 +507,8 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center" data-sort="perfList:orderAch" style="cursor:pointer">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-perfList-orderAch"></span></th>
               <th class="center" data-sort="perfList:sla" style="cursor:pointer">수락률<span id="sort-perfList-sla"></span></th>
               <th class="center" data-sort="perfList:slotsAchieved" style="cursor:pointer">달성<br><span style="font-size:10px;font-weight:400">슬롯수</span><span id="sort-perfList-slotsAchieved"></span></th>
-              <th>전일 vs 전전일</th>
-              <th>전일 vs 전주 동요일</th>
+              <th>전일 비교</th>
+              <th>전주 동요일 비교</th>
             </tr>
           </thead>
           <tbody id="perfListBody"></tbody>
@@ -1123,7 +1123,21 @@ async function init() {
       fetchSheet('협력사연락처',       'A:I').catch(() => []),
     ]);
     STATE.partners     = parseSheet(partnerVals,  1, 2);
-    const allKPI       = parseSheet(kpiVals, 1, 2);
+    // 데일리운영현황 시트의 목표_* 컬럼은 "총 목표(세트수×per-set)"로 저장됨.
+    // 대시보드 내부 계산은 per-set 기준으로 통일되어 있으므로 sets로 나눠 정규화.
+    const allKPI = parseSheet(kpiVals, 1, 2).map(r => {
+      const sets = Number(r['신청세트수'] || r['세트수'] || 0);
+      if (sets > 0) {
+        return {
+          ...r,
+          '목표_아침점심': Number(r['목표_아침점심'] || 0) / sets,
+          '목표_오후':     Number(r['목표_오후']     || 0) / sets,
+          '목표_저녁':     Number(r['목표_저녁']     || 0) / sets,
+          '목표_심야':     Number(r['목표_심야']     || 0) / sets,
+        };
+      }
+      return r;
+    });
     STATE.kpi          = filterKPIRecent(allKPI, 8);
     // 실시간운행현황: 두 가지 형식 자동 감지
     //  (a) 새 형식: row1=헤더(영문 snake_case), row2+=데이터
