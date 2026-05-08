@@ -314,6 +314,7 @@ textarea.form-input{resize:vertical;min-height:60px}
 .ach-hi{color:#4ade80}
 .ach-mid{color:#fbbf24}
 .ach-lo{color:#f87171}
+.ach-neutral{color:var(--text-cell)}   /* 진행중/미시작 슬롯 — 중성색 */
 
 /* ── Risk text label */
 .risk-label{font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap}
@@ -2143,13 +2144,15 @@ function _renderBriefingRegionCard(rgn2, d1, d2) {
 //   - vol 자체가 없으면 "-"
 //   - sets가 0이면 (운영 안 한 협력사) 처리건수만 표시 (달성률 비표시)
 //   - 정상이면 달성률 % + "처리/목표"
-function slotAchievementFmt(vol, sets, targetPerSet) {
+//   - slotStatus가 'current' 또는 'future' 면 달성률 색상은 중성색으로 (진행중 / 미시작 표기)
+function slotAchievementFmt(vol, sets, targetPerSet, slotStatus) {
   if (vol === null || vol === undefined || vol === '') {
     return `<span style="color:var(--text-muted)">-</span>`;
   }
   const n = Number(vol);
   const s = Number(sets) || 0;
   const tgt = Number(targetPerSet) || 0;
+  const status = slotStatus || 'past';
   // 세트수가 0이면 처리건수만 노출
   if (!s) {
     return `<span class="ach-cnt" style="font-size:13px;color:var(--text-cell);font-weight:700">${n.toLocaleString()}건</span>`;
@@ -2158,9 +2161,53 @@ function slotAchievementFmt(vol, sets, targetPerSet) {
   if (!goal) {
     return `<span class="ach-cnt" style="font-size:13px;color:var(--text-cell);font-weight:700">${n.toLocaleString()}건</span>`;
   }
-  const pct = Math.round((n / goal) * 100);
-  const cls = pct >= 100 ? 'ach-hi' : pct >= 70 ? 'ach-mid' : 'ach-lo';
-  return `<span class="ach-pct ${cls}">${pct}%</span><span class="ach-cnt">${n.toLocaleString()}/${Math.round(goal).toLocaleString()}</span>`;
+  const pctRaw = (n / goal) * 100;
+  // 색상은 슬롯이 이미 종료된 경우(past)에만 적용 — 진행중/미시작은 중성 표기
+  let cls;
+  if (status === 'past') {
+    cls = pctRaw >= 100 ? 'ach-hi' : pctRaw >= 70 ? 'ach-mid' : 'ach-lo';
+  } else {
+    cls = 'ach-neutral';   // 진행중/미시작: 중성색
+  }
+  const pctTxt = pctRaw.toFixed(1).replace(/\.0$/,'');
+  const subTxt = status === 'current' ? `${n.toLocaleString()}/${Math.round(goal).toLocaleString()} <span style="color:var(--accent-soft);font-weight:600;font-size:9px">진행중</span>`
+              : status === 'future'  ? `<span style="color:var(--text-muted)">미시작</span>`
+              :                          `${n.toLocaleString()}/${Math.round(goal).toLocaleString()}`;
+  return `<span class="ach-pct ${cls}">${pctTxt}%</span><span class="ach-cnt">${subTxt}</span>`;
+}
+
+// 현재 시각 기준 4개 슬롯의 진행 상태 — 'past' | 'current' | 'future'
+//   슬롯 시간대 (06시 컷오프 운영일 기준):
+//     평일: am 06~12, pm 13~16, ev 17~19, ni 20~다음날 05
+//     주말: am 06~13, pm 14~16, ev 17~19, ni 20~다음날 05
+function _getSlotPhase() {
+  const now = new Date();
+  const hh = now.getHours();
+  // 운영일 = 06:00 ~ 다음날 05:59. 새벽(00~05)은 어제 운영일의 심야 진행중
+  // 운영일 today 의 요일 기준으로 평일/주말 판정
+  const opToday = _operationalToday();
+  const dow = opToday.getDay();        // 0:Sun, 6:Sat
+  const isWeekend = (dow === 0 || dow === 6);
+  const amEnd   = isWeekend ? 13 : 12;  // 아침점심 종료 시각(시)
+  const pmStart = isWeekend ? 14 : 13;
+  const phase = { am: 'future', pm: 'future', ev: 'future', ni: 'future' };
+  if (hh >= 0 && hh < 6) {
+    // 어제 운영일의 심야 진행중 → 그 외 슬롯은 모두 past
+    phase.am = 'past'; phase.pm = 'past'; phase.ev = 'past';
+    phase.ni = 'current';
+  } else if (hh >= 6 && hh <= amEnd) {
+    phase.am = 'current';
+  } else if (hh >= pmStart && hh <= 16) {
+    phase.am = 'past';
+    phase.pm = 'current';
+  } else if (hh >= 17 && hh <= 19) {
+    phase.am = 'past'; phase.pm = 'past';
+    phase.ev = 'current';
+  } else if (hh >= 20) {
+    phase.am = 'past'; phase.pm = 'past'; phase.ev = 'past';
+    phase.ni = 'current';
+  }
+  return phase;
 }
 
 // ── localStorage VOC log helpers ──────────────────────────────
@@ -2411,6 +2458,7 @@ function renderRealtime() {
   }
 
   // ── 렌더 ──
+  const slotPhase = _getSlotPhase();      // 현재 시각 기준 4슬롯 진행 상태
   tbody.innerHTML = records.map(r => {
     const rowCls = r.rLvl==='red'?'risk-row-red':r.rLvl==='yellow'?'risk-row-yellow':'';
     // SLA수락률 색상은 일자별/주차별과 동일 기준: ≥90% 초록 / ≥80% 노랑 / <80% 빨강
@@ -2427,10 +2475,10 @@ function renderRealtime() {
       <td style="text-align:center;color:#4ade80;font-weight:600">${r.riderActN ? r.riderActN.toLocaleString() : '-'}</td>
       <td style="text-align:center;color:var(--text-secondary)">${r.setsN || '-'}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.kpi?r.totalVolN.toLocaleString():'-'}</td>
-      <td class="ach-cell">${r.kpi?slotAchievementFmt(r.amVol,r.setsN,r.tgt.am):'-'}</td>
-      <td class="ach-cell">${r.kpi?slotAchievementFmt(r.pmVol,r.setsN,r.tgt.pm):'-'}</td>
-      <td class="ach-cell">${r.kpi?slotAchievementFmt(r.evVol,r.setsN,r.tgt.ev):'-'}</td>
-      <td class="ach-cell">${r.kpi?slotAchievementFmt(r.niVol,r.setsN,r.tgt.ni):'-'}</td>
+      <td class="ach-cell">${r.kpi?slotAchievementFmt(r.amVol,r.setsN,r.tgt.am,slotPhase.am):'-'}</td>
+      <td class="ach-cell">${r.kpi?slotAchievementFmt(r.pmVol,r.setsN,r.tgt.pm,slotPhase.pm):'-'}</td>
+      <td class="ach-cell">${r.kpi?slotAchievementFmt(r.evVol,r.setsN,r.tgt.ev,slotPhase.ev):'-'}</td>
+      <td class="ach-cell">${r.kpi?slotAchievementFmt(r.niVol,r.setsN,r.tgt.ni,slotPhase.ni):'-'}</td>
       <td style="text-align:center;color:${slaColor};font-weight:600">${r.slaRaw!==null?r.slaRaw.toFixed(1)+'%':'-'}</td>
       <td style="text-align:center;color:${r.inSLA!==null?(inOk?'#4ade80':'#f87171'):'#8fa3b8'};font-weight:600">${r.inSLA!==null?(r.inSLA*100).toFixed(1)+'%':'-'}</td>
       <td style="text-align:center;color:${r.outSLA!==null?(outOk?'#4ade80':'#f87171'):'#8fa3b8'}">${r.outSLA!==null?(r.outSLA*100).toFixed(1)+'%':'-'}</td>
@@ -2549,7 +2597,8 @@ const _RISK_TIER  = { 'red':2, 'yellow':1, 'green':0 };
 
 const _tblState = {
   realtime: { sortKey: null, sortDir: null, filterGrades: new Set() },
-  perfList: { sortKey: null, sortDir: null, filterGrades: new Set() },
+  // 협력사 퍼포먼스 — 기본 정렬: 등급 오름차순 (1.마스터 → 6.등급없음)
+  perfList: { sortKey: 'grade', sortDir: 'asc', filterGrades: new Set() },
 };
 
 function _toggleSort(tableKey, colKey) {
@@ -3972,15 +4021,17 @@ function _renderPartnerProfile(body, pid) {
   const slotGridHtml = kpi ? slotPairs.map(([label, volF, tgt]) => {
     const n    = Number(kpi[volF]||0);
     const goal = sets * tgt;
-    const pct  = goal ? Math.round(n/goal*100) : null;
-    const cls  = pct===null?'dod-neu':pct>=100?'slot-hi':pct>=70?'slot-mid':'slot-lo';
+    const pctRaw = goal ? (n/goal)*100 : null;
+    const cls    = pctRaw===null?'dod-neu':pctRaw>=100?'slot-hi':pctRaw>=70?'slot-mid':'slot-lo';
+    // 표시는 소수 1자리 (반올림 X). "100.0%" → "100%" / "99.7%" 그대로
+    const pctTxt = pctRaw===null ? '-' : pctRaw.toFixed(1).replace(/\.0$/,'') + '%';
     // 보조 라벨: 목표가 있으면 "처리/목표", 없으면 "처리건"
     const subLabel = goal
       ? `${n.toLocaleString()}/${Math.round(goal).toLocaleString()}`
       : `${n.toLocaleString()}건`;
     return `<div class="slot-item">
       <div class="slot-item-label">${label}</div>
-      <div class="slot-item-val ${cls}" style="font-size:16px">${pct!==null?pct+'%':'-'}</div>
+      <div class="slot-item-val ${cls}" style="font-size:16px">${pctTxt}</div>
       <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${subLabel}</div>
     </div>`;
   }).join('') : '';
