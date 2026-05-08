@@ -2277,7 +2277,7 @@ function renderRealtime() {
       partnerName: p['협력사명'] || '',
       partnerId: p['협력사ID'] || '',
       contractSort: contractType || '',
-      gradeSort: _GRADE_TIER[grade] || 0,
+      gradeSort: _gradeRank(grade),
       riskSort: _RISK_TIER[rLvl] || 0,
     };
   });
@@ -2429,7 +2429,16 @@ function aggregateByWeek(kpiRows) {
 // ═══════════════════════════════════════════════════════════
 // 정렬/필터 인프라 (실시간 · 퍼포먼스 리스트 공통)
 // ═══════════════════════════════════════════════════════════
-const _GRADE_TIER = { '다이아':5, '플래티넘':4, '골드':3, '실버':2, '브론즈':1 };
+// 등급 정렬 우선순위 — 1.마스터 ▸ 2.다이아 ▸ 3.골드 ▸ 4.실버 ▸ 5.브론즈 ▸ 6.등급없음
+// (시트에 "1.마스터" 같이 숫자 접두사가 붙은 형태로 저장되므로 정규화 후 매핑)
+const _GRADE_RANK = { '마스터':1, '다이아':2, '골드':3, '실버':4, '브론즈':5, '등급없음':6 };
+function _gradeRank(grade) {
+  if (!grade) return _GRADE_RANK['등급없음'];
+  const key = String(grade).trim().replace(/^\s*\d+\s*[.\)]\s*/, '').trim();
+  return _GRADE_RANK[key] || _GRADE_RANK['등급없음'];
+}
+// 화면 표시용 — 등급 칩 정렬에서 "마스터가 맨 위"가 되도록 역수 (큰 값이 우선)
+const _GRADE_TIER = { '마스터':6,'다이아':5,'골드':4,'실버':3,'브론즈':2,'등급없음':1 };
 const _RISK_TIER  = { 'red':2, 'yellow':1, 'green':0 };
 
 const _tblState = {
@@ -2521,7 +2530,7 @@ function _renderGradeChip(tableKey) {
   const container = document.getElementById(`grade-chip-${tableKey}`);
   if (!container) return;
   const grades = [...new Set((STATE.partners||[]).map(p => p['등급']).filter(Boolean))]
-    .sort((a,b) => (_GRADE_TIER[b]||0) - (_GRADE_TIER[a]||0));
+    .sort((a,b) => _gradeRank(a) - _gradeRank(b));   // 마스터(1) → 등급없음(6) 순
   const st = _tblState[tableKey];
   const active = st.filterGrades;
   const label = active.size === 0 ? '등급 ▾' : `등급: ${active.size}개 ▾`;
@@ -3187,7 +3196,7 @@ function renderPerfList() {
       regionSort:  region,
       tpl3Sort:    tpl3,                                 // null이면 정렬 시 뒤로
       statusSort:  p['운영상태'] || '',
-      gradeSort:   _GRADE_TIER[grade] || 0,
+      gradeSort:   _gradeRank(grade),
       sets:        prev?.sets ?? null,
       riderAct:    prev?.riderActAvg ?? null,
       totalVol:    prev?.totalVol ?? null,
@@ -3599,10 +3608,14 @@ function _renderPartnerProfile(body, pid) {
     const goal = sets * tgt;
     const pct  = goal ? Math.round(n/goal*100) : null;
     const cls  = pct===null?'dod-neu':pct>=100?'slot-hi':pct>=70?'slot-mid':'slot-lo';
+    // 보조 라벨: 목표가 있으면 "처리/목표", 없으면 "처리건"
+    const subLabel = goal
+      ? `${n.toLocaleString()}/${Math.round(goal).toLocaleString()}`
+      : `${n.toLocaleString()}건`;
     return `<div class="slot-item">
       <div class="slot-item-label">${label}</div>
       <div class="slot-item-val ${cls}" style="font-size:16px">${pct!==null?pct+'%':'-'}</div>
-      <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${n.toLocaleString()}건</div>
+      <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${subLabel}</div>
     </div>`;
   }).join('') : '';
 
