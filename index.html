@@ -2711,41 +2711,64 @@ function _aggregateRange(hist, startDate, endDate, tgt) {
   };
 }
 
-// ── 글로벌 "전주" 기간 계산 (최신 데이터 날짜 -1일부터 7일 롤링) ──
-//   latest = 데이터의 가장 최근 일자 ("오늘" 역할)
-//   전주   = [latest-7, latest-1]  (7일 범위, latest 제외)
-//   전전주 = [latest-14, latest-8] (직전 7일)
+// ── 운영일 기준 "오늘" 계산 ──
+//   하루 구분 기준: 매일 오전 6시
+//   - 현재 시각이 06시 이전 → 운영일 = 어제(달력일 -1)
+//   - 현재 시각이 06시 이후 → 운영일 = 오늘
+const _DAY_CUTOFF_HOUR = 6;
+function _operationalToday() {
+  const now = new Date();
+  if (now.getHours() < _DAY_CUTOFF_HOUR) {
+    now.setDate(now.getDate() - 1);
+  }
+  // 시/분/초 제거 (자정 기준)
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+const _DAY_MS = 86400000;
+const _fmtDate = ms => {
+  const d = (ms instanceof Date) ? ms : new Date(ms);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+};
+
+// ── 글로벌 "전주" 기간 계산 (운영일 - 1 부터 7일 롤링) ──
+//   운영일 today (06시 기준)
+//   전주   = [today-7, today-1]  (7일 범위, today 제외)
+//   전전주 = [today-14, today-8] (직전 7일)
+//   데이터가 모자라면 max(데일리 일자) 기반으로 폴백
 function _getPrevWindow() {
   const dates = (STATE.kpi||[]).map(r => _kpiDateOf(r)).filter(Boolean).sort();
   if (!dates.length) return null;
-  const latest = dates[dates.length - 1];
-  const latestTs = new Date(latest).getTime();
-  const DAY = 86400000;
-  const fmt = ms => new Date(ms).toISOString().slice(0,10);
-
+  const todayBase = _operationalToday().getTime();
+  const dataMaxTs = new Date(dates[dates.length - 1]).getTime();
+  // 데이터가 운영일 today - 1 까지 못 차 있으면 max(date)+1 을 today 로 폴백
+  const baseTs = (todayBase - _DAY_MS) <= dataMaxTs
+    ? todayBase
+    : (dataMaxTs + _DAY_MS);
   return {
-    latest,
-    prev:  { start: fmt(latestTs - 7*DAY),  end: fmt(latestTs - 1*DAY)  },
-    prior: { start: fmt(latestTs - 14*DAY), end: fmt(latestTs - 8*DAY)  },
+    latest: _fmtDate(baseTs - _DAY_MS),  // 표시용 "전일"
+    prev:  { start: _fmtDate(baseTs - 7*_DAY_MS),  end: _fmtDate(baseTs - 1*_DAY_MS)  },
+    prior: { start: _fmtDate(baseTs - 14*_DAY_MS), end: _fmtDate(baseTs - 8*_DAY_MS)  },
   };
 }
 
 // ── 글로벌 "전일" 날짜 계산 (단일 일자) ──
-//   latest = 데이터의 가장 최근 일자 ("오늘" 역할)
-//   전일   = latest - 1일
-//   전전일 = latest - 2일
+//   운영일 today (06시 기준)
+//   전일   = today - 1일
+//   전전일 = today - 2일
 function _getPrevDayWindow() {
   const dates = (STATE.kpi||[]).map(r => _kpiDateOf(r)).filter(Boolean).sort();
   if (!dates.length) return null;
-  const latest = dates[dates.length - 1];
-  const latestTs = new Date(latest).getTime();
-  const DAY = 86400000;
-  const fmt = ms => new Date(ms).toISOString().slice(0,10);
-
+  const todayBase = _operationalToday().getTime();
+  const dataMaxTs = new Date(dates[dates.length - 1]).getTime();
+  const baseTs = (todayBase - _DAY_MS) <= dataMaxTs
+    ? todayBase
+    : (dataMaxTs + _DAY_MS);
   return {
-    latest,
-    prev:  { start: fmt(latestTs - 1*DAY), end: fmt(latestTs - 1*DAY) },
-    prior: { start: fmt(latestTs - 2*DAY), end: fmt(latestTs - 2*DAY) },
+    latest: _fmtDate(baseTs - _DAY_MS),
+    prev:  { start: _fmtDate(baseTs - 1*_DAY_MS), end: _fmtDate(baseTs - 1*_DAY_MS) },
+    prior: { start: _fmtDate(baseTs - 2*_DAY_MS), end: _fmtDate(baseTs - 2*_DAY_MS) },
   };
 }
 
