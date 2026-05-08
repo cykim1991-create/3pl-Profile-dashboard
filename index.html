@@ -1272,12 +1272,18 @@ function startAutoRefresh() {
 // FILTERS
 // ═══════════════════════════════════════════════════
 function populateRegionFilter() {
-  // 운영지역/권역명에서 RGN2(예: '구로구', '용산구')를 추출해 유니크 목록 생성
-  const allAreas = [
-    ...STATE.kpi.map(k => k['운영지역']).filter(Boolean),
-    ...STATE.partners.map(p => p['권역명']).filter(Boolean),
-  ];
-  const rgn2List = [...new Set(allAreas.map(getRGN2).filter(v => v && v !== '-'))].sort();
+  // RGN2 후보를 모음 — 1순위는 협력사기본정보 시트의 RGN2 컬럼
+  const set = new Set();
+  (STATE.partners || []).forEach(p => {
+    const v = getPartnerRgn2(p);
+    if (v && v !== '-') set.add(v);
+  });
+  // 협력사기본정보에 누락된 RGN2도 데이터 기반으로 보완
+  (STATE.kpi || []).forEach(k => {
+    const v = getRGN2(k['운영지역']);
+    if (v && v !== '-') set.add(v);
+  });
+  const rgn2List = [...set].sort();
   const sel = document.getElementById('regionFilter');
   while (sel.options.length > 1) sel.remove(1);
   // 첫 옵션 라벨 갱신
@@ -1323,12 +1329,11 @@ function applyFilters() {
   }
   // filtered = 상단 RGN2 + 담당자 필터 적용 (위험만 필터는 테이블에서만 적용)
   filtered = STATE.partners.filter(p => {
-    // 협력사의 RGN2 결정
-    const partnerArea = p['권역명'] || '';
-    let partnerRgn2 = getRGN2(partnerArea);
+    // 협력사의 RGN2 — 협력사기본정보의 RGN2 컬럼 우선
+    let partnerRgn2 = getPartnerRgn2(p);
     if (!partnerRgn2 || partnerRgn2 === '-') {
-      const k = STATE.kpi.find(x => x['협력사명'] === p['협력사명']);
-      if (k) partnerRgn2 = getRGN2(k['운영지역']);
+      const k = STATE.kpi.find(x => x['협력사ID'] === p['협력사ID'] || x['협력사명'] === p['협력사명']);
+      if (k) partnerRgn2 = getPartnerRgn2(p, k);
     }
     // RGN2 필터
     if (currentRegionFilter && partnerRgn2 !== currentRegionFilter) return false;
@@ -1618,6 +1623,24 @@ function getRGN2(operArea) {
   }
   // fallback
   return operArea.replace(/^표준[가-힣]+/, '').replace(/[A-Z]+$/, '') || operArea;
+}
+
+// ── 협력사별 RGN2 결정 (시트 컬럼 우선) ──
+//   1순위: 협력사기본정보 시트의 'RGN2' 컬럼 (사용자가 직접 관리하는 값)
+//   2순위: 협력사기본정보의 '권역명'에서 getRGN2() 추출
+//   3순위: KPI 데이터의 '운영지역'에서 getRGN2() 추출
+function getPartnerRgn2(p, kpi) {
+  if (p) {
+    const direct = (p['RGN2'] || '').toString().trim();
+    if (direct && direct !== '-') return direct;
+    const fromArea = getRGN2(p['권역명']);
+    if (fromArea && fromArea !== '-') return fromArea;
+  }
+  if (kpi) {
+    const fromKpi = getRGN2(kpi['운영지역']);
+    if (fromKpi && fromKpi !== '-') return fromKpi;
+  }
+  return '-';
 }
 
 // 실시간운행현황 시트 (영문 snake_case 컬럼) → 대시보드 표준 한글 필드명으로 정규화
@@ -2276,7 +2299,7 @@ function renderRealtime() {
     const rLvl = getRiskLevel(p);
 
     const operArea  = (kpi && kpi['운영지역']) || p['권역명'] || '';
-    const rgn2      = getRGN2(operArea);
+    const rgn2      = getPartnerRgn2(p, kpi);
     const regionDisp= operArea.replace('표준서울','서울 ').replace('표준인천','인천 ');
     const contractType = p['계약형태'] || '3PL';
     const grade = p['등급'] || (kpi && kpi['등급']) || '-';
@@ -3352,7 +3375,7 @@ function renderPerfList() {
     const kpi  = getLatestKPI(pid);
     const operArea = (kpi && kpi['운영지역']) || p['권역명'] || '-';
     const region   = operArea.replace('표준서울','서울 ').replace('표준인천','인천 ');
-    const rgn2     = getRGN2(operArea);
+    const rgn2     = getPartnerRgn2(p, kpi);
     const tpl3     = get3PLShare(rgn2);                 // null = 데이터 없음
     const grade    = p['등급'] || (kpi && kpi['등급']) || '-';
     const tgt      = _slotTargetsFromRow(kpi);            // KPI 행의 목표 컬럼 사용
