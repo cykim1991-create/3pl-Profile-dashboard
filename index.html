@@ -507,7 +507,8 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center" data-sort="perfList:orderAch" style="cursor:pointer">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-perfList-orderAch"></span></th>
               <th class="center" data-sort="perfList:sla" style="cursor:pointer">수락률<span id="sort-perfList-sla"></span></th>
               <th class="center" data-sort="perfList:slotsAchieved" style="cursor:pointer">달성<br><span style="font-size:10px;font-weight:400">슬롯수</span><span id="sort-perfList-slotsAchieved"></span></th>
-              <th>특이사항 <span style="font-size:10px;font-weight:400;color:var(--text-muted)">(전일 vs 전전일)</span></th>
+              <th>전일 vs 전전일</th>
+              <th>전일 vs 전주 동요일</th>
             </tr>
           </thead>
           <tbody id="perfListBody"></tbody>
@@ -2770,8 +2771,9 @@ function _getPrevWindow() {
 
 // ── 글로벌 "전일" 날짜 계산 (단일 일자) ──
 //   운영일 today (06시 기준)
-//   전일   = today - 1일
-//   전전일 = today - 2일
+//   전일       = today - 1일
+//   전전일     = today - 2일
+//   전주 동요일 = today - 8일 (= 전일과 같은 요일, 1주 전)
 function _getPrevDayWindow() {
   const dates = (STATE.kpi||[]).map(r => _kpiDateOf(r)).filter(Boolean).sort();
   if (!dates.length) return null;
@@ -2781,9 +2783,10 @@ function _getPrevDayWindow() {
     ? todayBase
     : (dataMaxTs + _DAY_MS);
   return {
-    latest: _fmtDate(baseTs - _DAY_MS),
-    prev:  { start: _fmtDate(baseTs - 1*_DAY_MS), end: _fmtDate(baseTs - 1*_DAY_MS) },
-    prior: { start: _fmtDate(baseTs - 2*_DAY_MS), end: _fmtDate(baseTs - 2*_DAY_MS) },
+    latest:    _fmtDate(baseTs - _DAY_MS),
+    prev:      { start: _fmtDate(baseTs - 1*_DAY_MS), end: _fmtDate(baseTs - 1*_DAY_MS) },
+    prior:     { start: _fmtDate(baseTs - 2*_DAY_MS), end: _fmtDate(baseTs - 2*_DAY_MS) },
+    priorWeek: { start: _fmtDate(baseTs - 8*_DAY_MS), end: _fmtDate(baseTs - 8*_DAY_MS) },
   };
 }
 
@@ -3159,10 +3162,11 @@ function renderPerfList() {
     const tpl3     = get3PLShare(rgn2);                 // null = 데이터 없음
     const grade    = p['등급'] || (kpi && kpi['등급']) || '-';
     const tgt      = _slotTargetsFromRow(kpi);            // KPI 행의 목표 컬럼 사용
-    const prev  = hist.length ? _aggregateRange(hist, window.prev.start,  window.prev.end,  tgt) : null;
-    const prior = hist.length ? _aggregateRange(hist, window.prior.start, window.prior.end, tgt) : null;
+    const prev      = hist.length ? _aggregateRange(hist, window.prev.start,      window.prev.end,      tgt) : null;
+    const prior     = hist.length ? _aggregateRange(hist, window.prior.start,     window.prior.end,     tgt) : null;
+    const priorWeek = (hist.length && window.priorWeek) ? _aggregateRange(hist, window.priorWeek.start, window.priorWeek.end, tgt) : null;
     return {
-      p, pid, rgn2, tpl3, region, grade, prev, prior,
+      p, pid, rgn2, tpl3, region, grade, prev, prior, priorWeek,
       // sort keys
       partnerName: p['협력사명']||'',
       partnerId:   pid||'',
@@ -3234,7 +3238,7 @@ function renderPerfList() {
         <td style="color:var(--text-secondary);font-size:11px">${r.region}</td>
         <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
         <td style="text-align:center">${getGradeBadge(r.grade)}</td>
-        <td colspan="7" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
+        <td colspan="8" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
       </tr>`;
     }
     const { prev, prior } = r;
@@ -3261,6 +3265,14 @@ function renderPerfList() {
         <span style="color:var(--text-secondary)">수락률</span>     ${fmtDelta(prev.sla,           prior ? prior.sla           : null, 'pp')}
         <span style="color:var(--text-secondary)">달성 슬롯수</span> ${fmtDelta(prev.slotsAchieved, prior ? prior.slotsAchieved : null, 'count')}
       </div>`;
+    const { priorWeek } = r;
+    const notableWk = `
+      <div style="display:grid;grid-template-columns:max-content max-content;gap:2px 8px;font-size:11px;line-height:1.45;white-space:nowrap">
+        <span style="color:var(--text-secondary)">처리건수</span>   ${fmtDelta(prev.totalVol,      priorWeek ? priorWeek.totalVol      : null, 'vol')}
+        <span style="color:var(--text-secondary)">발주 달성률</span> ${fmtDelta(prev.orderAch,      priorWeek ? priorWeek.orderAch      : null, 'rel')}
+        <span style="color:var(--text-secondary)">수락률</span>     ${fmtDelta(prev.sla,           priorWeek ? priorWeek.sla           : null, 'pp')}
+        <span style="color:var(--text-secondary)">달성 슬롯수</span> ${fmtDelta(prev.slotsAchieved, priorWeek ? priorWeek.slotsAchieved : null, 'count')}
+      </div>`;
 
     return `<tr onclick="openPerfDetailModal('${r.pid}')" style="cursor:pointer">
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
@@ -3276,6 +3288,7 @@ function renderPerfList() {
       <td style="text-align:center;color:${slaColor};font-weight:600">${prev.sla ? prev.sla.toFixed(1)+'%' : '-'}</td>
       ${slotCell}
       <td style="padding:8px 10px">${notable}</td>
+      <td style="padding:8px 10px">${notableWk}</td>
     </tr>`;
   }).join('');
 }
