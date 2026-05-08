@@ -1334,9 +1334,11 @@ function getGradeBadge(grade) {
     '브론즈':   'badge-bronze',
     '등급없음': 'badge-none',
   };
-  const g   = grade || '등급없음';
-  const cls = map[g] || 'badge-none';
-  return `<span class="badge ${cls}">${g}</span>`;
+  const raw = (grade || '').toString().trim();
+  // 시트에 "1.마스터", "2. 다이아" 같이 숫자 접두사가 붙어 있을 수 있어 정규화
+  const key = raw.replace(/^\s*\d+\s*[.\)]\s*/, '').trim() || '등급없음';
+  const cls = map[key] || 'badge-none';
+  return `<span class="badge ${cls}">${raw || '등급없음'}</span>`;
 }
 
 function getTierBadge(tier) {
