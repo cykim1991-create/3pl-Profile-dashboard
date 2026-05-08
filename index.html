@@ -103,10 +103,14 @@ input,select,textarea{font-family:inherit;font-size:13px}
 
 /* ── Table */
 .table-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.table-scroll{overflow-x:auto}
-.data-table{width:100%;border-collapse:collapse}
-.data-table th{background:var(--bg-section);color:var(--text-secondary);font-weight:600;font-size:11px;padding:9px 8px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.table-scroll{overflow-x:auto;overflow-y:visible}
+.data-table{width:100%;border-collapse:separate;border-spacing:0}
+.data-table th{background:var(--bg-section);color:var(--text-secondary);font-weight:600;font-size:11px;padding:9px 8px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;
+  /* 헤더 고정 — 본문 스크롤 시 thead 가 항상 보이도록 */
+  position:sticky;top:0;z-index:5}
 .data-table th.center{text-align:center}
+/* 두 줄짜리 헤더(예: 일자별/주차별 세부 지표)에서 두 번째 행 헤더는 첫 번째 행 아래에 스택 */
+.data-table thead tr:nth-child(2) th{top:32px}
 .data-table td{padding:9px 8px;border-bottom:1px solid var(--bg-section);color:var(--text-cell);vertical-align:middle}
 .data-table tbody tr{transition:background .1s}
 .data-table tbody tr:hover{background:var(--bg-filter);cursor:pointer}
