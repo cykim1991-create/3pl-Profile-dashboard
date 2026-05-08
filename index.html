@@ -365,8 +365,8 @@ textarea.form-input{resize:vertical;min-height:60px}
   <div class="topbar">
     <div class="topbar-logo">🚀 <span>3PL</span> 협력사</div>
     <div class="topbar-nav">
-      <button class="nav-btn active" onclick="switchView('realtime',this)">📡 실시간 운행현황</button>
-      <button class="nav-btn" onclick="switchView('performance',this)">📊 협력사 퍼포먼스</button>
+      <button class="nav-btn active" onclick="switchView('performance',this)">📊 협력사 퍼포먼스</button>
+      <button class="nav-btn" onclick="switchView('realtime',this)">📡 실시간 운행현황</button>
     </div>
     <div class="topbar-filters">
       <select class="filter-select" id="regionFilter" onchange="applyFilters()">
@@ -386,7 +386,7 @@ textarea.form-input{resize:vertical;min-height:60px}
     <!-- ══════════════════════════════════════
          VIEW 1: 실시간 운행현황
     ══════════════════════════════════════ -->
-    <div class="view active" id="view-realtime">
+    <div class="view" id="view-realtime">
       <!-- KPI cards -->
       <div class="kpi-grid">
         <div class="kpi-card blue">
@@ -434,8 +434,6 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th data-sort="realtime:rgn2" style="cursor:pointer">RGN2<span id="sort-realtime-rgn2"></span></th>
               <th data-sort="realtime:region" style="cursor:pointer">권역<span id="sort-realtime-region"></span></th>
               <th data-sort="realtime:partnerName" style="cursor:pointer">협력사명<span id="sort-realtime-partnerName"></span></th>
-              <th data-sort="realtime:partnerId" style="cursor:pointer">협력사 ID<span id="sort-realtime-partnerId"></span></th>
-              <th data-sort="realtime:contract" style="cursor:pointer">계약형태<span id="sort-realtime-contract"></span></th>
               <th data-sort="realtime:grade" style="cursor:pointer">등급<span id="sort-realtime-grade"></span></th>
               <th class="center" data-sort="realtime:riderJoin" style="cursor:pointer">가입중<br><span style="font-size:10px;font-weight:400">라이더</span><span id="sort-realtime-riderJoin"></span></th>
               <th class="center" data-sort="realtime:riderAct" style="cursor:pointer">운행<br><span style="font-size:10px;font-weight:400">라이더</span><span id="sort-realtime-riderAct"></span></th>
@@ -459,7 +457,7 @@ textarea.form-input{resize:vertical;min-height:60px}
     <!-- ══════════════════════════════════════
          VIEW 2: 협력사 퍼포먼스 (리스트 + 검색 + 클릭 시 상세)
     ══════════════════════════════════════ -->
-    <div class="view" id="view-performance">
+    <div class="view active" id="view-performance">
 
       <div class="section-header">
         <div class="section-title">
@@ -493,6 +491,7 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center" data-sort="perfList:status" style="cursor:pointer">상태<span id="sort-perfList-status"></span></th>
               <th class="center" data-sort="perfList:grade" style="cursor:pointer">등급<span id="sort-perfList-grade"></span></th>
               <th class="center" data-sort="perfList:sets" style="cursor:pointer">세트수<span id="sort-perfList-sets"></span></th>
+              <th class="center" data-sort="perfList:riderAct" style="cursor:pointer">Active<br><span style="font-size:10px;font-weight:400">라이더(평균)</span><span id="sort-perfList-riderAct"></span></th>
               <th class="center" data-sort="perfList:totalVol" style="cursor:pointer">처리건수<span id="sort-perfList-totalVol"></span></th>
               <th class="center" data-sort="perfList:orderAch" style="cursor:pointer">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-perfList-orderAch"></span></th>
               <th class="center" data-sort="perfList:sla" style="cursor:pointer">수락률<span id="sort-perfList-sla"></span></th>
@@ -823,6 +822,66 @@ async function writeLogWithOAuth(log) {
   }
 }
 
+// 활동로그 시트의 기존 행을 in-place 업데이트 (로그ID로 행 번호 찾기)
+// updates: { type, date, method, person, summary, action, status }
+async function updateSheetLogWithOAuth(logId, updates) {
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) {
+    _lastOAuthWriteError = '로그인 필요 — 액세스 토큰 만료';
+    return false;
+  }
+  // STATE.logs는 row1=제목, row2=헤더, row3=가이드, row4+=데이터 순으로 적재됨
+  // 즉 STATE.logs[i]의 시트 행 번호 = 4 + i
+  const idx = (STATE.logs || []).findIndex(v => v['로그ID'] === logId);
+  if (idx < 0) {
+    _lastOAuthWriteError = '시트에서 해당 로그ID를 찾지 못함';
+    return false;
+  }
+  const sheetRow = 4 + idx;
+  const old = STATE.logs[idx];
+  const p = STATE.partners.find(x => x['협력사ID'] === old['협력사ID']);
+  // 시트 컬럼 순서(11열): 로그ID, 날짜, 권역명, 협력사ID, 협력사명, 유형, 접촉방식, 담당자, 내용요약, 액션항목, 상태
+  const row = [
+    logId,
+    updates.date    || old['날짜']    || '',
+    old['권역명']    || (p && p['권역명']) || '',
+    old['협력사ID']  || '',
+    old['협력사명']  || (p && p['협력사명']) || '',
+    updates.type    || old['유형']    || '',
+    updates.method  || old['접촉방식'] || '',
+    updates.person  || old['담당자']  || '',
+    updates.summary || old['내용요약'] || '',
+    updates.action  || old['액션항목'] || '',
+    updates.status  || old['상태']    || '미완료',
+  ];
+  const range = encodeURIComponent(`활동로그!A${sheetRow}:K${sheetRow}`);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${range}?valueInputOption=RAW`;
+  try {
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] }),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      const apiMsg  = errBody?.error?.message || res.statusText || `HTTP ${res.status}`;
+      _lastOAuthWriteError = `[${res.status}] ${apiMsg}`;
+      console.error('OAuth 시트 update 실패:', _lastOAuthWriteError, errBody);
+      if (res.status === 401) {
+        gsiAccessToken = null; gsiTokenExpiry = 0;
+        _clearOAuthStorage();
+        updateGsiBtn(false);
+      }
+      return false;
+    }
+    _lastOAuthWriteError = '';
+    return true;
+  } catch(e) {
+    _lastOAuthWriteError = '네트워크 오류: ' + (e?.message || e);
+    console.error('OAuth update 예외:', e);
+    return false;
+  }
+}
+
 // ═══════════════════════════════════════════════════
 // Sheets API utils
 // ═══════════════════════════════════════════════════
@@ -1042,7 +1101,7 @@ async function init() {
     // v9 시트 구조: row1=제목, row2=헤더, row3+=데이터 (0-indexed: header=1, data=2)
     // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
     const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals] = await Promise.all([
-      fetchSheet('협력사기본정보',     'A:L'),    // 12열
+      fetchSheet('협력사기본정보',     'A:P'),    // 16열 (전화번호 + 담당자 추가 여유 포함)
       fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
       fetchSheet('실시간운행현황',     'A:AA'),   // 27열 (영문 snake_case 컬럼, 헤더 row1, 데이터 row2+)
       fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
@@ -2044,7 +2103,7 @@ function renderRealtime() {
   const tableSrc = riskOnlyMode ? all.filter(p => getRiskLevel(p) === 'red') : all;
 
   const tbody = document.getElementById('realtimeBody');
-  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="18" class="empty">데이터 없음</td></tr>`; return; }
+  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="16" class="empty">데이터 없음</td></tr>`; return; }
 
   const st = _tblState.realtime;
 
@@ -2128,7 +2187,7 @@ function renderRealtime() {
   }
 
   if (!records.length) {
-    tbody.innerHTML = `<tr><td colspan="18" class="empty">필터 결과가 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="16" class="empty">필터 결과가 없습니다</td></tr>`;
     return;
   }
 
@@ -2144,8 +2203,6 @@ function renderRealtime() {
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.regionDisp}</td>
       <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
-      <td style="color:var(--text-muted);font-size:11px">${r.p['협력사ID']}</td>
-      <td style="color:var(--text-secondary);font-size:11px">${r.contractType}</td>
       <td>${getGradeBadge(r.grade)}</td>
       <td style="text-align:center;color:var(--accent-soft);font-weight:600">${r.riderJoinN ? r.riderJoinN.toLocaleString() : '-'}</td>
       <td style="text-align:center;color:#4ade80;font-weight:600">${r.riderActN ? r.riderActN.toLocaleString() : '-'}</td>
@@ -2548,9 +2605,13 @@ function _aggregateRange(hist, startDate, endDate, tgt) {
   const slotsPossible = 4 * days;          // 4시간대 × 일수
   const slotsRatio    = slotsPossible > 0 ? (slotsAchieved / slotsPossible) * 100 : 0;
 
+  // Active 라이더수 평균 (운행라이더수 일별 평균 — 0 제외)
+  const riderActAvg = avg('운행라이더수');
+
   return {
     startDate, endDate, days, sets, grade,
     totalVol, amVol, pmVol, evVol, niVol, sla,
+    riderActAvg,
     orderVol: hasOrderVol ? orderVol : null,
     orderAch: hasOrderVol && orderVol ? (totalVol/orderVol)*100 : null,
     totalAch: tgtTotal ? (totalVol/tgtTotal)*100 : 0,
@@ -2871,7 +2932,7 @@ function renderPerformance() {
   renderPerfList();
 }
 
-const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','partnerName','partnerId','status','grade','sets','totalVol','orderAch','sla','slotsAchieved'];
+const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','partnerName','partnerId','status','grade','sets','riderAct','totalVol','orderAch','sla','slotsAchieved'];
 
 function renderPerfList() {
   const body   = document.getElementById('perfListBody');
@@ -2929,9 +2990,10 @@ function renderPerfList() {
         || isNaN(cur) || isNaN(prior)) {
       return `<span style="color:var(--text-muted)">-</span>`;
     }
-    let delta, unit;
+    let delta, unit, decimals = 1, useCommas = false;
     if (kind === 'pp')         { delta = cur - prior; unit = '%p'; }
-    else if (kind === 'count') { delta = cur - prior; unit = '슬롯'; }
+    else if (kind === 'count') { delta = cur - prior; unit = '슬롯'; decimals = 0; }
+    else if (kind === 'vol')   { delta = cur - prior; unit = '건'; decimals = 0; useCommas = true; }
     else {
       if (!prior) return `<span style="color:var(--text-muted)">-</span>`;
       delta = ((cur - prior) / prior) * 100;
@@ -2940,7 +3002,10 @@ function renderPerfList() {
     if (!isFinite(delta)) return `<span style="color:var(--text-muted)">-</span>`;
     const arrow = delta > 0.05 ? '▲' : delta < -0.05 ? '▼' : '·';
     const color = delta > 0.05 ? '#4ade80' : delta < -0.05 ? '#f87171' : '#8fa3b8';
-    return `<span style="color:${color};font-weight:600">${arrow}${Math.abs(delta).toFixed(1)}${unit}</span>`;
+    const num = useCommas
+      ? Math.round(Math.abs(delta)).toLocaleString()
+      : Math.abs(delta).toFixed(decimals);
+    return `<span style="color:${color};font-weight:600">${arrow}${num}${unit}</span>`;
   };
 
   // ── 레코드 빌드: 정렬/렌더에 필요한 필드 모두 추출 ──
@@ -2967,6 +3032,7 @@ function renderPerfList() {
       statusSort:  p['운영상태'] || '',
       gradeSort:   _GRADE_TIER[grade] || 0,
       sets:        prev?.sets ?? null,
+      riderAct:    prev?.riderActAvg ?? null,
       totalVol:    prev?.totalVol ?? null,
       orderAch:    prev?.orderAch ?? null,
       sla:         prev?.sla ?? null,
@@ -2986,6 +3052,7 @@ function renderPerfList() {
       status:      r => r.statusSort,
       grade:       r => r.gradeSort,
       sets:        r => r.sets,
+      riderAct:    r => r.riderAct,
       totalVol:    r => r.totalVol,
       orderAch:    r => r.orderAch,
       sla:         r => r.sla,
@@ -3017,7 +3084,7 @@ function renderPerfList() {
         <td style="color:var(--text-muted);font-size:11px">${r.pid}</td>
         <td style="text-align:center">${getStatusBadge(r.p)}</td>
         <td style="text-align:center">${getGradeBadge(r.grade)}</td>
-        <td colspan="6" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
+        <td colspan="7" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
       </tr>`;
     }
     const { prev, prior } = r;
@@ -3038,7 +3105,7 @@ function renderPerfList() {
 
     const notable = `
       <div style="display:grid;grid-template-columns:max-content max-content;gap:2px 8px;font-size:11px;line-height:1.45;white-space:nowrap">
-        <span style="color:var(--text-secondary)">처리건수</span>   ${fmtDelta(prev.totalVol,      prior ? prior.totalVol      : null, 'rel')}
+        <span style="color:var(--text-secondary)">처리건수</span>   ${fmtDelta(prev.totalVol,      prior ? prior.totalVol      : null, 'vol')}
         <span style="color:var(--text-secondary)">발주 달성률</span> ${fmtDelta(prev.orderAch,      prior ? prior.orderAch      : null, 'rel')}
         <span style="color:var(--text-secondary)">수락률</span>     ${fmtDelta(prev.sla,           prior ? prior.sla           : null, 'pp')}
         <span style="color:var(--text-secondary)">달성 슬롯수</span> ${fmtDelta(prev.slotsAchieved, prior ? prior.slotsAchieved : null, 'count')}
@@ -3054,6 +3121,7 @@ function renderPerfList() {
       <td style="text-align:center">${getStatusBadge(r.p)}</td>
       <td style="text-align:center">${getGradeBadge(r.grade)}</td>
       <td style="text-align:center;color:var(--text-cell);font-weight:600">${prev.sets ? prev.sets.toFixed(1) : '-'}</td>
+      <td style="text-align:center;color:#4ade80;font-weight:600">${prev.riderActAvg ? Number(prev.riderActAvg.toFixed(1)).toLocaleString() : '-'}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${(prev.totalVol||0).toLocaleString()}</td>
       ${orderCell}
       <td style="text-align:center;color:${slaColor};font-weight:600">${prev.sla ? prev.sla.toFixed(1)+'%' : '-'}</td>
@@ -3290,15 +3358,23 @@ function _renderPartnerProfile(body, pid) {
   const operArea = (kpi && kpi['운영지역']) || p['권역명'] || '';
 
   // ── SECTION 1: 기본 정보 ────────────────────────
-  // 고정 표시 필드 (전환경로 제거)
+  // 전화번호 → tel 링크 (휴대폰에서 누르면 전화 걸림)
+  const telLink = (v) => {
+    if (!v || v === '-') return '<span style="color:var(--text-muted)">-</span>';
+    const clean = String(v).replace(/[^\d+\-]/g,'');
+    return `<a href="tel:${clean}" style="color:var(--accent-soft);text-decoration:none">${v}</a>`;
+  };
   const fixedFields = [
-    ['협력사명',    p['협력사명']||'-'],
-    ['협력사 ID',   p['협력사ID']||'-'],
-    ['사업자명',    p['사업자명']||'-'],
-    ['사업자번호',  p['사업자번호']||'-'],
-    ['계정 생성일', p['계정생성일']||'-'],
-    ['적용 권역',   operArea.replace('표준서울','서울 ')||'-'],
-    ['운영 상태',   p['운영상태']||'-'],
+    ['협력사명',         p['협력사명']||'-'],
+    ['협력사 ID',        p['협력사ID']||'-'],
+    ['사업자명',         p['사업자명']||'-'],
+    ['사업자번호',       p['사업자번호']||'-'],
+    ['사장님 연락처',    telLink(p['사장님연락처'] || p['사장님전화번호'] || '-')],
+    ['협력사 담당자',    p['협력사담당자']||'-'],
+    ['담당자 연락처',    telLink(p['담당자연락처'] || p['담당자전화번호'] || '-')],
+    ['계정 생성일',      p['계정생성일']||'-'],
+    ['적용 권역',        operArea.replace('표준서울','서울 ')||'-'],
+    ['운영 상태',        p['운영상태']||'-'],
   ];
   const fixedHtml = fixedFields.map(([l,v])=>
     `<div class="info-row"><span class="info-label">${l}</span><span class="info-val">${v}</span></div>`
@@ -3570,9 +3646,10 @@ function renderVOCList(pid) {
 
 function renderVOCLogItem(v, pid) {
   const typeClass = 'type-'+(v.type||'기타');
+  // 시트/로컬 모두 수정 가능. 시트 로그는 OAuth로 시트에 직접 update.
   const src = v._src === 'local'
     ? '<span style="font-size:9px;background:var(--accent-bg);color:var(--accent-soft);padding:1px 4px;border-radius:3px;margin-left:4px">로컬</span>'
-    : '';
+    : '<span style="font-size:9px;background:#243240;color:var(--text-secondary);padding:1px 4px;border-radius:3px;margin-left:4px">시트</span>';
   // 상태 뱃지 (완료=초록, 진행중=노랑, 미완료=회색)
   const stRaw = (v.status || '미완료').replace('✅','').trim();
   const stStyle = stRaw === '완료'
@@ -3594,12 +3671,10 @@ function renderVOCLogItem(v, pid) {
     <div class="voc-log-summary">${v.summary||''}</div>
     ${v.action?`<div class="voc-log-action">→ ${v.action}</div>`:''}
     <div class="voc-log-controls">
-      ${v._src==='local'?`
-        <button class="btn btn-ghost btn-sm" onclick="toggleVOCEdit('${v._id}')">수정</button>
-        <button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="deleteVOCItem('${v._id}','${pid}')">삭제</button>
-      `:''}
+      <button class="btn btn-ghost btn-sm" onclick="toggleVOCEdit('${v._id}')">수정</button>
+      ${v._src==='local'?`<button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="deleteVOCItem('${v._id}','${pid}')">삭제</button>`:''}
     </div>
-    ${v._src==='local'?`<div class="voc-edit-area" id="vocedit-${v._id}">
+    <div class="voc-edit-area" id="vocedit-${v._id}" data-src="${v._src}">
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">유형</label>
@@ -3656,7 +3731,7 @@ function renderVOCLogItem(v, pid) {
         <button class="btn btn-ghost btn-sm" onclick="toggleVOCEdit('${v._id}')">취소</button>
         <button class="btn btn-primary btn-sm" onclick="saveVOCEdit('${v._id}','${pid}')">저장</button>
       </div>
-    </div>`:''}
+    </div>
   </div>`;
 }
 
@@ -3772,9 +3847,9 @@ function toggleVOCEdit(id) {
   if (el) el.classList.toggle('open');
 }
 
-function saveVOCEdit(id, pid) {
+async function saveVOCEdit(id, pid) {
   const g = s => { const el = document.getElementById(s+id); return el ? el.value : ''; };
-  updateLocalLog(id, {
+  const updates = {
     type:    g('vocedit-type-'),
     date:    g('vocedit-date-'),
     method:  g('vocedit-method-'),
@@ -3782,9 +3857,25 @@ function saveVOCEdit(id, pid) {
     summary: g('vocedit-sum-'),
     action:  g('vocedit-act-'),
     status:  g('vocedit-status-'),
-  });
-  showToast('✓ 수정됨');
-  renderVOCList(pid);
+  };
+  const wrap = document.getElementById('vocedit-'+id);
+  const src  = wrap ? wrap.getAttribute('data-src') : 'local';
+  if (src === 'local') {
+    updateLocalLog(id, updates);
+    showToast('✓ 수정됨');
+    renderVOCList(pid);
+    return;
+  }
+  // 시트 로그 — OAuth로 시트 update
+  showToast('시트 수정 중...');
+  const ok = await updateSheetLogWithOAuth(id, updates);
+  if (ok) {
+    await refreshActivityLogs();
+    renderVOCList(pid);
+    showToast('✓ 시트 수정 완료');
+  } else {
+    showToast('⚠ 시트 수정 실패 — ' + (_lastOAuthWriteError || '알 수 없는 오류'));
+  }
 }
 
 function deleteVOCItem(id, pid) {
