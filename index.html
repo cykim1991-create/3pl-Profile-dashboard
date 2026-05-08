@@ -482,6 +482,36 @@ textarea.form-input{resize:vertical;min-height:60px}
     ══════════════════════════════════════ -->
     <div class="view active" id="view-performance">
 
+      <!-- KPI cards (전일 기준) -->
+      <div class="kpi-grid">
+        <div class="kpi-card blue">
+          <div class="kpi-icon">📦</div>
+          <div class="kpi-label">전일 총 처리건수</div>
+          <div class="kpi-value" id="perf-delivery">-</div>
+          <div class="kpi-sub" id="perf-delivery-sub">전체 협력사 합산</div>
+        </div>
+        <div class="kpi-card green">
+          <div class="kpi-icon">🛵</div>
+          <div class="kpi-label">Active 라이더</div>
+          <div class="kpi-value" id="perf-riders">-</div>
+          <div class="kpi-sub" id="perf-riders-sub">계약 대비 운행</div>
+        </div>
+        <div class="kpi-card orange">
+          <div class="kpi-icon">✅</div>
+          <div class="kpi-label">평균 SLA 수락률</div>
+          <div class="kpi-value" id="perf-sla">-</div>
+        </div>
+        <div class="kpi-card purple">
+          <div class="kpi-icon">📋</div>
+          <div class="kpi-label">신청 세트수 합</div>
+          <div class="kpi-value" id="perf-sets">-</div>
+          <div class="kpi-sub">전체 협력사 합산</div>
+        </div>
+      </div>
+
+      <!-- 등급별 협력사 수 (현재 RGN2/담당자 필터에 영향 받음) -->
+      <div id="perf-grade-summary" class="grade-summary"></div>
+
       <div class="section-header">
         <div class="section-title">
           📊 협력사 퍼포먼스
@@ -2601,10 +2631,53 @@ function _bindSortHandlers() {
   _sortHandlerBound = true;
 }
 
-// 등급별 협력사 수 위젯 (실시간 운행현황 상단)
+// 협력사 퍼포먼스 상단 KPI + 등급 위젯
+//   전일(_getPrevDayWindow().prev) 기준 합계로 카드 4개 채움
+function _renderPerfTopSummary(partnerList) {
+  const list = partnerList || [];
+  const win = _getPrevDayWindow();
+  const prevStart = win ? win.prev.start : null;
+  const prevEnd   = win ? win.prev.end   : null;
+  let totalDel = 0, totalAct = 0, totalJoin = 0, totalSets = 0;
+  let slaWeightSum = 0, slaWeightTot = 0;
+  list.forEach(p => {
+    if (!prevStart) return;
+    const hist = getKPIHistory(p['협력사ID']);
+    hist.forEach(r => {
+      const d = _kpiDateOf(r);
+      if (!d || d < prevStart || d > prevEnd) return;
+      const tv = Number(r['총처리건수']||0);
+      totalDel  += tv;
+      totalAct  += Number(r['운행라이더수']||0);
+      totalJoin += Number(r['계약중라이더수']||r['가입라이더수']||0);
+      totalSets += Number(r['신청세트수']||r['세트수']||0);
+      const sla = _slaOf(r);
+      if (sla > 0 && tv > 0) { slaWeightSum += sla * tv; slaWeightTot += tv; }
+    });
+  });
+  const avgSLA = slaWeightTot > 0 ? slaWeightSum / slaWeightTot : 0;
+  const fmt = n => (n ? Math.round(n).toLocaleString() : '-');
+  const setEl = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+  setEl('perf-delivery',     totalDel ? totalDel.toLocaleString()+'건' : '-');
+  setEl('perf-delivery-sub', `${list.length.toLocaleString()}개 협력사 합산`);
+  setEl('perf-riders',       totalAct ? totalAct.toLocaleString()+'명' : '-');
+  setEl('perf-riders-sub',   totalJoin ? `계약 ${totalJoin.toLocaleString()}명 중 운행` : '운행 라이더 합산');
+  setEl('perf-sla',          avgSLA ? avgSLA.toFixed(1)+'%' : '-');
+  setEl('perf-sets',         totalSets ? totalSets.toLocaleString()+'세트' : '-');
+
+  // 등급별 협력사 수
+  _renderGradeSummary(list, 'perf-grade-summary');
+
+  // 기준일 라벨도 갱신
+  const label = document.getElementById('perf-date-label');
+  if (label && win) label.textContent = `${win.prev.start} 기준`;
+}
+
+// 등급별 협력사 수 위젯 (실시간/퍼포먼스 상단 공용)
 //   partnerList = 현재 RGN2/담당자 필터가 적용된 협력사 배열
-function _renderGradeSummary(partnerList) {
-  const el = document.getElementById('rt-grade-summary');
+//   elId = 렌더 대상 컨테이너 id (기본: rt-grade-summary)
+function _renderGradeSummary(partnerList, elId) {
+  const el = document.getElementById(elId || 'rt-grade-summary');
   if (!el) return;
   const list = partnerList || [];
   // 등급별 카운트 — 시트의 "1.마스터" 같은 prefix 정규화 후 매핑
@@ -3353,6 +3426,9 @@ function renderPerfList() {
   const baseList = (filtered && filtered.length) ? filtered : (STATE.partners || []);
   const source   = baseList;
   const st       = _tblState.perfList;
+
+  // ── 상단 데이터 서머리 (KPI 카드 + 등급별 협력사 수) — 전일 기준 ──
+  _renderPerfTopSummary(baseList);
 
   // 검색 + 등급 필터
   const partnersBase = source.filter(p => {
