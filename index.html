@@ -78,6 +78,12 @@ input,select,textarea{font-family:inherit;font-size:13px}
 
 /* ── KPI Cards */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+/* 등급별 협력사 수 위젯 */
+.grade-summary{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:18px}
+.grade-summary-title{display:flex;align-items:center;color:var(--text-secondary);font-size:11px;font-weight:600;letter-spacing:.3px;padding-right:12px;border-right:1px solid var(--border);margin-right:4px}
+.grade-summary-item{display:flex;align-items:center;gap:6px;padding:4px 0}
+.grade-summary-item .count{font-size:15px;font-weight:700;color:var(--text-primary);min-width:24px;text-align:right}
+.grade-summary-item .unit{font-size:10px;color:var(--text-muted)}
 .kpi-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
 .kpi-card.blue::before{background:var(--accent)}
@@ -430,6 +436,9 @@ textarea.form-input{resize:vertical;min-height:60px}
           <div class="kpi-sub">전체 협력사 합산</div>
         </div>
       </div>
+
+      <!-- 등급별 협력사 수 (현재 RGN2/담당자 필터에 영향 받음) -->
+      <div id="rt-grade-summary" class="grade-summary"></div>
 
       <div class="section-header">
         <div class="section-title">
@@ -2272,6 +2281,9 @@ function renderRealtime() {
   document.getElementById('rt-sla').textContent = avgSLA.toFixed(1)+'%';
   document.getElementById('rt-sets').textContent = totalSets.toLocaleString()+'세트';
 
+  // 등급별 협력사 수 위젯 — 현재 RGN2/담당자 필터 적용된 'all' 기준
+  _renderGradeSummary(all);
+
   const dates = realtimeKPIs.map(k=>k['일자']||k['주차시작일']).filter(Boolean).sort().reverse();
   const el = document.getElementById('rt-date-label');
   if (el && dates.length) el.textContent = dates[0]+' 기준';
@@ -2587,6 +2599,41 @@ function _bindSortHandlers() {
     if (tableKey && colKey) _toggleSort(tableKey, colKey);
   });
   _sortHandlerBound = true;
+}
+
+// 등급별 협력사 수 위젯 (실시간 운행현황 상단)
+//   partnerList = 현재 RGN2/담당자 필터가 적용된 협력사 배열
+function _renderGradeSummary(partnerList) {
+  const el = document.getElementById('rt-grade-summary');
+  if (!el) return;
+  const list = partnerList || [];
+  // 등급별 카운트 — 시트의 "1.마스터" 같은 prefix 정규화 후 매핑
+  const counts = {};
+  list.forEach(p => {
+    const raw = (p['등급'] || '').toString().trim();
+    const key = raw.replace(/^\s*\d+\s*[.\)]\s*/, '').trim() || '등급없음';
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const order = ['마스터','다이아','골드','실버','브론즈','등급없음'];
+  const items = order
+    .filter(k => counts[k] > 0)   // 데이터 있는 등급만 노출
+    .map(k => {
+      const cls = ({'마스터':'badge-master','다이아':'badge-diamond','골드':'badge-gold','실버':'badge-silver','브론즈':'badge-bronze','등급없음':'badge-none'})[k];
+      return `<div class="grade-summary-item">
+        <span class="badge ${cls}">${k}</span>
+        <span class="count">${counts[k].toLocaleString()}</span><span class="unit">개</span>
+      </div>`;
+    }).join('');
+  const total = list.length;
+  el.innerHTML = `
+    <div class="grade-summary-title">📊 등급별 협력사 수</div>
+    ${items || '<span style="color:var(--text-muted);font-size:12px">표시할 협력사가 없습니다</span>'}
+    <div style="margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:11px">
+      <span>합계</span>
+      <span style="color:var(--text-primary);font-weight:700;font-size:14px">${total.toLocaleString()}</span>
+      <span style="color:var(--text-muted)">개</span>
+    </div>
+  `;
 }
 
 // 등급 필터 칩 렌더
