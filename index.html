@@ -419,13 +419,12 @@ textarea.form-input{resize:vertical;min-height:60px}
           <div class="kpi-icon">✅</div>
           <div class="kpi-label">평균 SLA 수락률</div>
           <div class="kpi-value" id="rt-sla">-</div>
-          <div class="kpi-sub">배달 수락 기준</div>
         </div>
-        <div class="kpi-card red">
-          <div class="kpi-icon">⚠️</div>
-          <div class="kpi-label">위험 협력사</div>
-          <div class="kpi-value" id="rt-risk">-</div>
-          <div class="kpi-sub">즉시 대응 필요</div>
+        <div class="kpi-card purple">
+          <div class="kpi-icon">📋</div>
+          <div class="kpi-label">신청 세트수 합</div>
+          <div class="kpi-value" id="rt-sets">-</div>
+          <div class="kpi-sub">전체 협력사 합산</div>
         </div>
       </div>
 
@@ -2045,11 +2044,11 @@ function _renderBriefingRegionCard(rgn2, d1, d2) {
   </div>`;
 }
 
-// 달성률 cell: stacked "212%" on top, "34건" below
+// 달성률 cell: stacked "212%" on top, "처리건수/목표건수" below
 // vol = raw 물량건수, sets = 신청세트수, targetPerSet = goal per set
 //   - vol 자체가 없으면 "-"
 //   - sets가 0이면 (운영 안 한 협력사) 처리건수만 표시 (달성률 비표시)
-//   - 정상이면 달성률 % + 건수
+//   - 정상이면 달성률 % + "처리/목표"
 function slotAchievementFmt(vol, sets, targetPerSet) {
   if (vol === null || vol === undefined || vol === '') {
     return `<span style="color:var(--text-muted)">-</span>`;
@@ -2067,7 +2066,7 @@ function slotAchievementFmt(vol, sets, targetPerSet) {
   }
   const pct = Math.round((n / goal) * 100);
   const cls = pct >= 100 ? 'ach-hi' : pct >= 70 ? 'ach-mid' : 'ach-lo';
-  return `<span class="ach-pct ${cls}">${pct}%</span><span class="ach-cnt">${n.toLocaleString()}건</span>`;
+  return `<span class="ach-pct ${cls}">${pct}%</span><span class="ach-cnt">${n.toLocaleString()}/${Math.round(goal).toLocaleString()}</span>`;
 }
 
 // ── localStorage VOC log helpers ──────────────────────────────
@@ -2204,19 +2203,19 @@ function renderRealtime() {
   const totalDel  = realtimeKPIs.reduce((s,k) => s+Number(k['총처리건수']||0), 0);
   const totalAct  = realtimeKPIs.reduce((s,k) => s+Number(k['운행라이더수']||0), 0);
   const totalJoin = realtimeKPIs.reduce((s,k) => s+Number(k['계약중라이더수']||k['가입라이더수']||0), 0);
+  const totalSets = realtimeKPIs.reduce((s,k) => s+Number(k['신청세트수']||k['세트수']||0), 0);
   const slaVals   = realtimeKPIs.map(k => {
     const v = k['SLA_수락률(%)'] !== undefined ? Number(k['SLA_수락률(%)']) : Number(k['SLA수락률(%)']||0)*100;
     return v;
   }).filter(v => v > 0);
   const avgSLA    = slaVals.length ? slaVals.reduce((a,b)=>a+b,0)/slaVals.length : 0;
-  const riskCnt   = all.filter(p=>getRiskLevel(p)==='red').length;
 
   document.getElementById('rt-delivery').textContent = totalDel.toLocaleString()+'건';
   document.getElementById('rt-delivery-sub').textContent = `${all.length}개 협력사 합산`;
   document.getElementById('rt-riders').textContent = totalAct.toLocaleString()+'명';
   document.getElementById('rt-riders-sub').textContent = totalJoin ? `계약 ${totalJoin.toLocaleString()}명 중 운행` : '운행 라이더 합산';
   document.getElementById('rt-sla').textContent = avgSLA.toFixed(1)+'%';
-  document.getElementById('rt-risk').textContent = riskCnt+'개';
+  document.getElementById('rt-sets').textContent = totalSets.toLocaleString()+'세트';
 
   const dates = realtimeKPIs.map(k=>k['일자']||k['주차시작일']).filter(Boolean).sort().reverse();
   const el = document.getElementById('rt-date-label');
@@ -3199,11 +3198,13 @@ function renderPerfList() {
     };
   });
 
+  // ── '해당 기간 데이터 없음'(empty) 행은 표시하지 않음 ──
+  let recordsFiltered = records.filter(r => !r.empty);
+
   // ── 위험만 필터 (퍼포먼스 리스트 전용) ──
   // 기준: prev.sla < 80% (수락률 80% 미만)  OR  prev.slotsAchieved < 4 (달성슬롯수 4개 미만)
-  let recordsFiltered = records;
   if (riskOnlyMode) {
-    recordsFiltered = records.filter(r => {
+    recordsFiltered = recordsFiltered.filter(r => {
       if (!r.prev) return false;
       const slaLow = (r.prev.sla != null) && (r.prev.sla < 80);
       const slotsLow = (r.prev.slotsAchieved != null) && (r.prev.slotsAchieved < 4);
@@ -3261,9 +3262,10 @@ function renderPerfList() {
     const ordColor  = _orderAchColor(prev.orderAch);
 
     // 세트수가 0이면 운영 안 한 기간 → 발주물량 달성률은 "-" 로 비활성화
+    // 그 외에는 [달성률 %] 위에 + [처리건수/발주물량] 아래에 보조 표시
     const orderCell = (!prev.sets || prev.orderAch === null)
       ? `<td style="text-align:center;color:var(--text-muted)" title="${!prev.sets ? '신청세트수 0' : '발주물량 컬럼에 값이 없습니다'}">-</td>`
-      : `<td style="text-align:center;color:${ordColor};font-weight:600">${prev.orderAch.toFixed(1)}%</td>`;
+      : `<td style="text-align:center"><span class="ach-pct" style="color:${ordColor}">${prev.orderAch.toFixed(1)}%</span><span class="ach-cnt">${(prev.totalVol||0).toLocaleString()}/${(prev.orderVol||0).toLocaleString()}</span></td>`;
 
     // 슬롯 셀: "X / Y" 달성/가능 (이진 합산 — 정수)
     const slotCell = (prev.slotsAchieved !== null && prev.slotsAchieved !== undefined)
