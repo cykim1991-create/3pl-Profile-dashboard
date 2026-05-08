@@ -565,9 +565,9 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="modal-close" onclick="closePartnerModal()">✕</button>
     </div>
     <div class="modal-tabs" style="padding:0 20px">
-      <button class="modal-tab active" id="partnerTabProfile" onclick="switchPartnerTab('profile')">📋 Profile</button>
-      <button class="modal-tab" id="partnerTabDaily" onclick="switchPartnerTab('daily')">📆 일자별</button>
+      <button class="modal-tab active" id="partnerTabDaily" onclick="switchPartnerTab('daily')">📆 일자별</button>
       <button class="modal-tab" id="partnerTabWeekly" onclick="switchPartnerTab('weekly')">📅 주차별</button>
+      <button class="modal-tab" id="partnerTabProfile" onclick="switchPartnerTab('profile')">📋 Profile</button>
     </div>
     <div id="partnerTabBody" style="overflow-y:auto;max-height:82vh;padding:18px 20px;display:flex;flex-direction:column;gap:16px"></div>
   </div>
@@ -2607,7 +2607,7 @@ function _computeWeeklyRows(hist, tgt) {
   });
   return Object.values(weekMap)
     .sort((a,b) => b.week.localeCompare(a.week))
-    .slice(0, 4)
+    .slice(0, 5)
     .map(g => {
       const rows = g.rows;
       const sum = f => rows.reduce((s,r) => s + Number(r[f]||0), 0);
@@ -2883,13 +2883,13 @@ function _themeBgColors() {
 }
 
 // 바+라인 콤보 (처리건수 bar + 수락률 line)
-function _chartVolumeSLA(labels, volumes, slas, riders) {
+function _chartVolumeSLA(labels, volumes, slas, _unusedRiders) {
+  // riders 데이터는 이제 별도 차트(_chartActiveRiders)로 분리됨 — 호환을 위해 인자만 유지
   const AC = _accentColors();
   const TC = _themeTextColors();
   const BC = _themeBgColors();
-  const hasRiders = Array.isArray(riders) && riders.some(v => v != null);
-  const w = 900, h = hasRiders ? 296 : 280;
-  const padL = 50, padR = 50, padT = 64, padB = hasRiders ? 54 : 38;
+  const w = 900, h = 280;
+  const padL = 50, padR = 50, padT = 64, padB = 38;
   const chartW = w - padL - padR;
   const chartH = h - padT - padB;
   const n = labels.length || 1;
@@ -2948,21 +2948,13 @@ function _chartVolumeSLA(labels, volumes, slas, riders) {
     </g>`;
   }).join('');
 
-  // X labels (날짜 + 선택적 Active 라이더 라벨)
+  // X labels
   const xlabels = labels.map((l,i) => {
     const x = xFor(i);
-    const dateText = `<text x="${x}" y="${h-padB+14}" font-size="10" fill="${TC.secondary}" text-anchor="middle">${l}</text>`;
-    if (!hasRiders || riders[i] == null) return dateText;
-    const r = Math.round(Number(riders[i]) || 0);
-    const riderText = `<text x="${x}" y="${h-padB+30}" font-size="9.5" fill="#4ade80" text-anchor="middle" font-weight="600">${r.toLocaleString()}명</text>`;
-    return dateText + riderText;
+    return `<text x="${x}" y="${h-padB+14}" font-size="10" fill="${TC.secondary}" text-anchor="middle">${l}</text>`;
   }).join('');
 
   // Legend (제목 아래에 별도 행으로 배치)
-  const riderLegend = hasRiders
-    ? `<text x="195" y="9" font-size="10" fill="#4ade80" font-weight="600">●</text>
-       <text x="206" y="9" font-size="10" fill="${TC.cell}">Active 라이더(명)</text>`
-    : '';
   const legend = `
     <g transform="translate(${padL}, 38)">
       <rect x="0" y="0" width="10" height="10" fill="${AC.accent}" opacity="0.85" rx="1"/>
@@ -2970,13 +2962,108 @@ function _chartVolumeSLA(labels, volumes, slas, riders) {
       <line x1="90" y1="5" x2="108" y2="5" stroke="#fbbf24" stroke-width="2"/>
       <circle cx="99" cy="5" r="3" fill="${BC.section}" stroke="#fbbf24" stroke-width="2"/>
       <text x="114" y="9" font-size="10" fill="${TC.cell}">수락률(%)</text>
-      ${riderLegend}
     </g>`;
 
   // 렌더 순서: 격자 → 바(rect+라벨 g) → SLA 선 → SLA 점(circle+라벨 g) → x축 라벨
   // 호버 시 같은 g 안의 라벨도 함께 강조됨
   return _svgFrame('처리건수 · 수락률', w, h,
     legend + grid + bars + slaLine + slaPoints + xlabels);
+}
+
+// ── Active 라이더 차트 (Active 라이더수 + 비중) ──
+//   active     = 일별/주별 운행라이더수
+//   contracted = 일별/주별 계약중라이더수 (없으면 비중 미표시)
+function _chartActiveRiders(labels, active, contracted) {
+  const TC = _themeTextColors();
+  const BC = _themeBgColors();
+  const ACTIVE_COLOR = '#4ade80';   // 초록
+  const RATIO_COLOR  = '#a78bfa';   // 보라 (라이더 활성 비중 라인)
+  const w = 900, h = 230;
+  const padL = 50, padR = 50, padT = 56, padB = 38;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+  const n = labels.length || 1;
+  const maxAct = Math.max(...active, 1) * 1.30;
+  const barGap = 4;
+  const barW = Math.max(6, (chartW / n) - barGap);
+  const xFor = i => padL + (i + 0.5) * (chartW / n);
+  const hasRatio = Array.isArray(contracted) && contracted.some(v => v > 0);
+  const ratios = hasRatio
+    ? active.map((a,i) => contracted[i] > 0 ? (a/contracted[i])*100 : null)
+    : [];
+
+  // 좌측 Y 격자 + 눈금 (Active 라이더수)
+  const ticks = 4;
+  let grid = '';
+  for (let t = 0; t <= ticks; t++) {
+    const y = padT + chartH - (t/ticks) * chartH;
+    const v = Math.round((t/ticks) * maxAct);
+    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${BC.border}" stroke-width="1"/>
+             <text x="${padL-6}" y="${y+3}" font-size="9.5" fill="${TC.muted}" text-anchor="end">${v.toLocaleString()}</text>`;
+  }
+  if (hasRatio) {
+    for (let t = 0; t <= ticks; t++) {
+      const y = padT + chartH - (t/ticks) * chartH;
+      const v = Math.round((t/ticks) * 100);
+      grid += `<text x="${w-padR+6}" y="${y+3}" font-size="9.5" fill="${RATIO_COLOR}" text-anchor="start">${v}%</text>`;
+    }
+  }
+
+  // Active 라이더수 막대 (호버 시 라벨 함께 강조)
+  const bars = active.map((v,i) => {
+    const x  = xFor(i) - barW/2;
+    const bh = (v/maxAct) * chartH;
+    const y  = padT + chartH - bh;
+    const inside = bh >= 26;
+    const labelY = inside ? y + 14 : y - 5;
+    const labelFill = inside ? '#062014' : ACTIVE_COLOR;
+    return `<g class="chart-hov" color="${ACTIVE_COLOR}">
+      <rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="${ACTIVE_COLOR}" opacity="0.85" rx="2"/>
+      <text x="${x+barW/2}" y="${labelY}" font-size="9.5" fill="${labelFill}" text-anchor="middle" font-weight="700"
+            stroke="#0d1923" stroke-width="2.5" paint-order="stroke">${v.toLocaleString()}</text>
+    </g>`;
+  }).join('');
+
+  // 비중 라인 + 점
+  let ratioLine = '', ratioPoints = '';
+  if (hasRatio) {
+    const pts = ratios.map((r,i) => {
+      if (r == null) return null;
+      const x = xFor(i);
+      const y = padT + chartH - (Math.min(100, Math.max(0, r))/100) * chartH;
+      return { x, y, r, i };
+    }).filter(Boolean);
+    if (pts.length > 1) {
+      ratioLine = `<polyline points="${pts.map(p=>`${p.x},${p.y}`).join(' ')}" fill="none" stroke="${RATIO_COLOR}" stroke-width="2" stroke-linejoin="round" pointer-events="none"/>`;
+    }
+    ratioPoints = pts.map(p =>
+      `<g class="chart-hov" color="${RATIO_COLOR}">
+        <circle cx="${p.x}" cy="${p.y}" r="3" fill="${BC.section}" stroke="${RATIO_COLOR}" stroke-width="2"/>
+        <text x="${p.x}" y="${p.y-9}" font-size="9" fill="${RATIO_COLOR}" text-anchor="middle" font-weight="600"
+              stroke="#0d1923" stroke-width="3" paint-order="stroke">${p.r.toFixed(0)}%</text>
+      </g>`
+    ).join('');
+  }
+
+  // X 라벨
+  const xlabels = labels.map((l,i) =>
+    `<text x="${xFor(i)}" y="${h-padB+14}" font-size="10" fill="${TC.secondary}" text-anchor="middle">${l}</text>`
+  ).join('');
+
+  // 범례
+  const legend = `
+    <g transform="translate(${padL}, 32)">
+      <rect x="0" y="0" width="10" height="10" fill="${ACTIVE_COLOR}" opacity="0.85" rx="1"/>
+      <text x="14" y="9" font-size="10" fill="${TC.cell}">Active 라이더수</text>
+      ${hasRatio ? `
+        <line x1="120" y1="5" x2="138" y2="5" stroke="${RATIO_COLOR}" stroke-width="2"/>
+        <circle cx="129" cy="5" r="3" fill="${BC.section}" stroke="${RATIO_COLOR}" stroke-width="2"/>
+        <text x="144" y="9" font-size="10" fill="${TC.cell}">비중 (Active / 계약 %)</text>
+      ` : ''}
+    </g>`;
+
+  return _svgFrame('Active 라이더', w, h,
+    legend + grid + bars + ratioLine + ratioPoints + xlabels);
 }
 
 // 멀티라인 차트 (슬롯 달성률 — 전체+4개 시간대)
@@ -3328,12 +3415,14 @@ function _renderPerfWeekly(body, hist, tgt) {
 
   // 오래된 → 최신 순으로 (차트는 왼쪽이 과거)
   const asc = weeks.slice().reverse();
-  const labels = asc.map(w => _formatWeek(w.week));
-  const vols   = asc.map(w => w.totalVol);
-  const slas   = asc.map(w => w.sla);
-  const riders = asc.map(w => w.riderActAvg || 0);
+  const labels   = asc.map(w => _formatWeek(w.week));
+  const vols     = asc.map(w => w.totalVol);
+  const slas     = asc.map(w => w.sla);
+  const ridersA  = asc.map(w => Math.round(w.riderActAvg  || 0));
+  const ridersC  = asc.map(w => Math.round(w.riderJoinAvg || 0));
 
-  const chart1 = _chartVolumeSLA(labels, vols, slas, riders);
+  const chart1 = _chartVolumeSLA(labels, vols, slas);
+  const chart2 = _chartActiveRiders(labels, ridersA, ridersC);
   const chart3 = _chartShareStacked(labels, {
     am: asc.map(w => w.totalVol ? (w.amVol/w.totalVol)*100 : 0),
     pm: asc.map(w => w.totalVol ? (w.pmVol/w.totalVol)*100 : 0),
@@ -3397,6 +3486,7 @@ function _renderPerfWeekly(body, hist, tgt) {
       </div>
     </div>
     <div class="modal-section">${chart1}</div>
+    <div class="modal-section">${chart2}</div>
     <div class="modal-section">${chart3}</div>`;
 }
 
@@ -3414,11 +3504,13 @@ function _renderPerfDaily(body, hist, tgt) {
     const d = _kpiDateOf(r);
     return d ? d.slice(5) : '';  // MM-DD
   });
-  const vols    = asc.map(r => Number(r['총처리건수']||0));
-  const slas    = asc.map(r => _slaOf(r));
-  const riders  = asc.map(r => Number(r['운행라이더수']||0));
+  const vols       = asc.map(r => Number(r['총처리건수']||0));
+  const slas       = asc.map(r => _slaOf(r));
+  const ridersA    = asc.map(r => Number(r['운행라이더수']||0));
+  const ridersC    = asc.map(r => Number(r['계약중라이더수']||r['가입라이더수']||0));
 
-  const chart1 = _chartVolumeSLA(labels, vols, slas, riders);
+  const chart1 = _chartVolumeSLA(labels, vols, slas);
+  const chart2 = _chartActiveRiders(labels, ridersA, ridersC);
   const chart3 = _chartShareStacked(labels, {
     am: asc.map(r => { const t = Number(r['총처리건수']||0); return t ? Number(r['아침점심피크_물량']||0)/t*100 : 0; }),
     pm: asc.map(r => { const t = Number(r['총처리건수']||0); return t ? Number(r['오후논피크_물량']||0)  /t*100 : 0; }),
@@ -3494,6 +3586,7 @@ function _renderPerfDaily(body, hist, tgt) {
       </div>
     </div>
     <div class="modal-section">${chart1}</div>
+    <div class="modal-section">${chart2}</div>
     <div class="modal-section">${chart3}</div>`;
 }
 
@@ -3510,7 +3603,7 @@ function openPartnerModal(pid) {
   const p = STATE.partners.find(x => x['협력사ID'] === pid);
   if (!p) return;
   _currentPartnerPID = pid;
-  _currentPartnerTab = 'profile';
+  _currentPartnerTab = 'daily';
 
   // 모달 헤더는 실시간 시트 기준 (오늘 세트수 등)
   const kpi      = getRealtimeKPI(pid);
@@ -3529,10 +3622,10 @@ function openPartnerModal(pid) {
     ${getGradeBadge(grade)} ${setsBadge} ${getStatusBadge(p)}
   `;
 
-  // 탭 활성: Profile 기본
-  document.getElementById('partnerTabProfile').classList.add('active');
-  document.getElementById('partnerTabDaily').classList.remove('active');
+  // 탭 활성: 일자별 기본
+  document.getElementById('partnerTabDaily').classList.add('active');
   document.getElementById('partnerTabWeekly').classList.remove('active');
+  document.getElementById('partnerTabProfile').classList.remove('active');
 
   _renderPartnerTabBody();
   document.getElementById('partnerModal').classList.add('open');
@@ -3630,9 +3723,15 @@ function _renderPartnerProfile(body, pid) {
         <div class="slot-item-val" style="font-size:16px">${Number(kpi['총처리건수']||0).toLocaleString()}건</div>
       </div>
       <div class="slot-item">
-        <div class="slot-item-label">운행라이더</div>
-        <div class="slot-item-val" style="font-size:16px;color:#4ade80">${kpi['운행라이더수']?Number(kpi['운행라이더수']).toLocaleString():'-'}명</div>
-        <div style="font-size:10px;color:var(--text-secondary)">계약 ${kpi['계약중라이더수']?Number(kpi['계약중라이더수']).toLocaleString():'-'}명</div>
+        <div class="slot-item-label">Active 라이더</div>
+        <div class="slot-item-val" style="font-size:16px;color:#4ade80">${(() => {
+          const a = Number(kpi['운행라이더수']||0);
+          const c = Number(kpi['계약중라이더수']||kpi['가입라이더수']||0);
+          if (!a && !c) return '-';
+          const ratio = c ? Math.round((a/c)*100) : null;
+          return `${a.toLocaleString()}<span style="color:var(--text-muted);font-weight:600"> / ${c?c.toLocaleString():'-'}</span>${ratio!==null?` <span style="color:var(--text-secondary);font-size:11px;font-weight:600">(${ratio}%)</span>`:''}`;
+        })()}</div>
+        <div style="font-size:10px;color:var(--text-secondary)">운행 / 계약</div>
       </div>
     </div>
     <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">시간대별 달성</div>
@@ -4076,7 +4175,7 @@ function deleteVOCItem(id, pid) {
 
 // ── 통합 협력사 모달 탭 전환 (Profile / 일자별 / 주차별) ──
 let _currentPartnerPID = null;
-let _currentPartnerTab = 'profile';
+let _currentPartnerTab = 'daily';
 
 function switchPartnerTab(tab) {
   _currentPartnerTab = tab;
