@@ -102,8 +102,9 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .btn-sm{padding:4px 8px;font-size:11px}
 
 /* ── Table */
-.table-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.table-scroll{overflow-x:auto;overflow-y:visible}
+.table-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:visible}
+/* sticky thead가 가로 스크롤 컨테이너에 갇히지 않도록 — overflow는 상위 .main 한 곳에서만 처리 */
+.table-scroll{}
 .data-table{width:100%;border-collapse:separate;border-spacing:0}
 .data-table th{background:var(--bg-section);color:var(--text-secondary);font-weight:600;font-size:11px;padding:9px 8px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;
   /* 헤더 고정 — 본문 스크롤 시 thead 가 항상 보이도록 */
