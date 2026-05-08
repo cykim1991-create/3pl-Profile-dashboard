@@ -78,6 +78,13 @@ input,select,textarea{font-family:inherit;font-size:13px}
 
 /* ── KPI Cards */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+/* RGN2 영업브리핑 인라인 패널 */
+.rgn2-briefing{display:flex;flex-wrap:wrap;align-items:stretch;gap:14px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:12px}
+.rgn2-briefing-title{display:flex;align-items:center;color:var(--accent-soft);font-size:13px;font-weight:700;padding-right:14px;border-right:1px solid var(--border);margin-right:6px;white-space:nowrap}
+.rgn2-briefing-cell{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:120px}
+.rgn2-briefing-cell .lbl{font-size:10.5px;color:var(--text-secondary)}
+.rgn2-briefing-cell .val{font-size:14px;font-weight:700;color:var(--text-primary)}
+.rgn2-briefing-cell .delta{font-size:10.5px;color:var(--text-secondary)}
 /* 등급별 협력사 수 위젯 */
 .grade-summary{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:18px}
 .grade-summary-title{display:flex;align-items:center;color:var(--text-secondary);font-size:11px;font-weight:600;letter-spacing:.3px;padding-right:12px;border-right:1px solid var(--border);margin-right:4px}
@@ -438,6 +445,9 @@ textarea.form-input{resize:vertical;min-height:60px}
         </div>
       </div>
 
+      <!-- RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위) -->
+      <div id="rt-rgn2-briefing" class="rgn2-briefing" style="display:none"></div>
+
       <!-- 등급별 협력사 수 (현재 RGN2/담당자 필터에 영향 받음) -->
       <div id="rt-grade-summary" class="grade-summary"></div>
 
@@ -509,6 +519,9 @@ textarea.form-input{resize:vertical;min-height:60px}
           <div class="kpi-sub">전체 협력사 합산</div>
         </div>
       </div>
+
+      <!-- RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위) -->
+      <div id="perf-rgn2-briefing" class="rgn2-briefing" style="display:none"></div>
 
       <!-- 등급별 협력사 수 (현재 RGN2/담당자 필터에 영향 받음) -->
       <div id="perf-grade-summary" class="grade-summary"></div>
@@ -2358,6 +2371,8 @@ function renderRealtime() {
   document.getElementById('rt-sla').textContent = avgSLA.toFixed(1)+'%';
   document.getElementById('rt-sets').textContent = totalSets.toLocaleString()+'세트';
 
+  // RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위)
+  _renderRgn2BriefingPanel(currentRegionFilter, 'rt-rgn2-briefing');
   // 등급별 협력사 수 위젯 — 현재 RGN2/담당자 필터 적용된 'all' 기준
   _renderGradeSummary(all);
 
@@ -2734,12 +2749,58 @@ function _renderPerfTopSummary(partnerList) {
   setEl('perf-sla',          avgSLA ? avgSLA.toFixed(1)+'%' : '-');
   setEl('perf-sets',         totalSets ? totalSets.toLocaleString()+'세트' : '-');
 
+  // RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위)
+  _renderRgn2BriefingPanel(currentRegionFilter, 'perf-rgn2-briefing');
   // 등급별 협력사 수
   _renderGradeSummary(list, 'perf-grade-summary');
 
   // 기준일 라벨도 갱신
   const label = document.getElementById('perf-date-label');
   if (label && win) label.textContent = `${win.prev.start} 기준`;
+}
+
+// RGN2 필터 선택 시 — 영업 브리핑 핵심 지표를 인라인 패널로 노출
+//   rgn2 = 현재 선택된 RGN2 (없으면 패널 숨김)
+//   elId = 렌더 대상 컨테이너 id
+function _renderRgn2BriefingPanel(rgn2, elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!rgn2) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  const { d1, d2 } = _briefingDates();
+  const a = _briefingAggregate(rgn2, d1);
+  const b = d2 ? _briefingAggregate(rgn2, d2) : null;
+  el.style.display = 'flex';
+  if (!a) {
+    el.innerHTML = `
+      <div class="rgn2-briefing-title">📍 ${rgn2}</div>
+      <div style="color:var(--text-muted);font-size:12px;align-self:center">전일(${d1||'-'}) 데이터 없음</div>`;
+    return;
+  }
+  // 변화량 포맷 (이미 정의된 _bDeltaFmt, _bArrow, _bN 헬퍼 재사용)
+  const sharePct  = a.sharePct != null ? (a.sharePct * 100).toFixed(1) + '%' : '-';
+  const shareDel  = (a.sharePct != null && b && b.sharePct != null)
+    ? _bDeltaFmt(a.sharePct * 100, b.sharePct * 100, {pp:true, dec:1}) : '';
+  const dcpoGap = (a.totalDcpo && a.flDcpo) ? (a.totalDcpo - a.flDcpo) : null;
+  const gapTxt = dcpoGap !== null
+    ? `<span style="color:${dcpoGap>0?'#f87171':'#4ade80'}">${dcpoGap>0?'▲':'▼'}${Math.abs(Math.round(dcpoGap)).toLocaleString()}원</span>`
+    : '<span style="color:var(--text-muted)">-</span>';
+  const cell = (lbl, val, del) => `
+    <div class="rgn2-briefing-cell">
+      <span class="lbl">${lbl}</span>
+      <span class="val">${val}</span>
+      ${del ? `<span class="delta">${del}</span>` : ''}
+    </div>`;
+  el.innerHTML = `
+    <div class="rgn2-briefing-title">📍 ${rgn2}
+      <span style="color:var(--text-muted);font-size:10.5px;font-weight:400;margin-left:6px">${d1} 기준</span>
+    </div>
+    ${cell('3PL처리비중', sharePct, shareDel)}
+    ${cell('60분초과율', _bN(a.over60, {dec:1, unit:'%'}),  b ? _bDeltaFmt(a.over60, b.over60, {pp:true, dec:1}) : '')}
+    ${cell('UTR',         _bN(a.utr,    {dec:1}),          b ? _bDeltaFmt(a.utr, b.utr, {dec:1}) : '')}
+    ${cell('운행라이더 FL',  _bN(a.flRiders) + '명',     b ? _bArrow(a.flRiders,  b.flRiders,  '명') : '')}
+    ${cell('운행라이더 3PL', _bN(a.riders3pl) + '명',    b ? _bArrow(a.riders3pl, b.riders3pl, '명') : '')}
+    ${cell('Total DCPO',  _bN(a.totalDcpo, {unit:'원'}), `FL 대비 ${gapTxt}`)}
+  `;
 }
 
 // 등급별 협력사 수 위젯 (실시간/퍼포먼스 상단 공용)
