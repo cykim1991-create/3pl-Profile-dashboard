@@ -2382,8 +2382,20 @@ function renderRealtime() {
   _renderGradeChip('realtime');
   _updateSortIndicators('realtime', _RT_SORT_KEYS);
 
+  // 전일(D-1) 운행 이력이 있는 협력사만 노출 — 전일 데이터 없는 협력사는 제외
+  const _dayWin = _getPrevDayWindow();
+  const _d1 = _dayWin ? _dayWin.prev.start : null;
+  const _hasD1Op = (pid, name) => {
+    if (!_d1) return true;
+    return (STATE.kpi || []).some(r => {
+      if (r['일자'] !== _d1) return false;
+      if (Number(r['총처리건수']||0) < 1) return false;
+      return r['협력사ID'] === pid || (name && r['협력사명'] === name);
+    });
+  };
   // KPI 카드용: 상단 RGN2 필터만 적용된 'filtered' 사용 (위험만 토글의 영향 X)
-  const all = filtered;
+  //   + 전일 운행 이력이 있는 협력사만 합산 대상에 포함
+  const all = (filtered || []).filter(p => _hasD1Op(p['협력사ID'], p['협력사명']));
   const realtimeKPIs = all.map(p => getRealtimeKPI(p['협력사ID'])).filter(Boolean);
 
   const totalDel  = realtimeKPIs.reduce((s,k) => s+Number(k['총처리건수']||0), 0);
