@@ -397,12 +397,14 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="nav-btn" onclick="switchView('realtime',this)">📡 실시간 운행현황</button>
     </div>
     <div class="topbar-filters">
-      <select class="filter-select" id="regionFilter" onchange="applyFilters()">
+      <select class="filter-select" id="regionFilter" onchange="onRegionFilterChange()">
         <option value="">전체 RGN2</option>
       </select>
-      <select class="filter-select" id="managerFilter" onchange="applyFilters()">
+      <select class="filter-select" id="managerFilter" onchange="onManagerFilterChange()">
         <option value="">전체 담당자</option>
       </select>
+      <button class="btn btn-ghost btn-sm" onclick="resetTopFilters()" title="RGN2/담당자 필터 초기화"
+              style="font-size:11px">🔄 필터 초기화</button>
       <button class="btn btn-primary btn-sm" onclick="openBriefingModal()" title="아침 영업 브리핑 보고서 작성"
               style="font-size:11px">📝 영업 브리핑</button>
       <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
@@ -1446,6 +1448,35 @@ function applyFilters() {
 
 function filterRiskOnly() {
   riskOnlyMode = !riskOnlyMode;
+  applyFilters();
+}
+
+// ── 상단 필터 핸들러 ──
+// 한쪽 필터를 '전체'로 되돌리면 다른 쪽 필터도 자동 해제 (사용자 의도: 시야 리셋)
+function onRegionFilterChange() {
+  const rgnSel = document.getElementById('regionFilter');
+  if (rgnSel && rgnSel.value === '') {
+    const mgrSel = document.getElementById('managerFilter');
+    if (mgrSel) mgrSel.value = '';
+  }
+  applyFilters();
+}
+
+function onManagerFilterChange() {
+  const mgrSel = document.getElementById('managerFilter');
+  if (mgrSel && mgrSel.value === '') {
+    const rgnSel = document.getElementById('regionFilter');
+    if (rgnSel) rgnSel.value = '';
+  }
+  applyFilters();
+}
+
+// 필터 초기화 버튼 — RGN2/담당자 필터 모두 '전체'로 리셋
+function resetTopFilters() {
+  const rgnSel = document.getElementById('regionFilter');
+  const mgrSel = document.getElementById('managerFilter');
+  if (rgnSel) rgnSel.value = '';
+  if (mgrSel) mgrSel.value = '';
   applyFilters();
 }
 
