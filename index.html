@@ -407,6 +407,8 @@ textarea.form-input{resize:vertical;min-height:60px}
               style="font-size:11px">🔄 필터 초기화</button>
       <button class="btn btn-primary btn-sm" onclick="openBriefingModal()" title="아침 영업 브리핑 보고서 작성"
               style="font-size:11px">📝 영업 브리핑</button>
+      <button class="btn btn-ghost btn-sm" onclick="openDownloadModal()" title="지역/담당자별 데이터 다운로드"
+              style="font-size:11px">📥 데이터 다운로드</button>
       <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
       <button class="btn btn-ghost btn-sm" id="themeToggleBtn" onclick="toggleTheme()" title="라이트/다크 모드 전환">☀️</button>
       <button class="btn btn-ghost btn-sm" onclick="openSetup()" title="연결 설정">⚙</button>
@@ -611,6 +613,46 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="modal-close" onclick="closeBriefingModal()">✕</button>
     </div>
     <div id="briefingBody" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px;max-height:82vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- 데이터 다운로드 모달 -->
+<div class="modal-overlay" id="downloadModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:560px">
+    <div class="modal-header">
+      <div class="modal-title">📥 데이터 다운로드</div>
+      <button class="modal-close" onclick="closeDownloadModal()">✕</button>
+    </div>
+    <div style="padding:20px 22px;display:flex;flex-direction:column;gap:18px">
+      <!-- 필터 유형 -->
+      <div>
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:700;display:block;margin-bottom:8px">대상 선택</label>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <button type="button" id="dlScopeBtn-all"     class="btn btn-ghost btn-sm" onclick="setDownloadScope('all')"     style="font-size:11px;flex:1">🌐 전체</button>
+          <button type="button" id="dlScopeBtn-region"  class="btn btn-ghost btn-sm" onclick="setDownloadScope('region')"  style="font-size:11px;flex:1">📍 지역(RGN2)</button>
+          <button type="button" id="dlScopeBtn-manager" class="btn btn-ghost btn-sm" onclick="setDownloadScope('manager')" style="font-size:11px;flex:1">👤 담당자</button>
+        </div>
+        <select id="dlScopeValue" class="filter-select" style="width:100%;display:none">
+          <option value="">선택…</option>
+        </select>
+      </div>
+      <!-- 데이터 유형 -->
+      <div>
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:700;display:block;margin-bottom:8px">데이터 유형</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="dlTypeBtn-daily"   class="btn btn-primary btn-sm" onclick="setDownloadType('daily')"   style="font-size:11px;flex:1">📆 일별 데이터<br><span style="font-size:9px;opacity:.8;font-weight:400">최근 8일</span></button>
+          <button type="button" id="dlTypeBtn-weekly"  class="btn btn-ghost btn-sm"   onclick="setDownloadType('weekly')"  style="font-size:11px;flex:1">📅 주간 데이터<br><span style="font-size:9px;opacity:.8;font-weight:400">이번 주(수~화)</span></button>
+          <button type="button" id="dlTypeBtn-d1"      class="btn btn-ghost btn-sm"   onclick="setDownloadType('d1')"      style="font-size:11px;flex:1">⏮ 전일 데이터<br><span style="font-size:9px;opacity:.8;font-weight:400">D-1 만</span></button>
+        </div>
+      </div>
+      <!-- 미리보기 / 안내 -->
+      <div id="dlPreview" style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;color:var(--text-secondary);line-height:1.6"></div>
+      <!-- 다운로드 -->
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="closeDownloadModal()">취소</button>
+        <button class="btn btn-primary btn-sm" id="dlConfirmBtn" onclick="executeDownload()">💾 CSV 다운로드</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1960,6 +2002,235 @@ function closeBriefingModal() {
   const ta = document.getElementById('briefingPlan');
   if (ta) _briefingState.plan = ta.value;
   document.getElementById('briefingModal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════
+// 데이터 다운로드 모달
+// ═══════════════════════════════════════════════════
+const _dlState = { scope: 'all', value: '', type: 'daily' };
+
+function openDownloadModal() {
+  _dlState.scope = 'all';
+  _dlState.value = '';
+  _dlState.type  = 'daily';
+  _renderDownloadScopeButtons();
+  _renderDownloadTypeButtons();
+  _renderDownloadScopeSelect();
+  _renderDownloadPreview();
+  document.getElementById('downloadModal').classList.add('open');
+}
+
+function closeDownloadModal() {
+  document.getElementById('downloadModal').classList.remove('open');
+}
+
+function setDownloadScope(scope) {
+  _dlState.scope = scope;
+  _dlState.value = '';
+  _renderDownloadScopeButtons();
+  _renderDownloadScopeSelect();
+  _renderDownloadPreview();
+}
+
+function setDownloadType(type) {
+  _dlState.type = type;
+  _renderDownloadTypeButtons();
+  _renderDownloadPreview();
+}
+
+function _renderDownloadScopeButtons() {
+  ['all','region','manager'].forEach(s => {
+    const btn = document.getElementById(`dlScopeBtn-${s}`);
+    if (!btn) return;
+    btn.classList.toggle('btn-primary', s === _dlState.scope);
+    btn.classList.toggle('btn-ghost',   s !== _dlState.scope);
+  });
+}
+
+function _renderDownloadTypeButtons() {
+  ['daily','weekly','d1'].forEach(t => {
+    const btn = document.getElementById(`dlTypeBtn-${t}`);
+    if (!btn) return;
+    btn.classList.toggle('btn-primary', t === _dlState.type);
+    btn.classList.toggle('btn-ghost',   t !== _dlState.type);
+  });
+}
+
+function _renderDownloadScopeSelect() {
+  const sel = document.getElementById('dlScopeValue');
+  if (!sel) return;
+  // 전체일 경우 select 숨김
+  if (_dlState.scope === 'all') {
+    sel.style.display = 'none';
+    sel.innerHTML = '<option value="">선택…</option>';
+    return;
+  }
+  sel.style.display = '';
+  let options = [];
+  if (_dlState.scope === 'region') {
+    // 협력사기본정보의 RGN2 컬럼 값(드롭다운/필터와 동일 소스)
+    options = _allRgn2List();
+  } else if (_dlState.scope === 'manager') {
+    // 지역 담당자 매핑에서 담당자 unique 목록
+    const set = new Set();
+    Object.values(STATE.rgn2Managers || {}).forEach(name => {
+      const v = (name || '').trim();
+      if (v) set.add(v);
+    });
+    options = [...set].sort();
+  }
+  sel.innerHTML = '<option value="">선택…</option>' +
+    options.map(o => `<option value="${o}">${o}</option>`).join('');
+  sel.onchange = () => { _dlState.value = sel.value; _renderDownloadPreview(); };
+}
+
+function _renderDownloadPreview() {
+  const el = document.getElementById('dlPreview');
+  if (!el) return;
+  const partners = _dlSelectedPartners();
+  const dates    = _dlDateRange();
+  const rows     = _dlBuildRows(partners, dates);
+  const scopeLbl = _dlState.scope === 'all'      ? '전체 협력사'
+                 : _dlState.scope === 'region'   ? `RGN2 = ${_dlState.value || '(미선택)'}`
+                 : _dlState.scope === 'manager'  ? `담당자 = ${_dlState.value || '(미선택)'}`
+                 : '-';
+  const typeLbl  = _dlState.type === 'daily'  ? '일별 (최근 8일)'
+                 : _dlState.type === 'weekly' ? `주간 (${dates.start} ~ ${dates.end})`
+                 : `전일 (${dates.start || '-'})`;
+  el.innerHTML = `
+    <div><b style="color:var(--text-primary)">대상:</b> ${scopeLbl} → 협력사 <b style="color:var(--accent-soft)">${partners.length}</b>개</div>
+    <div><b style="color:var(--text-primary)">기간:</b> ${typeLbl}</div>
+    <div><b style="color:var(--text-primary)">예상 행 수:</b> ${rows.length}개</div>
+  `;
+}
+
+// 선택된 scope에 해당하는 협력사 목록
+function _dlSelectedPartners() {
+  const all = STATE.partners || [];
+  if (_dlState.scope === 'all') return all;
+  if (_dlState.scope === 'region') {
+    if (!_dlState.value) return [];
+    return all.filter(p => (p['RGN2'] || '').toString().trim() === _dlState.value);
+  }
+  if (_dlState.scope === 'manager') {
+    if (!_dlState.value) return [];
+    // 담당자가 매핑된 RGN2 집합
+    const rgnSet = new Set();
+    Object.entries(STATE.rgn2Managers || {}).forEach(([rgn2, name]) => {
+      if ((name || '').trim() === _dlState.value) rgnSet.add(rgn2);
+    });
+    return all.filter(p => rgnSet.has((p['RGN2'] || '').toString().trim()));
+  }
+  return [];
+}
+
+// 데이터 유형별 날짜 범위
+function _dlDateRange() {
+  const kpiDates = [...new Set((STATE.kpi || []).map(r => r['일자']).filter(Boolean))].sort();
+  const max = kpiDates[kpiDates.length - 1] || '';
+  if (_dlState.type === 'd1') {
+    return { start: max, end: max };
+  }
+  if (_dlState.type === 'weekly') {
+    const wk = _getThisWeekRange();
+    return { start: wk.start, end: wk.end };
+  }
+  // daily — 전 기간 (STATE.kpi에 있는 모든 일자)
+  return { start: kpiDates[0] || '', end: max };
+}
+
+// CSV용 행 빌드 — 각 (협력사 × 일자) 단위
+function _dlBuildRows(partners, dates) {
+  if (!partners.length) return [];
+  const pidSet = new Set(partners.map(p => p['협력사ID']));
+  const pNameByPid = new Map(partners.map(p => [p['협력사ID'], p['협력사명']]));
+  const pInfo = new Map(partners.map(p => [p['협력사ID'], p]));
+  return (STATE.kpi || [])
+    .filter(r => pidSet.has(r['협력사ID']))
+    .filter(r => {
+      const d = r['일자'];
+      if (!d) return false;
+      return d >= dates.start && d <= dates.end;
+    })
+    .map(r => {
+      const p = pInfo.get(r['협력사ID']) || {};
+      const rgn2 = (p['RGN2'] || '').toString().trim();
+      const manager = (STATE.rgn2Managers || {})[rgn2] || '';
+      return {
+        '일자':              r['일자'] || '',
+        '협력사ID':          r['협력사ID'] || '',
+        '협력사명':          r['협력사명'] || pNameByPid.get(r['협력사ID']) || '',
+        'RGN2':              rgn2,
+        '담당자':            manager,
+        '등급':              p['등급'] || '',
+        '계약형태':          p['계약형태'] || '',
+        '운영지역':          r['운영지역'] || '',
+        '총처리건수':        r['총처리건수'] || '',
+        '운행라이더수':      r['운행라이더수'] || '',
+        '계약중라이더수':    r['계약중라이더수'] || r['가입라이더수'] || '',
+        'Active라이더수':    r['Active라이더수'] || '',
+        '발주달성률':        r['발주달성률'] || '',
+        'SLA수락률':         r['SLA수락률'] || '',
+        '60분초과율':        r['60분초과율'] || '',
+        'UTR':               r['UTR'] || '',
+        '총처리건수_아침점심': r['총처리건수_아침점심'] || '',
+        '총처리건수_오후':   r['총처리건수_오후'] || '',
+        '총처리건수_저녁':   r['총처리건수_저녁'] || '',
+        '총처리건수_심야':   r['총처리건수_심야'] || '',
+      };
+    });
+}
+
+function executeDownload() {
+  // 선택 검증
+  if (_dlState.scope !== 'all' && !_dlState.value) {
+    showToast(`${_dlState.scope === 'region' ? 'RGN2' : '담당자'}를 선택해주세요`, 'error');
+    return;
+  }
+  const partners = _dlSelectedPartners();
+  if (!partners.length) {
+    showToast('선택한 조건에 해당하는 협력사가 없습니다', 'error');
+    return;
+  }
+  const dates = _dlDateRange();
+  const rows  = _dlBuildRows(partners, dates);
+  if (!rows.length) {
+    showToast('해당 기간/대상의 데이터가 없습니다', 'error');
+    return;
+  }
+  // CSV 변환
+  const headers = Object.keys(rows[0]);
+  const escape = v => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    // 큰따옴표/콤마/개행 포함 시 따옴표로 감싸고 내부 따옴표는 이중화
+    return /["\n,]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  const csv = [headers.join(',')]
+    .concat(rows.map(r => headers.map(h => escape(r[h])).join(',')))
+    .join('\n');
+  // UTF-8 BOM — 한글 Excel 호환
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  // 파일명: 3PL_데이터_<유형>_<scope값>_<날짜>.csv
+  const typeKor = _dlState.type === 'daily' ? '일별' : _dlState.type === 'weekly' ? '주간' : '전일';
+  const scopeKor = _dlState.scope === 'all' ? '전체'
+                 : _dlState.scope === 'region' ? _dlState.value
+                 : _dlState.value;
+  const safeName = (s) => (s || '').toString().replace(/[\\/:*?"<>|]/g, '_');
+  const today = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const stamp = `${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
+  const filename = `3PL_${typeKor}_${safeName(scopeKor)}_${stamp}.csv`;
+  // 다운로드 트리거
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`${rows.length}행 다운로드 완료 — ${filename}`, 'success');
+  closeDownloadModal();
 }
 
 // 영업 브리핑 — 사용 가능한 RGN2 목록
