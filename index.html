@@ -1452,22 +1452,16 @@ function filterRiskOnly() {
 }
 
 // ── 상단 필터 핸들러 ──
-// 한쪽 필터를 '전체'로 되돌리면 다른 쪽 필터도 자동 해제 (사용자 의도: 시야 리셋)
+// RGN2 와 담당자 필터는 상호 배타적: 한쪽을 변경(값 선택/전체 복귀 모두)하면 다른 쪽은 항상 초기화
 function onRegionFilterChange() {
-  const rgnSel = document.getElementById('regionFilter');
-  if (rgnSel && rgnSel.value === '') {
-    const mgrSel = document.getElementById('managerFilter');
-    if (mgrSel) mgrSel.value = '';
-  }
+  const mgrSel = document.getElementById('managerFilter');
+  if (mgrSel) mgrSel.value = '';
   applyFilters();
 }
 
 function onManagerFilterChange() {
-  const mgrSel = document.getElementById('managerFilter');
-  if (mgrSel && mgrSel.value === '') {
-    const rgnSel = document.getElementById('regionFilter');
-    if (rgnSel) rgnSel.value = '';
-  }
+  const rgnSel = document.getElementById('regionFilter');
+  if (rgnSel) rgnSel.value = '';
   applyFilters();
 }
 
