@@ -669,15 +669,15 @@ textarea.form-input{resize:vertical;min-height:60px}
 const DEFAULT_SHEET_ID   = '1jKyC_vmQ_fwaADCV_9J8g_Pok_QieX-rU0vYBwaSSUY';
 const DEFAULT_API_KEY    = 'AIzaSyDa-zT47hYhBOxgbIBDFZ_iS2HIxuJ3Vzw';
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEjXO_oHuYEL326LBmai7D8sVKXBJ0WRn8otgcIg8soTXI1cAuRC1MA6ISX3rqFdyJ/exec';
-// 기존 사용자의 stale localStorage 값을 새 기본값으로 마이그레이션 (1회성)
-// 새 시트로 전환할 때마다 CONFIG_VERSION을 올리면 모든 PC에서 자동 초기화됨
+// Sheet ID / Script URL 만 기본값으로 강제 동기화 (API Key는 사용자 별 설정 유지)
+// 새 시트로 전환할 때마다 CONFIG_VERSION 을 올리면 모든 PC에서 자동 갱신됨
 (function _migrateConfig() {
-  const CONFIG_VERSION = '2026-05-1';
+  const CONFIG_VERSION = '2026-05-2';
   try {
     if (localStorage.getItem('3pl_config_version') !== CONFIG_VERSION) {
       localStorage.removeItem('3pl_sheet_id');
-      localStorage.removeItem('3pl_api_key');
       localStorage.removeItem('3pl_script_url');
+      // API Key 는 절대 건드리지 않음 — 사용자가 보유한 키 유지
       localStorage.setItem('3pl_config_version', CONFIG_VERSION);
     }
   } catch (_) {}
