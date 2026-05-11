@@ -1360,19 +1360,25 @@ function populateRegionFilter() {
   });
   const rgn2List = [...set].sort();
   const sel = document.getElementById('regionFilter');
-  while (sel.options.length > 1) sel.remove(1);
-  // 첫 옵션 라벨 갱신
-  if (sel.options[0]) sel.options[0].textContent = '전체 RGN2';
-  rgn2List.forEach(r => {
-    const o = document.createElement('option');
-    o.value = r;
-    o.textContent = r;
-    sel.appendChild(o);
-  });
+  if (sel) {
+    // 자동 새로고침 시 사용자가 선택한 필터가 유지되도록 기존 값 보존
+    const prevVal = sel.value;
+    while (sel.options.length > 1) sel.remove(1);
+    if (sel.options[0]) sel.options[0].textContent = '전체 RGN2';
+    rgn2List.forEach(r => {
+      const o = document.createElement('option');
+      o.value = r;
+      o.textContent = r;
+      sel.appendChild(o);
+    });
+    // 이전 선택값이 새 옵션 목록에 여전히 존재하면 복원
+    if (prevVal && rgn2List.includes(prevVal)) sel.value = prevVal;
+  }
 
   // 담당자 필터 — RGN2_담당자 매핑에서 unique 담당자 목록
   const mgrSel = document.getElementById('managerFilter');
   if (mgrSel) {
+    const prevMgr = mgrSel.value;
     const mgrSet = new Set();
     Object.values(STATE.rgn2Managers || {}).forEach(name => {
       const v = (name || '').trim();
@@ -1387,6 +1393,7 @@ function populateRegionFilter() {
       o.textContent = m;
       mgrSel.appendChild(o);
     });
+    if (prevMgr && mgrList.includes(prevMgr)) mgrSel.value = prevMgr;
   }
 }
 
