@@ -1173,7 +1173,7 @@ async function init() {
       fetchSheet('실시간운행현황',     'A:AA'),   // 27열 (영문 snake_case 컬럼, 헤더 row1, 데이터 row2+)
       fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
       fetchSheet('RGN2_담당자',        'A:C'),    // 3열 (RGN2, 담당자, 변경일시)
-      fetchSheet('RGN2_일별지표',      'A:H'),    // 8열 (RGN2 × 일자 단위 영업브리핑 지표, 최근 7일)
+      fetchSheet('RGN2_일별지표',      'A:J'),    // 8~10열 — 사용자 시트는 3pl_라이더수/3pl_DCPO 포함 10열
       // 협력사연락처는 선택 시트 — 없거나 권한 없으면 빈 배열로 폴백
       fetchSheet('협력사연락처',       'A:I').catch(() => []),
     ]);
@@ -1222,16 +1222,42 @@ async function init() {
     }, {});
 
     // RGN2_일별지표 (RGN2 × 일자, 최근 7일):
-    //   3PL처리비중, 60분초과율, UTR, Total_DCPO, FL_라이더수, FL_DCPO
-    //   row1=제목, row2=헤더, row3=가이드, row4+=데이터 → header=1, dataStart=3
-    STATE.rgn2Daily = parseSheet(rgn2DailyVals, 1, 3).map(r => ({
-      일자:           r['일자']         || '',
-      RGN2:           r['RGN2']         || '',
+    //   사용자 시트 형식 자동 감지
+    //   (a) row1=헤더 / row2+=데이터  (실제 사용자 시트)
+    //   (b) row1=제목 / row2=헤더 / row3=가이드 / row4+=데이터  (샘플 시트)
+    const _r2First = (rgn2DailyVals && rgn2DailyVals[0]) || [];
+    const _r2HasHeader1 = _r2First.some(h =>
+      typeof h === 'string' && (h === '일자' || h === 'RGN2')
+    );
+    const _r2HeaderIdx = _r2HasHeader1 ? 0 : 1;
+    // 가이드 행 존재 여부 확인 — 헤더 다음 행에 빈 값/안내 텍스트
+    const _r2GuideMaybe = (rgn2DailyVals && rgn2DailyVals[_r2HeaderIdx + 1]) || [];
+    const _r2HasGuide = !_r2HasHeader1 && _r2GuideMaybe.length > 0 &&
+      _r2GuideMaybe.filter(v => v != null && v !== '').length < 4;  // 4개 미만이면 가이드 행으로 추정
+    const _r2DataIdx = _r2HeaderIdx + (_r2HasGuide ? 2 : 1);
+    // 일자가 Date 객체일 수 있어 정규화
+    const _fmtCell = v => {
+      if (v == null || v === '') return '';
+      if (v instanceof Date) {
+        const pad = n => String(n).padStart(2,'0');
+        return `${v.getFullYear()}-${pad(v.getMonth()+1)}-${pad(v.getDate())}`;
+      }
+      const s = String(v);
+      // ISO 문자열에서 시간부 제거
+      if (s.length > 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+      return s;
+    };
+    STATE.rgn2Daily = parseSheet(rgn2DailyVals, _r2HeaderIdx, _r2DataIdx).map(r => ({
+      일자:           _fmtCell(r['일자']),
+      RGN2:           (r['RGN2'] || '').toString().trim(),
       '3PL처리비중':  _parsePercent(r['3PL처리비중']),
       '60분초과율':   Number(String(r['60분초과율']||'').replace(/[%\s,]/g,'')) || 0,
       UTR:            Number(r['UTR']||0) || 0,
       Total_DCPO:     Number(String(r['Total_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
+      // 사용자 시트는 3pl_라이더수, 3pl_DCPO 컬럼도 있음 — 향후 활용을 위해 함께 저장
+      '3pl_라이더수': Number(String(r['3pl_라이더수']||r['3PL_라이더수']||'').replace(/[,\s명]/g,'')) || 0,
       FL_라이더수:    Number(String(r['FL_라이더수']||'').replace(/[,\s명]/g,'')) || 0,
+      '3pl_DCPO':     Number(String(r['3pl_DCPO']||r['3PL_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
       FL_DCPO:        Number(String(r['FL_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
     }));
     // tpl3Share 호환 — 각 RGN2의 가장 최근 일자 3PL처리비중을 정적 매핑으로 노출
