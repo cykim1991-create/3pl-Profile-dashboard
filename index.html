@@ -1862,16 +1862,13 @@ function _savePartnerNote(pid, value) {
 
 // ── RGN2 담당자 관리 모달 ───────────────────────────
 function openRgn2ManagerModal() {
-  // 모든 알려진 RGN2 수집 (KPI 운영지역 + partners 권역명 + 기존 매핑 키)
-  const allAreas = [
-    ...(STATE.kpi||[]).map(k => k['운영지역']).filter(Boolean),
-    ...(STATE.partners||[]).map(p => p['권역명']).filter(Boolean),
-  ];
+  // 메인 RGN2 필터와 동일한 출처 — 협력사기본정보 시트의 RGN2 컬럼에 등록된 값만
   const rgn2Set = new Set();
-  allAreas.forEach(a => {
-    const r = getRGN2(a);
-    if (r && r !== '-') rgn2Set.add(r);
+  (STATE.partners || []).forEach(p => {
+    const v = (p['RGN2'] || '').toString().trim();
+    if (v && v !== '-') rgn2Set.add(v);
   });
+  // 단, 시트에는 없지만 RGN2_담당자 매핑에 이미 존재하는 키는 유지 (편집 가능하도록)
   Object.keys(STATE.rgn2Managers || {}).forEach(r => rgn2Set.add(r));
   const rgn2List = [...rgn2Set].sort();
 
