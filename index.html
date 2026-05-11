@@ -665,28 +665,10 @@ textarea.form-input{resize:vertical;min-height:60px}
 // ═══════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════
-// ── 모든 사용자에 동일하게 적용되는 기본 연결값 (영업파트 배포용 — 하드코딩) ──
-const DEFAULT_SHEET_ID   = '1jKyC_vmQ_fwaADCV_9J8g_Pok_QieX-rU0vYBwaSSUY';
-const DEFAULT_API_KEY    = 'AIzaSyDa-zT47hYhBOxgbIBDFZ_iS2HIxuJ3Vzw';
-const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEjXO_oHuYEL326LBmai7D8sVKXBJ0WRn8otgcIg8soTXI1cAuRC1MA6ISX3rqFdyJ/exec';
-// Sheet ID / Script URL 만 기본값으로 강제 동기화 (API Key는 사용자 별 설정 유지)
-// 새 시트로 전환할 때마다 CONFIG_VERSION 을 올리면 모든 PC에서 자동 갱신됨
-(function _migrateConfig() {
-  const CONFIG_VERSION = '2026-05-2';
-  try {
-    if (localStorage.getItem('3pl_config_version') !== CONFIG_VERSION) {
-      localStorage.removeItem('3pl_sheet_id');
-      localStorage.removeItem('3pl_script_url');
-      // API Key 는 절대 건드리지 않음 — 사용자가 보유한 키 유지
-      localStorage.setItem('3pl_config_version', CONFIG_VERSION);
-    }
-  } catch (_) {}
-})();
-// ⚙ 연결 설정에서 사용자가 직접 바꾸면 localStorage 값이 기본값보다 우선
 const CONFIG = {
-  get spreadsheetId(){ return localStorage.getItem('3pl_sheet_id')    || DEFAULT_SHEET_ID; },
-  get apiKey()       { return localStorage.getItem('3pl_api_key')     || DEFAULT_API_KEY; },
-  get scriptUrl()    { return localStorage.getItem('3pl_script_url')  || DEFAULT_SCRIPT_URL; },
+  get spreadsheetId(){ return localStorage.getItem('3pl_sheet_id')    || '1H9Yy0NLkUbftU8kx3g3SfLgzQXuUzVDecTgEm9OZbKk'; },
+  get apiKey()       { return localStorage.getItem('3pl_api_key')     || 'AIzaSyDa-zT47hYhBOxgbIBDFZ_iS2HIxuJ3Vzw'; },
+  get scriptUrl()    { return localStorage.getItem('3pl_script_url')  || ''; },
   set spreadsheetId(v){ localStorage.setItem('3pl_sheet_id',   v); },
   set apiKey(v)      { localStorage.setItem('3pl_api_key',     v); },
   set scriptUrl(v)   { localStorage.setItem('3pl_script_url',  v); },
@@ -1329,46 +1311,8 @@ async function init() {
       hint = 'API 요청 형식 오류 — 탭 이름/범위 확인';
     }
     showToast(`⚠ API 실패: ${hint || msg}`);
-    console.error('[3PL] API 연결 실패:', e);
-    console.log('[3PL] 현재 설정:', {
-      spreadsheetId: CONFIG.spreadsheetId,
-      apiKey: CONFIG.apiKey ? CONFIG.apiKey.substring(0,12) + '...' : '(empty)',
-      scriptUrl: CONFIG.scriptUrl,
-      configVersion: localStorage.getItem('3pl_config_version'),
-    });
-    // 화면 상단에 오류 패널 노출 — 사용자가 바로 보고 조치 가능
-    _showDataLoadErrorPanel(hint || msg);
+    console.error('API 연결 실패 상세:', e.message);
   }
-}
-
-// 데이터 로드 실패 시 화면 상단에 오류 + 재설정 버튼 표시
-function _showDataLoadErrorPanel(hintText) {
-  let bar = document.getElementById('rt-data-err');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'rt-data-err';
-    bar.style.cssText = 'background:#2d0606;color:#f87171;border:1px solid #7f1d1d;border-radius:8px;padding:12px 16px;margin:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px';
-    const main = document.querySelector('.main');
-    if (main) main.insertBefore(bar, main.firstChild);
-  }
-  bar.innerHTML = `
-    <span style="font-weight:700">⚠️ 데이터 연결 실패</span>
-    <span style="color:#fca5a5">${hintText}</span>
-    <span style="color:#94a3b8;font-size:11.5px;margin-left:auto">현재 시트 ID: ${CONFIG.spreadsheetId.slice(0,10)}…</span>
-    <button onclick="_resetConfigAndReload()" style="background:#7f1d1d;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;font-weight:600">🔄 설정 초기화 후 재시도</button>
-    <button onclick="openSetup()" style="background:transparent;color:#fca5a5;border:1px solid #7f1d1d;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer">⚙ 직접 설정</button>
-  `;
-}
-
-// localStorage의 시트/API/스크립트 설정값을 모두 지우고 재로드
-function _resetConfigAndReload() {
-  try {
-    localStorage.removeItem('3pl_sheet_id');
-    localStorage.removeItem('3pl_api_key');
-    localStorage.removeItem('3pl_script_url');
-    localStorage.removeItem('3pl_config_version');
-  } catch (_) {}
-  location.reload();
 }
 
 function boot() {
