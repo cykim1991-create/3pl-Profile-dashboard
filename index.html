@@ -740,11 +740,18 @@ const CONFIG = {
 // Google OAuth (GIS Token Model)
 // ═══════════════════════════════════════════════════
 const OAUTH_CLIENT_ID = '210806485129-9u0lfm2ceh8cmm1rjftvbs8kp27lf2a3.apps.googleusercontent.com';
-const LS_TOKEN_KEY = '3pl_oauth_token_v1';
-let gsiTokenClient = null;
-let gsiAccessToken = null;
-let gsiTokenExpiry  = 0;
-let gsiUserName     = '';
+const LS_TOKEN_KEY   = '3pl_oauth_token_v1';
+const LS_SESSION_KEY = '3pl_oauth_session_v1';
+// 세션 유효시간 — Google access token 자체는 1시간 한도이지만,
+// 그 안에서 만료 직전에 silent reauth (prompt:'') 로 자동 갱신하여
+// 사용자 체감 세션을 SESSION_TIMEOUT_MS 만큼 유지.
+const SESSION_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3시간
+let gsiTokenClient   = null;
+let gsiAccessToken   = null;
+let gsiTokenExpiry   = 0;
+let gsiSessionExpiry = 0;
+let gsiUserName      = '';
+let _silentRefreshTimer = null;
 
 // ── OAuth 토큰 localStorage 캐시 (새로고침 시 자동 복원) ─────────
 // 주의: 토큰은 평문으로 저장됨. 1시간 수명이지만 공용 PC에서는 로그아웃 권장
@@ -774,6 +781,45 @@ function _clearOAuthStorage() {
   try { localStorage.removeItem(LS_TOKEN_KEY); } catch (_) {}
 }
 
+// ── 3시간 세션 만료 캐시 (탭/새로고침 간 유지) ───────────────────
+function _saveSessionExpiry() {
+  try {
+    if (gsiSessionExpiry > Date.now()) {
+      localStorage.setItem(LS_SESSION_KEY, String(gsiSessionExpiry));
+    }
+  } catch (_) {}
+}
+function _loadSessionExpiry() {
+  try {
+    const s = localStorage.getItem(LS_SESSION_KEY);
+    if (!s) return 0;
+    const n = Number(s);
+    return (n && n > Date.now()) ? n : 0;
+  } catch (_) { return 0; }
+}
+function _clearSessionExpiry() {
+  try { localStorage.removeItem(LS_SESSION_KEY); } catch (_) {}
+}
+
+// access token 만료 ~30초 전에 silent reauth 예약.
+// 세션 만료 이후로는 더 이상 자동 갱신 안함 (수동 로그인 필요).
+function _scheduleSilentRefresh() {
+  if (_silentRefreshTimer) { clearTimeout(_silentRefreshTimer); _silentRefreshTimer = null; }
+  if (!gsiTokenExpiry || !gsiSessionExpiry) return;
+  if (Date.now() >= gsiSessionExpiry) return;
+  const refreshAt = gsiTokenExpiry - 30 * 1000; // 만료 30초 전
+  const delay = Math.max(1000, refreshAt - Date.now());
+  if (Date.now() + delay >= gsiSessionExpiry) return; // 갱신 시점이 세션 만료 이후 → 스킵
+  _silentRefreshTimer = setTimeout(() => {
+    if (Date.now() >= gsiSessionExpiry) return;
+    if (!gsiTokenClient) return;
+    try {
+      // prompt:'' → 사용자 동의 화면 없이 토큰 재발급 (Google 세션 유효한 경우)
+      gsiTokenClient.requestAccessToken({ prompt: '' });
+    } catch (_) {}
+  }, delay);
+}
+
 function initGSI() {
   if (typeof google === 'undefined' || !google.accounts) return;
   gsiTokenClient = google.accounts.oauth2.initTokenClient({
@@ -793,6 +839,13 @@ function initGSI() {
       }
       gsiAccessToken = resp.access_token;
       gsiTokenExpiry  = Date.now() + (resp.expires_in - 60) * 1000;
+      // 세션 만료 시각이 아직 없거나 이미 지났으면 → 새 3시간 세션 시작.
+      // 그렇지 않으면 기존 세션 만료 시각 유지 (silent refresh가 호출된 경우)
+      if (!gsiSessionExpiry || Date.now() >= gsiSessionExpiry) {
+        gsiSessionExpiry = Date.now() + SESSION_TIMEOUT_MS;
+      }
+      _saveSessionExpiry();
+      _scheduleSilentRefresh();
       updateGsiBtn(true);
       _saveOAuthToStorage(); // 새로고침 시 복원할 수 있도록 캐시
       // 사용자 이름 가져오기 (캐시도 같이 갱신)
@@ -869,8 +922,11 @@ function gsiLogin() {
     // 이미 로그인됨 → 로그아웃 후 로그인 게이트로 복귀
     google.accounts.oauth2.revoke(gsiAccessToken, () => {});
     gsiAccessToken = null; gsiTokenExpiry = 0;
+    gsiSessionExpiry = 0;
     gsiUserName = '';
     _clearOAuthStorage();
+    _clearSessionExpiry();
+    if (_silentRefreshTimer) { clearTimeout(_silentRefreshTimer); _silentRefreshTimer = null; }
     updateGsiBtn(false);
     if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
     showToast('로그아웃됨');
@@ -5111,12 +5167,21 @@ function showToast(msg) {
 
 // 페이지 로드 시 — 캐시된 OAuth 토큰이 유효하면 자동 복원, 아니면 로그인 게이트
 window.addEventListener('load', () => {
-  const cached = _loadOAuthFromStorage();
+  const cached     = _loadOAuthFromStorage();
+  const sessionExp = _loadSessionExpiry();
   if (cached) {
-    gsiAccessToken = cached.token;
-    gsiTokenExpiry = cached.expiry;
-    gsiUserName    = cached.name || '';
+    gsiAccessToken   = cached.token;
+    gsiTokenExpiry   = cached.expiry;
+    gsiUserName      = cached.name || '';
+    gsiSessionExpiry = sessionExp; // 0이어도 OK — 만료된 세션이면 silent refresh 안 함
     updateGsiBtn(true);
+    // GIS 라이브러리가 준비된 뒤 silent refresh 예약 (라이브러리가 로딩 안 됐으면 잠시 대기)
+    if (gsiSessionExpiry > Date.now()) {
+      const waitGSI = setInterval(() => {
+        if (gsiTokenClient) { clearInterval(waitGSI); _scheduleSilentRefresh(); }
+      }, 300);
+      setTimeout(() => clearInterval(waitGSI), 6000);
+    }
     document.getElementById('loginGate').style.display = 'none';
     document.getElementById('loading').style.display = 'flex';
     init();
