@@ -665,10 +665,28 @@ textarea.form-input{resize:vertical;min-height:60px}
 // ═══════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════
+// ── 모든 사용자에 동일하게 적용되는 기본 연결값 (영업파트 배포용 — 하드코딩) ──
+const DEFAULT_SHEET_ID   = '1jKyC_vmQ_fwaADCV_9J8g_Pok_QieX-rU0vYBwaSSUY';
+const DEFAULT_API_KEY    = 'AIzaSyDa-zT47hYhBOxgbIBDFZ_iS2HIxuJ3Vzw';
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEjXO_oHuYEL326LBmai7D8sVKXBJ0WRn8otgcIg8soTXI1cAuRC1MA6ISX3rqFdyJ/exec';
+// 기존 사용자의 stale localStorage 값을 새 기본값으로 마이그레이션 (1회성)
+// 새 시트로 전환할 때마다 CONFIG_VERSION을 올리면 모든 PC에서 자동 초기화됨
+(function _migrateConfig() {
+  const CONFIG_VERSION = '2026-05-1';
+  try {
+    if (localStorage.getItem('3pl_config_version') !== CONFIG_VERSION) {
+      localStorage.removeItem('3pl_sheet_id');
+      localStorage.removeItem('3pl_api_key');
+      localStorage.removeItem('3pl_script_url');
+      localStorage.setItem('3pl_config_version', CONFIG_VERSION);
+    }
+  } catch (_) {}
+})();
+// ⚙ 연결 설정에서 사용자가 직접 바꾸면 localStorage 값이 기본값보다 우선
 const CONFIG = {
-  get spreadsheetId(){ return localStorage.getItem('3pl_sheet_id')    || '1H9Yy0NLkUbftU8kx3g3SfLgzQXuUzVDecTgEm9OZbKk'; },
-  get apiKey()       { return localStorage.getItem('3pl_api_key')     || 'AIzaSyDa-zT47hYhBOxgbIBDFZ_iS2HIxuJ3Vzw'; },
-  get scriptUrl()    { return localStorage.getItem('3pl_script_url')  || ''; },
+  get spreadsheetId(){ return localStorage.getItem('3pl_sheet_id')    || DEFAULT_SHEET_ID; },
+  get apiKey()       { return localStorage.getItem('3pl_api_key')     || DEFAULT_API_KEY; },
+  get scriptUrl()    { return localStorage.getItem('3pl_script_url')  || DEFAULT_SCRIPT_URL; },
   set spreadsheetId(v){ localStorage.setItem('3pl_sheet_id',   v); },
   set apiKey(v)      { localStorage.setItem('3pl_api_key',     v); },
   set scriptUrl(v)   { localStorage.setItem('3pl_script_url',  v); },
