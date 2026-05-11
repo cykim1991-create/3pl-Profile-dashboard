@@ -541,7 +541,7 @@ textarea.form-input{resize:vertical;min-height:60px}
             style="min-width:260px;padding:6px 12px;font-size:12.5px"
           />
           <div id="grade-chip-perfList" style="display:inline-block"></div>
-          <button class="btn btn-ghost btn-sm" onclick="filterRiskOnly()" title="수락률 80% 미만 또는 달성슬롯수 4개 미만">⚠️ 위험만</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterRiskOnly()" title="수락률 75% 미만 또는 달성슬롯수 4개 미만">⚠️ 위험만</button>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('perfList')" title="정렬/필터 모두 해제">↻ 초기화</button>
           <span id="perf-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
         </div>
@@ -2520,7 +2520,7 @@ function renderRealtime() {
   const slotPhase = _getSlotPhase();      // 현재 시각 기준 4슬롯 진행 상태
   // 행 위험 표시 기준 — SLA < 80%  OR  이미 종료된 슬롯의 달성률 < 100%
   const isRowRisk = (r) => {
-    if (r.slaRaw !== null && r.slaRaw < 80) return true;
+    if (r.slaRaw !== null && r.slaRaw < 75) return true;
     const sets = Number(r.setsN) || 0;
     if (!sets) return false;
     const checks = [
@@ -2613,10 +2613,10 @@ function _achColor(pct) {
   return '#f87171';
 }
 
-// SLA 수락률 색상 (≥90% 초록, ≥80% 노랑, <80% 빨강)
+// SLA 수락률 색상 (≥80% 초록, ≥75% 노랑, <75% 빨강)
 function _slaColor(pct) {
-  if (pct >= 90) return '#4ade80';
-  if (pct >= 80) return '#fbbf24';
+  if (pct >= 80) return '#4ade80';
+  if (pct >= 75) return '#fbbf24';
   return '#f87171';
 }
 
@@ -3711,11 +3711,11 @@ function renderPerfList() {
   let recordsFiltered = records.filter(r => !r.empty && r.hasVolThisWeek);
 
   // ── 위험만 필터 (퍼포먼스 리스트 전용) ──
-  // 기준: prev.sla < 80% (수락률 80% 미만)  OR  prev.slotsAchieved < 4 (달성슬롯수 4개 미만)
+  // 기준: prev.sla < 75% (수락률 75% 미만)  OR  prev.slotsAchieved < 4 (달성슬롯수 4개 미만)
   if (riskOnlyMode) {
     recordsFiltered = recordsFiltered.filter(r => {
       if (!r.prev) return false;
-      const slaLow = (r.prev.sla != null) && (r.prev.sla < 80);
+      const slaLow = (r.prev.sla != null) && (r.prev.sla < 75);
       const slotsLow = (r.prev.slotsAchieved != null) && (r.prev.slotsAchieved < 4);
       return slaLow || slotsLow;
     });
