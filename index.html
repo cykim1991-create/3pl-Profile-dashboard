@@ -1916,13 +1916,15 @@ function closeBriefingModal() {
   document.getElementById('briefingModal').classList.remove('open');
 }
 
-// 데이터에서 사용 가능한 RGN2 목록 (정렬)
-// RGN2_일별지표 시트가 가장 권위 있는 RGN2 정의이므로 우선 사용
+// 영업 브리핑 — 사용 가능한 RGN2 목록
+// 메인 페이지 상단 RGN2 필터(populateRegionFilter)와 동일한 출처/정렬 규칙을 따름
+//   = 협력사기본정보 시트의 RGN2 컬럼(우선) 또는 권역명에서 추출된 값
 function _allRgn2List() {
   const set = new Set();
-  (STATE.rgn2Daily || []).forEach(r => { if (r.RGN2) set.add(r.RGN2); });
-  (STATE.kpi       || []).forEach(r => { const g = getRGN2(r['운영지역']); if (g && g !== '-') set.add(g); });
-  (STATE.partners  || []).forEach(p => { if (p['권역명']) set.add(getRGN2(p['권역명']) || p['권역명']); });
+  (STATE.partners || []).forEach(p => {
+    const v = getPartnerRgn2(p);
+    if (v && v !== '-') set.add(v);
+  });
   return [...set].sort();
 }
 
