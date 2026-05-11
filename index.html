@@ -1324,13 +1324,51 @@ async function init() {
     } else if (msg.includes('404')) {
       hint = 'Spreadsheet ID가 잘못되었거나 시트가 삭제됨';
     } else if (msg.includes('403')) {
-      hint = '시트 공개 설정 필요 (공유→링크가 있는 모든 사용자→뷰어)';
+      hint = '시트 공개 설정 필요 또는 API Key 권한 없음';
     } else if (msg.includes('400')) {
       hint = 'API 요청 형식 오류 — 탭 이름/범위 확인';
     }
     showToast(`⚠ API 실패: ${hint || msg}`);
-    console.error('API 연결 실패 상세:', e.message);
+    console.error('[3PL] API 연결 실패:', e);
+    console.log('[3PL] 현재 설정:', {
+      spreadsheetId: CONFIG.spreadsheetId,
+      apiKey: CONFIG.apiKey ? CONFIG.apiKey.substring(0,12) + '...' : '(empty)',
+      scriptUrl: CONFIG.scriptUrl,
+      configVersion: localStorage.getItem('3pl_config_version'),
+    });
+    // 화면 상단에 오류 패널 노출 — 사용자가 바로 보고 조치 가능
+    _showDataLoadErrorPanel(hint || msg);
   }
+}
+
+// 데이터 로드 실패 시 화면 상단에 오류 + 재설정 버튼 표시
+function _showDataLoadErrorPanel(hintText) {
+  let bar = document.getElementById('rt-data-err');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'rt-data-err';
+    bar.style.cssText = 'background:#2d0606;color:#f87171;border:1px solid #7f1d1d;border-radius:8px;padding:12px 16px;margin:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px';
+    const main = document.querySelector('.main');
+    if (main) main.insertBefore(bar, main.firstChild);
+  }
+  bar.innerHTML = `
+    <span style="font-weight:700">⚠️ 데이터 연결 실패</span>
+    <span style="color:#fca5a5">${hintText}</span>
+    <span style="color:#94a3b8;font-size:11.5px;margin-left:auto">현재 시트 ID: ${CONFIG.spreadsheetId.slice(0,10)}…</span>
+    <button onclick="_resetConfigAndReload()" style="background:#7f1d1d;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;font-weight:600">🔄 설정 초기화 후 재시도</button>
+    <button onclick="openSetup()" style="background:transparent;color:#fca5a5;border:1px solid #7f1d1d;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer">⚙ 직접 설정</button>
+  `;
+}
+
+// localStorage의 시트/API/스크립트 설정값을 모두 지우고 재로드
+function _resetConfigAndReload() {
+  try {
+    localStorage.removeItem('3pl_sheet_id');
+    localStorage.removeItem('3pl_api_key');
+    localStorage.removeItem('3pl_script_url');
+    localStorage.removeItem('3pl_config_version');
+  } catch (_) {}
+  location.reload();
 }
 
 function boot() {
