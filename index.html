@@ -2325,7 +2325,7 @@ function _briefingRemoveRegion(rgn2) {
 }
 
 // ── RGN2 × 날짜 단위 집계 ──
-// 1) RGN2 단위 지표(3PL처리비중/60분초과율/UTR/Total_DCPO/FL_라이더수/FL_DCPO)는
+// 1) RGN2 단위 지표(3PL처리비중/60분초과율/UTR/3pl_DCPO/FL_라이더수/FL_DCPO)는
 //    STATE.rgn2Daily에서 직접 lookup
 // 2) 운행라이더수(3PL)와 totalVol은 협력사 단위 시트(STATE.kpi)에서 RGN2 합산
 function _briefingAggregate(rgn2, dateStr) {
@@ -2365,9 +2365,9 @@ function _briefingAggregate(rgn2, dateStr) {
     sharePct:    rgn2Row ? rgn2Row['3PL처리비중']  : null,  // 0~1 비율 (null 가능)
     over60:      rgn2Row ? rgn2Row['60분초과율']  : 0,
     utr:         rgn2Row ? rgn2Row['UTR']          : 0,
-    totalDcpo:   rgn2Row ? rgn2Row['Total_DCPO']   : 0,
+    dcpo3pl:     rgn2Row ? rgn2Row['3pl_DCPO']     : 0,  // 3PL DCPO (표시값)
     flRiders:    rgn2Row ? rgn2Row['FL_라이더수']  : 0,
-    flDcpo:      rgn2Row ? rgn2Row['FL_DCPO']      : 0,
+    flDcpo:      rgn2Row ? rgn2Row['FL_DCPO']      : 0,  // FL DCPO (비교 기준값)
     totalVol:    sum(partnerRows, '총처리건수'),
     riders3pl:   riders3plVal,
   };
@@ -2421,10 +2421,10 @@ function _briefingBlockText(rgn2) {
   const shareDelta = (a.sharePct != null && b && b.sharePct != null)
     ? _bDeltaFmt(a.sharePct * 100, b.sharePct * 100, {pp:true, dec:1})
     : '';
-  // FL 대비 DCPO 차이 — 양수면 FL보다 비쌈 ▲, 음수면 FL보다 쌈 ▼
-  const dcpoGapTxt = (a.totalDcpo && a.flDcpo)
+  // FL 대비 3PL DCPO 차이 — 양수면 FL보다 비쌈 ▲, 음수면 FL보다 쌈 ▼
+  const dcpoGapTxt = (a.dcpo3pl && a.flDcpo)
     ? (() => {
-        const gap = a.totalDcpo - a.flDcpo;
+        const gap = a.dcpo3pl - a.flDcpo;
         const arrow = gap > 0 ? '▲' : '▼';
         return `(FL 대비 ${arrow}${Math.abs(Math.round(gap)).toLocaleString()}원)`;
       })()
@@ -2436,7 +2436,7 @@ function _briefingBlockText(rgn2) {
     `* 60분초과율: ${_bN(a.over60, {dec:1, unit:'%'})} ${b? _bDeltaFmt(a.over60, b.over60, {pp:true, dec:1}) : ''}`.trim(),
     `* UTR ${_bN(a.utr, {dec:1})} ${b? _bDeltaFmt(a.utr, b.utr, {dec:1}) : ''}`.trim(),
     `* 운행라이더수 FL/3PL ${_bN(a.flRiders)}명/${_bN(a.riders3pl)}명 ${b? `(${_bArrow(a.flRiders,b.flRiders,'명')}/${_bArrow(a.riders3pl,b.riders3pl,'명')})` : ''}`.trim(),
-    `* Total DCPO ${_bN(a.totalDcpo, {unit:'원'})} ${dcpoGapTxt}`,
+    `* 3PL DCPO ${_bN(a.dcpo3pl, {unit:'원'})} ${dcpoGapTxt}`,
   ].join('\n');
 }
 
@@ -2548,7 +2548,7 @@ function _renderBriefingRegionCard(rgn2, d1, d2) {
   const shareDelta = (a.sharePct != null && b && b.sharePct != null)
     ? _bDeltaFmt(a.sharePct * 100, b.sharePct * 100, {pp:true, dec:1})
     : '';
-  const dcpoGap = (a.totalDcpo && a.flDcpo) ? (a.totalDcpo - a.flDcpo) : null;
+  const dcpoGap = (a.dcpo3pl && a.flDcpo) ? (a.dcpo3pl - a.flDcpo) : null;
   const gapHtml = dcpoGap !== null
     ? `<span style="color:${dcpoGap>0?'#f87171':'#4ade80'};font-size:11px">FL 대비 ${dcpoGap>0?'▲':'▼'}${Math.abs(Math.round(dcpoGap)).toLocaleString()}원</span>`
     : `<span style="color:var(--text-muted);font-size:11px">FL 대비 -</span>`;
@@ -2568,7 +2568,7 @@ function _renderBriefingRegionCard(rgn2, d1, d2) {
       ${cell('UTR',         _bN(a.utr,{dec:1}),               b? _bDeltaFmt(a.utr,b.utr,{dec:1}) : '')}
       ${cell('운행라이더수 FL', _bN(a.flRiders)+'명',         b? _bArrow(a.flRiders,b.flRiders,'명') : '')}
       ${cell('운행라이더수 3PL',_bN(a.riders3pl)+'명',        b? _bArrow(a.riders3pl,b.riders3pl,'명') : '')}
-      ${cell('Total DCPO',  _bN(a.totalDcpo,{unit:'원'}),     gapHtml)}
+      ${cell('3PL DCPO',    _bN(a.dcpo3pl,{unit:'원'}),       gapHtml)}
     </div>
   </div>`;
 }
@@ -3213,7 +3213,7 @@ function _renderRgn2BriefingPanel(rgn2, elId) {
   const sharePct  = a.sharePct != null ? (a.sharePct * 100).toFixed(1) + '%' : '-';
   const shareDel  = (a.sharePct != null && b && b.sharePct != null)
     ? _bDeltaFmt(a.sharePct * 100, b.sharePct * 100, {pp:true, dec:1}) : '';
-  const dcpoGap = (a.totalDcpo && a.flDcpo) ? (a.totalDcpo - a.flDcpo) : null;
+  const dcpoGap = (a.dcpo3pl && a.flDcpo) ? (a.dcpo3pl - a.flDcpo) : null;
   const gapTxt = dcpoGap !== null
     ? `<span style="color:${dcpoGap>0?'#f87171':'#4ade80'}">${dcpoGap>0?'▲':'▼'}${Math.abs(Math.round(dcpoGap)).toLocaleString()}원</span>`
     : '<span style="color:var(--text-muted)">-</span>';
@@ -3232,7 +3232,7 @@ function _renderRgn2BriefingPanel(rgn2, elId) {
     ${cell('UTR',         _bN(a.utr,    {dec:1}),          b ? _bDeltaFmt(a.utr, b.utr, {dec:1}) : '')}
     ${cell('운행라이더 FL',  _bN(a.flRiders) + '명',     b ? _bArrow(a.flRiders,  b.flRiders,  '명') : '')}
     ${cell('운행라이더 3PL', _bN(a.riders3pl) + '명',    b ? _bArrow(a.riders3pl, b.riders3pl, '명') : '')}
-    ${cell('Total DCPO',  _bN(a.totalDcpo, {unit:'원'}), `FL 대비 ${gapTxt}`)}
+    ${cell('3PL DCPO',    _bN(a.dcpo3pl, {unit:'원'}),   `FL 대비 ${gapTxt}`)}
   `;
 }
 
