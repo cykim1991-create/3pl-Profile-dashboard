@@ -1989,15 +1989,15 @@ function _renderPartnerContactsSection(pid) {
     </tr>`;
   }).join('');
   return `
-    <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
+    <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px;display:flex;flex-direction:column;min-height:0">
       <div class="modal-section-title">📞 사장님 / 담당자 연락처
         <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">(${sorted.length}명)</span>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" style="max-height:420px;overflow-y:auto">
         <table class="data-table" style="width:100%;font-size:12.5px">
-          <thead><tr>
-            <th style="width:90px">구분</th>
-            <th style="width:130px">이름</th>
+          <thead style="position:sticky;top:0;background:var(--bg-section);z-index:1"><tr>
+            <th style="width:80px">구분</th>
+            <th style="width:120px">이름</th>
             <th>전화번호</th>
             <th>비즈회원 ID</th>
           </tr></thead>
@@ -2858,9 +2858,26 @@ function renderRealtime() {
   // 등급별 협력사 수 위젯 — D-1 운행 협력사 기준 ('all')
   _renderGradeSummary(all);
 
-  // 기준일 라벨 — 실시간 시트의 최신 part_date (보통 오늘)
+  // 기준일 라벨 — 실시간 시트의 최신 part_date (보통 오늘) + 최신 timestamp
   const el = document.getElementById('rt-date-label');
-  if (el) el.textContent = rtDate ? rtDate+' 기준' : '';
+  if (el) {
+    // 실시간 시트의 timestamp 컬럼에서 최신값 추출 (Date 객체/문자열 모두 대응)
+    let maxTs = null;
+    (STATE.realtimeKpi || []).forEach(r => {
+      const t = r['timestamp'];
+      if (!t) return;
+      const d = (t instanceof Date) ? t : new Date(t);
+      if (!isNaN(d.getTime()) && (!maxTs || d > maxTs)) maxTs = d;
+    });
+    const fmtTs = (d) => {
+      if (!d) return '';
+      const pad = n => String(n).padStart(2,'0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+    const datePart = rtDate ? `운행일 : ${rtDate}` : '';
+    const tsPart   = maxTs   ? `업데이트 : ${fmtTs(maxTs)}` : '';
+    el.textContent = [datePart, tsPart].filter(Boolean).join(' / ');
+  }
 
   // 위험만 필터는 협력사 퍼포먼스 탭 전용 — 실시간 운행현황에는 적용 X
   const tableSrc = all;
@@ -4727,11 +4744,14 @@ function _renderPartnerProfile(body, pid) {
   // ── 사장님/담당자 연락처 섹션 ──
   const contactsHtml = _renderPartnerContactsSection(pid);
 
-  // ── Profile 탭 본문 조립: 기본정보 + 연락처 + 활동로그 ──
+  // ── Profile 탭 본문 조립: (기본정보 | 연락처) 2-컬럼 → 활동 로그 ──
   body.innerHTML = `
-    <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
-      <div class="modal-section-title">기본 정보</div>
-      ${infoHtml}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
+        <div class="modal-section-title">기본 정보</div>
+        ${infoHtml}
+      </div>
+      ${contactsHtml}
     </div>
 
     <!-- 활동 로그 -->
@@ -4801,8 +4821,6 @@ function _renderPartnerProfile(body, pid) {
       <!-- 로그 목록 -->
       <div id="voc-log-list"></div>
     </div>
-
-    ${contactsHtml}
   `;
 
   // 로그 목록 렌더링
