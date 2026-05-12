@@ -407,7 +407,6 @@ textarea.form-input{resize:vertical;min-height:60px}
               style="font-size:11px">🔄 필터 초기화</button>
       <button class="btn btn-primary btn-sm" onclick="openBriefingModal()" title="아침 영업 브리핑 보고서 작성"
               style="font-size:11px">📝 영업 브리핑</button>
-      <button class="btn btn-ghost btn-sm" id="refreshBtn" onclick="refreshData()" title="새로고침">↻</button>
       <button class="btn btn-ghost btn-sm" id="themeToggleBtn" onclick="toggleTheme()" title="라이트/다크 모드 전환">☀️</button>
       <button class="btn btn-sm" id="gsiBtn" onclick="gsiLogin()" style="background:var(--accent-bg);color:var(--text-secondary);border:1px solid var(--border);font-size:11px">🔑 로그인</button>
     </div>
@@ -2579,24 +2578,13 @@ function renderRealtime() {
   _renderGradeChip('realtime');
   _updateSortIndicators('realtime', _RT_SORT_KEYS);
 
-  // 전일(D-1) 운행 이력이 있는 협력사만 노출 — 전일 데이터 없는 협력사는 제외
-  const _dayWin = _getPrevDayWindow();
-  const _d1 = _dayWin ? _dayWin.prev.start : null;
-  const _hasD1Op = (pid, name) => {
-    if (!_d1) return true;
-    return (STATE.kpi || []).some(r => {
-      if (r['일자'] !== _d1) return false;
-      if (Number(r['총처리건수']||0) < 1) return false;
-      return r['협력사ID'] === pid || (name && r['협력사명'] === name);
-    });
-  };
-  // KPI 카드용: 상단 RGN2 필터만 적용된 'filtered' 사용 (위험만 토글의 영향 X)
-  //   + 전일 운행 이력이 있는 협력사만 합산 대상에 포함
-  const all = (filtered || []).filter(p => _hasD1Op(p['협력사ID'], p['협력사명']));
-  const realtimeKPIs = all.map(p => getRealtimeKPI(p['협력사ID'])).filter(Boolean);
+  // 합산 대상: 전일(D-1) 운행 이력이 있는 협력사만 — 공통 헬퍼 사용
+  // (현재 상단 RGN2/담당자 필터가 적용된 'filtered' 기준으로 추가 정제)
+  const { list: all, d1 } = _filterD1OpPartners(filtered || []);
+  const setText = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
 
-  // 실시간 시트(STATE.realtimeKpi) raw row — '오늘 스냅샷'.
-  // 운행 라이더 / 계약중 라이더 / 신청 세트수는 daily(어제) fallback 없이 raw 값만 사용.
+  // 데이터 소스: 실시간운영현황(STATE.realtimeKpi)의 raw row.
+  // 데일리(어제) fallback 사용하지 않음 — 실시간 시트의 현재 스냅샷만 합산.
   const rtById   = new Map();
   const rtByName = new Map();
   (STATE.realtimeKpi || []).forEach(rt => {
@@ -2616,34 +2604,45 @@ function renderRealtime() {
   };
   const rtRows = all.map(_rtRow).filter(Boolean);
 
-  const totalDel  = realtimeKPIs.reduce((s,k) => s+Number(k['총처리건수']||0), 0);
-  const totalAct  = rtRows.reduce((s,r) =>
+  // 카드 5종 — 모두 실시간 시트 raw row 기준 합산
+  const totalDel = rtRows.reduce((s,r) =>
+    s + _rtNum(r, ['총처리건수','total_complete','complete_count_total']), 0);
+  const totalAct = rtRows.reduce((s,r) =>
     s + _rtNum(r, ['active_rider','running_rider','active_rider_count','operating_rider','운행라이더수']), 0);
   const totalJoin = rtRows.reduce((s,r) =>
     s + _rtNum(r, ['commit_rider','contract_rider','contracted_rider','commit_rider_count','계약중라이더수','가입라이더수']), 0);
   const totalSets = rtRows.reduce((s,r) =>
     s + _rtNum(r, ['commit_sets','신청세트수','세트수']), 0);
-  const slaVals   = realtimeKPIs.map(k => {
-    const v = k['SLA_수락률(%)'] !== undefined ? Number(k['SLA_수락률(%)']) : Number(k['SLA수락률(%)']||0)*100;
-    return v;
-  }).filter(v => v > 0);
-  const avgSLA    = slaVals.length ? slaVals.reduce((a,b)=>a+b,0)/slaVals.length : 0;
 
-  document.getElementById('rt-delivery').textContent = totalDel.toLocaleString()+'건';
-  document.getElementById('rt-delivery-sub').textContent = `${all.length}개 협력사 합산`;
-  document.getElementById('rt-riders').textContent = totalAct.toLocaleString()+'명';
-  document.getElementById('rt-riders-sub').textContent = totalJoin ? `계약 ${totalJoin.toLocaleString()}명 중 운행` : '운행 라이더 합산';
-  document.getElementById('rt-sla').textContent = avgSLA.toFixed(1)+'%';
-  document.getElementById('rt-sets').textContent = totalSets.toLocaleString()+'세트';
+  // SLA — 실시간 시트 row 기준. 처리건수 가중평균.
+  let slaWeightSum = 0, slaWeightTot = 0;
+  rtRows.forEach(r => {
+    const tv = _rtNum(r, ['총처리건수','total_complete','complete_count_total']);
+    const slaCand = r['SLA_수락률(%)'] !== undefined
+      ? Number(r['SLA_수락률(%)'])
+      : (r['SLA수락률(%)'] !== undefined ? Number(r['SLA수락률(%)']) * 100
+      : (r['sla_acceptance_rate'] !== undefined ? Number(r['sla_acceptance_rate'])
+      : 0));
+    const sla = isNaN(slaCand) ? 0 : slaCand;
+    if (sla > 0 && tv > 0) { slaWeightSum += sla * tv; slaWeightTot += tv; }
+  });
+  const avgSLA = slaWeightTot > 0 ? slaWeightSum / slaWeightTot : 0;
+
+  setText('rt-delivery',     totalDel ? totalDel.toLocaleString()+'건' : '-');
+  setText('rt-delivery-sub', `${all.length}개 협력사 합산`);
+  setText('rt-riders',       totalAct ? totalAct.toLocaleString()+'명' : '-');
+  setText('rt-riders-sub',   totalJoin ? `계약 ${totalJoin.toLocaleString()}명 중 운행` : '운행 라이더 합산');
+  setText('rt-sla',          avgSLA ? avgSLA.toFixed(1)+'%' : '-');
+  setText('rt-sets',         totalSets ? totalSets.toLocaleString()+'세트' : '-');
 
   // RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위)
   _renderRgn2BriefingPanel(currentRegionFilter, 'rt-rgn2-briefing');
-  // 등급별 협력사 수 위젯 — 현재 RGN2/담당자 필터 적용된 'all' 기준
+  // 등급별 협력사 수 위젯 — D-1 운행 협력사 기준 ('all')
   _renderGradeSummary(all);
 
-  const dates = realtimeKPIs.map(k=>k['일자']||k['주차시작일']).filter(Boolean).sort().reverse();
+  // 기준일 라벨 — D-1
   const el = document.getElementById('rt-date-label');
-  if (el && dates.length) el.textContent = dates[0]+' 기준';
+  if (el) el.textContent = d1 ? d1+' 기준' : '';
 
   // 위험만 필터는 협력사 퍼포먼스 탭 전용 — 실시간 운행현황에는 적용 X
   const tableSrc = all;
@@ -2981,34 +2980,46 @@ function _bindSortHandlers() {
 }
 
 // 협력사 퍼포먼스 상단 KPI + 등급 위젯
-//   전일(_getPrevDayWindow().prev) 기준 합계로 카드 4개 채움
+// 데이터 소스: 데일리운영현황(STATE.kpi)의 전일(D-1) row
+// 합산 대상: 전일 운행 이력이 있는 협력사(총처리건수 ≥ 1)만
 function _renderPerfTopSummary(partnerList) {
-  const list = partnerList || [];
-  const win = _getPrevDayWindow();
-  const prevStart = win ? win.prev.start : null;
-  const prevEnd   = win ? win.prev.end   : null;
+  const { list: opList, d1 } = _filterD1OpPartners(partnerList);
+  const setEl = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+
+  if (!d1 || !opList.length) {
+    setEl('perf-delivery', '-');
+    setEl('perf-delivery-sub', '0개 협력사 합산');
+    setEl('perf-riders', '-');
+    setEl('perf-riders-sub', '운행 라이더 합산');
+    setEl('perf-sla', '-');
+    setEl('perf-sets', '-');
+    _renderRgn2BriefingPanel(currentRegionFilter, 'perf-rgn2-briefing');
+    _renderGradeSummary(opList, 'perf-grade-summary');
+    const label = document.getElementById('perf-date-label');
+    if (label) label.textContent = d1 ? `${d1} 기준` : '';
+    return;
+  }
+
+  // 전일(D-1) 행만 골라 합산
+  const pidSet  = new Set(opList.map(p => p['협력사ID']));
+  const nameSet = new Set(opList.map(p => p['협력사명']).filter(Boolean));
   let totalDel = 0, totalAct = 0, totalJoin = 0, totalSets = 0;
   let slaWeightSum = 0, slaWeightTot = 0;
-  list.forEach(p => {
-    if (!prevStart) return;
-    const hist = getKPIHistory(p['협력사ID']);
-    hist.forEach(r => {
-      const d = _kpiDateOf(r);
-      if (!d || d < prevStart || d > prevEnd) return;
-      const tv = Number(r['총처리건수']||0);
-      totalDel  += tv;
-      totalAct  += Number(r['운행라이더수']||0);
-      totalJoin += Number(r['계약중라이더수']||r['가입라이더수']||0);
-      totalSets += Number(r['신청세트수']||r['세트수']||0);
-      const sla = _slaOf(r);
-      if (sla > 0 && tv > 0) { slaWeightSum += sla * tv; slaWeightTot += tv; }
-    });
+  (STATE.kpi || []).forEach(r => {
+    if (r['일자'] !== d1) return;
+    if (!pidSet.has(r['협력사ID']) && !(r['협력사명'] && nameSet.has(r['협력사명']))) return;
+    const tv = Number(r['총처리건수']||0);
+    totalDel  += tv;
+    totalAct  += Number(r['운행라이더수']||0);
+    totalJoin += Number(r['계약중라이더수']||r['가입라이더수']||0);
+    totalSets += Number(r['신청세트수']||r['세트수']||0);
+    const sla = _slaOf(r);
+    if (sla > 0 && tv > 0) { slaWeightSum += sla * tv; slaWeightTot += tv; }
   });
   const avgSLA = slaWeightTot > 0 ? slaWeightSum / slaWeightTot : 0;
-  const fmt = n => (n ? Math.round(n).toLocaleString() : '-');
-  const setEl = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+
   setEl('perf-delivery',     totalDel ? totalDel.toLocaleString()+'건' : '-');
-  setEl('perf-delivery-sub', `${list.length.toLocaleString()}개 협력사 합산`);
+  setEl('perf-delivery-sub', `${opList.length.toLocaleString()}개 협력사 합산`);
   setEl('perf-riders',       totalAct ? totalAct.toLocaleString()+'명' : '-');
   setEl('perf-riders-sub',   totalJoin ? `계약 ${totalJoin.toLocaleString()}명 중 운행` : '운행 라이더 합산');
   setEl('perf-sla',          avgSLA ? avgSLA.toFixed(1)+'%' : '-');
@@ -3016,12 +3027,12 @@ function _renderPerfTopSummary(partnerList) {
 
   // RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위)
   _renderRgn2BriefingPanel(currentRegionFilter, 'perf-rgn2-briefing');
-  // 등급별 협력사 수
-  _renderGradeSummary(list, 'perf-grade-summary');
+  // 등급별 협력사 수 — D-1 운행 협력사 기준
+  _renderGradeSummary(opList, 'perf-grade-summary');
 
-  // 기준일 라벨도 갱신
+  // 기준일 라벨
   const label = document.getElementById('perf-date-label');
-  if (label && win) label.textContent = `${win.prev.start} 기준`;
+  if (label) label.textContent = `${d1} 기준`;
 }
 
 // RGN2 필터 선택 시 — 영업 브리핑 핵심 지표를 인라인 패널로 노출
@@ -3431,6 +3442,27 @@ function _getPrevDayWindow() {
     prior:     { start: _fmtDate(baseTs - 2*_DAY_MS), end: _fmtDate(baseTs - 2*_DAY_MS) },
     priorWeek: { start: _fmtDate(baseTs - 8*_DAY_MS), end: _fmtDate(baseTs - 8*_DAY_MS) },
   };
+}
+
+// ── 공통 헬퍼: 전일(D-1) 운행 이력이 있는 협력사 필터 ──
+// 데일리운영현황(STATE.kpi)의 D-1 일자에서 총처리건수 ≥ 1인 행을 가진 협력사만 통과.
+// 두 view(협력사 퍼포먼스, 실시간 운행현황) 모두 동일 필터 기준 적용.
+function _filterD1OpPartners(partnerList) {
+  const win = _getPrevDayWindow();
+  if (!win) return { list: [], d1: null };
+  const d1 = win.prev.start;
+  const opPids = new Set();
+  const opNames = new Set();
+  (STATE.kpi || []).forEach(r => {
+    if (r['일자'] !== d1) return;
+    if (Number(r['총처리건수']||0) < 1) return;
+    if (r['협력사ID']) opPids.add(r['협력사ID']);
+    if (r['협력사명']) opNames.add(r['협력사명']);
+  });
+  const list = (partnerList || []).filter(p =>
+    opPids.has(p['협력사ID']) || (p['협력사명'] && opNames.has(p['협력사명']))
+  );
+  return { list, d1 };
 }
 
 // ═══════════════════════════════════════════════════════════
