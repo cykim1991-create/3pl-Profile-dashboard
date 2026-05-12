@@ -1066,6 +1066,86 @@ async function writeLogWithOAuth(log) {
   }
 }
 
+// ── 시트 탭별 sheetId(gid) 캐시 ────────────────────────────
+// batchUpdate.deleteDimension 호출 시 필요. 처음 사용될 때 1번만 메타데이터 가져옴.
+const _sheetGidCache = {};
+async function _getSheetGid(tabName) {
+  if (_sheetGidCache[tabName] !== undefined) return _sheetGidCache[tabName];
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) return null;
+  try {
+    // fields로 sheets.properties만 가져와서 가볍게
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}?fields=sheets.properties(sheetId,title)`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${gsiAccessToken}` } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    (data.sheets || []).forEach(s => {
+      const t = s.properties && s.properties.title;
+      const id = s.properties && s.properties.sheetId;
+      if (t != null && id != null) _sheetGidCache[t] = id;
+    });
+    return _sheetGidCache[tabName] != null ? _sheetGidCache[tabName] : null;
+  } catch (_) { return null; }
+}
+
+// ── 시트 로그 삭제 (행 삭제) ──────────────────────────────
+// 로그ID로 STATE.logs의 인덱스를 찾고 → 실제 시트 행 번호 = 4 + idx (1-based: row1=제목, row2=헤더, row3=가이드)
+// batchUpdate.deleteDimension 으로 행 자체를 제거 (빈 행 남기지 않음)
+async function deleteSheetLogWithOAuth(logId) {
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) {
+    _lastOAuthWriteError = '로그인 필요 — 액세스 토큰 만료';
+    return false;
+  }
+  const idx = (STATE.logs || []).findIndex(v => v['로그ID'] === logId);
+  if (idx < 0) {
+    _lastOAuthWriteError = '시트에서 해당 로그ID를 찾지 못함';
+    return false;
+  }
+  const sheetRow0 = 3 + idx; // 0-based row index (시트 1-based 4 → 0-based 3)
+  const gid = await _getSheetGid('활동로그');
+  if (gid == null) {
+    _lastOAuthWriteError = "'활동로그' 시트 메타데이터를 가져올 수 없음";
+    return false;
+  }
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}:batchUpdate`;
+  const body = {
+    requests: [{
+      deleteDimension: {
+        range: {
+          sheetId: gid,
+          dimension: 'ROWS',
+          startIndex: sheetRow0,
+          endIndex:   sheetRow0 + 1,
+        }
+      }
+    }]
+  };
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      const apiMsg  = errBody?.error?.message || res.statusText || `HTTP ${res.status}`;
+      _lastOAuthWriteError = `[${res.status}] ${apiMsg}`;
+      console.error('OAuth 시트 삭제 실패:', _lastOAuthWriteError, errBody);
+      if (res.status === 401) {
+        gsiAccessToken = null; gsiTokenExpiry = 0;
+        _clearOAuthStorage();
+        updateGsiBtn(false);
+      }
+      return false;
+    }
+    _lastOAuthWriteError = '';
+    return true;
+  } catch (e) {
+    _lastOAuthWriteError = '네트워크 오류: ' + (e?.message || e);
+    console.error('OAuth delete 예외:', e);
+    return false;
+  }
+}
+
 // 활동로그 시트의 기존 행을 in-place 업데이트 (로그ID로 행 번호 찾기)
 // updates: { type, date, method, person, summary, action, status }
 async function updateSheetLogWithOAuth(logId, updates) {
@@ -4921,7 +5001,7 @@ function renderVOCLogItem(v, pid) {
     ${v.action?`<div class="voc-log-action">→ ${v.action}</div>`:''}
     <div class="voc-log-controls">
       <button class="btn btn-ghost btn-sm" onclick="toggleVOCEdit('${v._id}')">수정</button>
-      ${v._src==='local'?`<button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="deleteVOCItem('${v._id}','${pid}')">삭제</button>`:''}
+      <button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="deleteVOCItem('${v._id}','${pid}','${v._src}')">삭제</button>
     </div>
     <div class="voc-edit-area" id="vocedit-${v._id}" data-src="${v._src}">
       <div class="form-row">
@@ -5127,11 +5207,31 @@ async function saveVOCEdit(id, pid) {
   }
 }
 
-function deleteVOCItem(id, pid) {
+async function deleteVOCItem(id, pid, src) {
   if (!confirm('이 로그를 삭제하시겠습니까?')) return;
-  deleteLocalLog(id);
-  showToast('삭제됨');
-  renderVOCList(pid);
+  // src 미지정 시 STATE.logs 에서 찾아 자동 판별 (하위 호환)
+  if (!src) {
+    src = (STATE.logs || []).some(v => v['로그ID'] === id) ? 'sheets' : 'local';
+  }
+  if (src === 'local') {
+    deleteLocalLog(id);
+    showToast('✓ 삭제됨');
+    renderVOCList(pid);
+    return;
+  }
+  // 시트 로그 삭제 — OAuth로 batchUpdate.deleteDimension
+  showToast('시트 삭제 중...');
+  const ok = await deleteSheetLogWithOAuth(id);
+  if (ok) {
+    // 캐시된 STATE.logs 에서도 즉시 제거 (UI 응답성)
+    STATE.logs = (STATE.logs || []).filter(v => v['로그ID'] !== id);
+    // 시트 새로고침 — 행 삭제로 인해 인덱스가 변경되므로 다시 가져오기
+    await refreshActivityLogs();
+    renderVOCList(pid);
+    showToast('✓ 시트에서 삭제됨');
+  } else {
+    showToast('⚠ 시트 삭제 실패 — ' + (_lastOAuthWriteError || '알 수 없는 오류'));
+  }
 }
 
 // ── 통합 협력사 모달 탭 전환 (Profile / 일자별 / 주차별) ──
