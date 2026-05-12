@@ -428,7 +428,7 @@ textarea.form-input{resize:vertical;min-height:60px}
         </div>
         <div class="kpi-card green">
           <div class="kpi-icon">🛵</div>
-          <div class="kpi-label">운행 라이더</div>
+          <div class="kpi-label">Active 라이더</div>
           <div class="kpi-value" id="rt-riders">-</div>
           <div class="kpi-sub" id="rt-riders-sub">계약 대비 운행</div>
         </div>
@@ -2578,9 +2578,9 @@ function renderRealtime() {
   _renderGradeChip('realtime');
   _updateSortIndicators('realtime', _RT_SORT_KEYS);
 
-  // 합산 대상: 전일(D-1) 운행 이력이 있는 협력사만 — 공통 헬퍼 사용
+  // 합산 대상: 실시간운행현황 시트에 등록된 협력사 = '오늘 운영 중인 협력사'
   // (현재 상단 RGN2/담당자 필터가 적용된 'filtered' 기준으로 추가 정제)
-  const { list: all, d1 } = _filterD1OpPartners(filtered || []);
+  const { list: all, date: rtDate } = _filterRealtimePartners(filtered || []);
   const setText = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
 
   // 데이터 소스: 실시간운영현황(STATE.realtimeKpi)의 raw row.
@@ -2640,9 +2640,9 @@ function renderRealtime() {
   // 등급별 협력사 수 위젯 — D-1 운행 협력사 기준 ('all')
   _renderGradeSummary(all);
 
-  // 기준일 라벨 — D-1
+  // 기준일 라벨 — 실시간 시트의 최신 part_date (보통 오늘)
   const el = document.getElementById('rt-date-label');
-  if (el) el.textContent = d1 ? d1+' 기준' : '';
+  if (el) el.textContent = rtDate ? rtDate+' 기준' : '';
 
   // 위험만 필터는 협력사 퍼포먼스 탭 전용 — 실시간 운행현황에는 적용 X
   const tableSrc = all;
@@ -3444,9 +3444,8 @@ function _getPrevDayWindow() {
   };
 }
 
-// ── 공통 헬퍼: 전일(D-1) 운행 이력이 있는 협력사 필터 ──
+// ── 공통 헬퍼 (협력사 퍼포먼스 view용): 전일(D-1) 운행 이력이 있는 협력사 필터 ──
 // 데일리운영현황(STATE.kpi)의 D-1 일자에서 총처리건수 ≥ 1인 행을 가진 협력사만 통과.
-// 두 view(협력사 퍼포먼스, 실시간 운행현황) 모두 동일 필터 기준 적용.
 function _filterD1OpPartners(partnerList) {
   const win = _getPrevDayWindow();
   if (!win) return { list: [], d1: null };
@@ -3463,6 +3462,25 @@ function _filterD1OpPartners(partnerList) {
     opPids.has(p['협력사ID']) || (p['협력사명'] && opNames.has(p['협력사명']))
   );
   return { list, d1 };
+}
+
+// ── 헬퍼 (실시간 운행현황 view용): 실시간 시트에 누적된 협력사 ──
+// 실시간운행현황(STATE.realtimeKpi)에 행이 존재하는 협력사 = '오늘 운영 중인 협력사'.
+// 협력사기본정보 master 기준으로 매칭(RGN2/담당자 필터를 적용할 수 있도록).
+function _filterRealtimePartners(partnerList) {
+  const rtIds   = new Set();
+  const rtNames = new Set();
+  (STATE.realtimeKpi || []).forEach(rt => {
+    if (rt['협력사ID']) rtIds.add(rt['협력사ID']);
+    if (rt['협력사명']) rtNames.add(rt['협력사명']);
+  });
+  const list = (partnerList || []).filter(p =>
+    rtIds.has(p['협력사ID']) || (p['협력사명'] && rtNames.has(p['협력사명']))
+  );
+  // 실시간 시트의 가장 최근 일자 (보통 오늘) — 라벨용
+  const dates = [...new Set((STATE.realtimeKpi || []).map(r => r['일자']).filter(Boolean))].sort();
+  const today = dates[dates.length - 1] || '';
+  return { list, date: today };
 }
 
 // ═══════════════════════════════════════════════════════════
