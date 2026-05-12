@@ -2348,6 +2348,19 @@ function _briefingAggregate(rgn2, dateStr) {
   // → 두 값 중 하나라도 있으면 집계 결과 반환
   if (!rgn2Row && !partnerRows.length) return null;
 
+  // 운행라이더수(3PL) — RGN2_일별지표 시트의 '3pl_라이더수' 컬럼이 source of truth.
+  // (DW에서 unique rider count로 집계되므로 협력사 단위 단순 합산과 다를 수 있음)
+  // 시트에 값이 없을 때만 협력사 단위 합산을 fallback으로 사용.
+  let riders3plVal = null;
+  if (rgn2Row) {
+    const sheetVal = rgn2Row['3pl_라이더수'] != null ? rgn2Row['3pl_라이더수'] : rgn2Row['3PL_라이더수'];
+    const n = Number(sheetVal);
+    if (!isNaN(n) && (sheetVal !== '' && sheetVal !== null && sheetVal !== undefined)) {
+      riders3plVal = n;
+    }
+  }
+  if (riders3plVal === null) riders3plVal = sum(partnerRows, '운행라이더수');
+
   return {
     sharePct:    rgn2Row ? rgn2Row['3PL처리비중']  : null,  // 0~1 비율 (null 가능)
     over60:      rgn2Row ? rgn2Row['60분초과율']  : 0,
@@ -2356,7 +2369,7 @@ function _briefingAggregate(rgn2, dateStr) {
     flRiders:    rgn2Row ? rgn2Row['FL_라이더수']  : 0,
     flDcpo:      rgn2Row ? rgn2Row['FL_DCPO']      : 0,
     totalVol:    sum(partnerRows, '총처리건수'),
-    riders3pl:   sum(partnerRows, '운행라이더수'),
+    riders3pl:   riders3plVal,
   };
 }
 
