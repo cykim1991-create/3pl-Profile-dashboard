@@ -397,9 +397,12 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="nav-btn" onclick="switchView('realtime',this)">📡 실시간 운행현황</button>
     </div>
     <div class="topbar-filters">
-      <select class="filter-select" id="regionFilter" onchange="onRegionFilterChange()">
-        <option value="">전체 RGN2</option>
-      </select>
+      <button class="filter-select" id="regionFilterBtn" onclick="openRegionFilterModal()"
+              style="cursor:pointer;text-align:left;display:inline-flex;align-items:center;gap:6px;min-width:140px"
+              title="지역(RGN2) 필터 — 도시별 다중 선택">
+        <span id="regionFilterLabel" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">전체 RGN2</span>
+        <span style="opacity:.55;font-size:10px">▾</span>
+      </button>
       <select class="filter-select" id="managerFilter" onchange="onManagerFilterChange()">
         <option value="">전체 담당자</option>
       </select>
@@ -612,6 +615,24 @@ textarea.form-input{resize:vertical;min-height:60px}
   </div>
 </div>
 
+<!-- 지역(RGN2) 필터 팝업 -->
+<div class="modal-overlay" id="regionFilterModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:820px;width:90vw">
+    <div class="modal-header">
+      <div class="modal-title">📍 지역 필터</div>
+      <button class="modal-close" onclick="closeRegionFilterModal()">✕</button>
+    </div>
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
+      <div id="regionFilterSummary" style="flex:1;font-size:12px;color:var(--text-secondary)">선택된 지역: <b style="color:var(--accent-soft)">0</b>개</div>
+      <button class="btn btn-ghost btn-sm" onclick="clearAllRegionSelection()" style="font-size:11px">전체 해제</button>
+    </div>
+    <div id="regionFilterBody" style="padding:14px 18px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-height:64vh;overflow-y:auto"></div>
+    <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="closeRegionFilterModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
 
 
 <!-- 통합 협력사 모달 (실시간 운행현황 + 협력사 퍼포먼스 양쪽에서 사용) -->
@@ -661,6 +682,9 @@ textarea.form-input{resize:vertical;min-height:60px}
 </div>
 
 <div id="toast"></div>
+
+<!-- 차트 호버 툴팁 (벌룬) — _chartVolumeSLA + _chartActiveRiders 공용 -->
+<div id="chartTooltip" style="position:fixed;display:none;pointer-events:none;z-index:10000;background:rgba(15,23,32,.96);color:#e8edf2;border:1px solid #2a3b50;border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.55;box-shadow:0 8px 24px rgba(0,0,0,.45);min-width:160px;backdrop-filter:blur(6px)"></div>
 
 <script>
 // ═══════════════════════════════════════════════════
@@ -1154,7 +1178,9 @@ function filterKPIRecent(kpi, weeks) {
 let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, tpl3Share:{}, rgn2Managers:{} };
 let filtered = [];
 let riskOnlyMode = false;
-let currentRegionFilter = '';
+// RGN2 필터 — 다중 선택 Set. 빈 Set = '전체 RGN2'(필터 미적용).
+// 하위 호환: 코드 다른 곳에서 'currentRegionFilter ? ... : null' 패턴을 위해 빈 Set 도 falsy 처럼 동작하게 _activeRgn2() 헬퍼 사용.
+let currentRegionFilter = new Set();
 
 const SAMPLE = {
   // 시스템 설정 (활성 키 없음 — 추후 확장용)
@@ -1503,30 +1529,42 @@ function startAutoRefresh() {
 // ═══════════════════════════════════════════════════
 // FILTERS
 // ═══════════════════════════════════════════════════
-function populateRegionFilter() {
-  // RGN2 드롭다운은 협력사기본정보 시트의 RGN2 컬럼에 직접 등록된 값만 노출
-  // (권역명·운영지역에서 자동 추출되는 폴백 값은 옵션에 포함하지 않음)
+// ── 사용 가능한 RGN2 목록 (협력사기본정보의 RGN2 컬럼만) ──
+function _availableRgn2List() {
   const set = new Set();
   (STATE.partners || []).forEach(p => {
     const v = (p['RGN2'] || '').toString().trim();
     if (v && v !== '-') set.add(v);
   });
-  const rgn2List = [...set].sort();
-  const sel = document.getElementById('regionFilter');
-  if (sel) {
-    // 자동 새로고침 시 사용자가 선택한 필터가 유지되도록 기존 값 보존
-    const prevVal = sel.value;
-    while (sel.options.length > 1) sel.remove(1);
-    if (sel.options[0]) sel.options[0].textContent = '전체 RGN2';
-    rgn2List.forEach(r => {
-      const o = document.createElement('option');
-      o.value = r;
-      o.textContent = r;
-      sel.appendChild(o);
-    });
-    // 이전 선택값이 새 옵션 목록에 여전히 존재하면 복원
-    if (prevVal && rgn2List.includes(prevVal)) sel.value = prevVal;
-  }
+  return [...set].sort();
+}
+
+// ── 도시 prefix 분류 ──
+// 정의된 그룹 외 RGN2는 '기타' 그룹으로
+const _CITY_GROUPS = [
+  { key: '서울특별시', label: '🏙️ 서울특별시', prefix: '서울특별시_' },
+  { key: '경기도',     label: '🏞️ 경기도',     prefix: '경기도_'     },
+  { key: '인천광역시', label: '🌊 인천광역시', prefix: '인천광역시_' },
+];
+
+function _groupRgn2ByCity(rgn2List) {
+  const groups = _CITY_GROUPS.map(g => ({ ...g, items: [] }));
+  const others = { key: '기타', label: '📌 기타', prefix: '', items: [] };
+  rgn2List.forEach(r => {
+    const g = groups.find(g => r.startsWith(g.prefix));
+    if (g) g.items.push(r);
+    else others.items.push(r);
+  });
+  // 기타는 항목 있을 때만 노출
+  return others.items.length ? [...groups, others] : groups;
+}
+
+function populateRegionFilter() {
+  // 팝업 본문은 모달 열릴 때 _renderRegionFilterModalBody() 에서 빌드.
+  // 여기서는 사용자가 이전에 선택한 RGN2 중 시트에서 사라진 항목을 정리.
+  const valid = new Set(_availableRgn2List());
+  [...currentRegionFilter].forEach(r => { if (!valid.has(r)) currentRegionFilter.delete(r); });
+  _updateRegionFilterBtnLabel();
 
   // 담당자 필터 — RGN2_담당자 매핑에서 unique 담당자 목록
   const mgrSel = document.getElementById('managerFilter');
@@ -1550,8 +1588,23 @@ function populateRegionFilter() {
   }
 }
 
+// 상단 필터 버튼 라벨 갱신 — Set 크기에 따라 표시
+function _updateRegionFilterBtnLabel() {
+  const lbl = document.getElementById('regionFilterLabel');
+  if (!lbl) return;
+  const size = currentRegionFilter.size;
+  if (size === 0) lbl.textContent = '전체 RGN2';
+  else if (size === 1) lbl.textContent = [...currentRegionFilter][0];
+  else lbl.textContent = `${size}개 지역 선택`;
+}
+
+// 코드 다른 곳에서 '단일 RGN2'를 기대하는 곳을 위한 헬퍼:
+// 정확히 1개 선택 시 그 RGN2 반환, 아니면 null. (브리핑 패널 등에 사용)
+function _activeSingleRgn2() {
+  return currentRegionFilter.size === 1 ? [...currentRegionFilter][0] : null;
+}
+
 function applyFilters() {
-  currentRegionFilter = document.getElementById('regionFilter').value;  // 이제 RGN2 값
   const mgrSel = document.getElementById('managerFilter');
   const currentManagerFilter = mgrSel ? mgrSel.value : '';
   // 담당자 필터 → 해당 담당자가 관리하는 RGN2 셋
@@ -1570,12 +1623,13 @@ function applyFilters() {
       const k = STATE.kpi.find(x => x['협력사ID'] === p['협력사ID'] || x['협력사명'] === p['협력사명']);
       if (k) partnerRgn2 = getPartnerRgn2(p, k);
     }
-    // RGN2 필터
-    if (currentRegionFilter && partnerRgn2 !== currentRegionFilter) return false;
+    // RGN2 필터 (다중 선택 — Set 비어있으면 통과)
+    if (currentRegionFilter.size > 0 && !currentRegionFilter.has(partnerRgn2)) return false;
     // 담당자 필터 — 담당자가 매핑된 RGN2 의 협력사만 통과
     if (mgrRgn2Set && !mgrRgn2Set.has(partnerRgn2)) return false;
     return true;
   });
+  _updateRegionFilterBtnLabel();
   renderRealtime();
   renderPerformance();
 }
@@ -1586,25 +1640,109 @@ function filterRiskOnly() {
 }
 
 // ── 상단 필터 핸들러 ──
-// RGN2 와 담당자 필터는 상호 배타적: 한쪽을 변경(값 선택/전체 복귀 모두)하면 다른 쪽은 항상 초기화
-function onRegionFilterChange() {
-  const mgrSel = document.getElementById('managerFilter');
-  if (mgrSel) mgrSel.value = '';
-  applyFilters();
-}
-
+// RGN2 와 담당자 필터는 상호 배타적: 한쪽을 변경하면 다른 쪽은 항상 초기화
 function onManagerFilterChange() {
-  const rgnSel = document.getElementById('regionFilter');
-  if (rgnSel) rgnSel.value = '';
+  // 담당자 필터를 건드리면 → RGN2 필터 전체 해제
+  currentRegionFilter.clear();
+  _updateRegionFilterBtnLabel();
   applyFilters();
 }
 
 // 필터 초기화 버튼 — RGN2/담당자 필터 모두 '전체'로 리셋
 function resetTopFilters() {
-  const rgnSel = document.getElementById('regionFilter');
+  currentRegionFilter.clear();
   const mgrSel = document.getElementById('managerFilter');
-  if (rgnSel) rgnSel.value = '';
   if (mgrSel) mgrSel.value = '';
+  _updateRegionFilterBtnLabel();
+  applyFilters();
+}
+
+// ═══════════════════════════════════════════════════
+// 지역(RGN2) 필터 팝업 모달
+// ═══════════════════════════════════════════════════
+function openRegionFilterModal() {
+  _renderRegionFilterModalBody();
+  document.getElementById('regionFilterModal').classList.add('open');
+}
+
+function closeRegionFilterModal() {
+  document.getElementById('regionFilterModal').classList.remove('open');
+}
+
+function _renderRegionFilterModalBody() {
+  const body = document.getElementById('regionFilterBody');
+  if (!body) return;
+  const rgn2List = _availableRgn2List();
+  const groups = _groupRgn2ByCity(rgn2List);
+  body.innerHTML = groups.map(g => {
+    const allChecked = g.items.length > 0 && g.items.every(r => currentRegionFilter.has(r));
+    const someChecked = g.items.some(r => currentRegionFilter.has(r));
+    const selCount = g.items.filter(r => currentRegionFilter.has(r)).length;
+    return `
+      <div style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:2px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--text-primary);cursor:pointer;flex:1">
+            <input type="checkbox"
+              ${allChecked ? 'checked' : ''}
+              ${someChecked && !allChecked ? 'data-indeterminate="1"' : ''}
+              onclick="_toggleRegionGroup('${g.key}', this.checked)">
+            ${g.label}
+          </label>
+          <span style="font-size:10.5px;color:var(--text-muted);font-weight:600">${selCount}/${g.items.length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;max-height:42vh;overflow-y:auto">
+          ${g.items.map(r => {
+            const checked = currentRegionFilter.has(r) ? 'checked' : '';
+            const short = r.replace(g.prefix, '');
+            return `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);padding:3px 4px;border-radius:4px;cursor:pointer" onmouseover="this.style.background='var(--bg-hover,rgba(255,255,255,.04))'" onmouseout="this.style.background='transparent'">
+              <input type="checkbox" ${checked} onclick="_toggleRegion('${r.replace(/'/g,"\\'")}', this.checked)">
+              <span>${short}</span>
+            </label>`;
+          }).join('') || '<div style="color:var(--text-muted);font-size:11px;padding:8px 4px">없음</div>'}
+        </div>
+      </div>`;
+  }).join('');
+  // 헤더 indeterminate 표시
+  body.querySelectorAll('input[data-indeterminate="1"]').forEach(el => { el.indeterminate = true; });
+  _updateRegionFilterSummary();
+}
+
+function _updateRegionFilterSummary() {
+  const summary = document.getElementById('regionFilterSummary');
+  if (!summary) return;
+  summary.innerHTML = `선택된 지역: <b style="color:var(--accent-soft)">${currentRegionFilter.size}</b>개`;
+}
+
+function _toggleRegion(rgn2, checked) {
+  if (checked) currentRegionFilter.add(rgn2);
+  else currentRegionFilter.delete(rgn2);
+  // RGN2 변경 시 담당자 필터 해제 (상호 배타)
+  const mgrSel = document.getElementById('managerFilter');
+  if (mgrSel && mgrSel.value) mgrSel.value = '';
+  _renderRegionFilterModalBody();   // 그룹 체크박스/카운트 갱신
+  applyFilters();
+}
+
+function _toggleRegionGroup(groupKey, checked) {
+  const grp = _CITY_GROUPS.find(g => g.key === groupKey);
+  const list = _availableRgn2List();
+  const items = grp
+    ? list.filter(r => r.startsWith(grp.prefix))
+    : list.filter(r => !_CITY_GROUPS.some(g => r.startsWith(g.prefix))); // '기타'
+  items.forEach(r => {
+    if (checked) currentRegionFilter.add(r);
+    else currentRegionFilter.delete(r);
+  });
+  // RGN2 변경 시 담당자 필터 해제
+  const mgrSel = document.getElementById('managerFilter');
+  if (mgrSel && mgrSel.value) mgrSel.value = '';
+  _renderRegionFilterModalBody();
+  applyFilters();
+}
+
+function clearAllRegionSelection() {
+  currentRegionFilter.clear();
+  _renderRegionFilterModalBody();
   applyFilters();
 }
 
@@ -2636,7 +2774,7 @@ function renderRealtime() {
   setText('rt-sets',         totalSets ? totalSets.toLocaleString()+'세트' : '-');
 
   // RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위)
-  _renderRgn2BriefingPanel(currentRegionFilter, 'rt-rgn2-briefing');
+  _renderRgn2BriefingPanel(_activeSingleRgn2(), 'rt-rgn2-briefing');
   // 등급별 협력사 수 위젯 — D-1 운행 협력사 기준 ('all')
   _renderGradeSummary(all);
 
@@ -2993,7 +3131,7 @@ function _renderPerfTopSummary(partnerList) {
     setEl('perf-riders-sub', '운행 라이더 합산');
     setEl('perf-sla', '-');
     setEl('perf-sets', '-');
-    _renderRgn2BriefingPanel(currentRegionFilter, 'perf-rgn2-briefing');
+    _renderRgn2BriefingPanel(_activeSingleRgn2(), 'perf-rgn2-briefing');
     _renderGradeSummary(opList, 'perf-grade-summary');
     const label = document.getElementById('perf-date-label');
     if (label) label.textContent = d1 ? `${d1} 기준` : '';
@@ -3026,7 +3164,7 @@ function _renderPerfTopSummary(partnerList) {
   setEl('perf-sets',         totalSets ? totalSets.toLocaleString()+'세트' : '-');
 
   // RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위)
-  _renderRgn2BriefingPanel(currentRegionFilter, 'perf-rgn2-briefing');
+  _renderRgn2BriefingPanel(_activeSingleRgn2(), 'perf-rgn2-briefing');
   // 등급별 협력사 수 — D-1 운행 협력사 기준
   _renderGradeSummary(opList, 'perf-grade-summary');
 
@@ -3511,6 +3649,94 @@ function _sparkline(values, color) {
   </svg>`;
 }
 
+// ═══════════════════════════════════════════════════════════
+// 차트 호버 툴팁 (벌룬) — _chartVolumeSLA + _chartActiveRiders 공용
+// ═══════════════════════════════════════════════════════════
+// 각 차트 페어 렌더 시 _registerChartHoverGroup(payload) 로 그룹ID 생성.
+// 차트 SVG 안에 보이지 않는 hover-zone <rect>를 인덱스마다 깔고
+// data-tt-group / data-tt-idx 로 인덱스를 식별. 마우스 hover 시
+// 글로벌 핸들러가 payload를 읽어 #chartTooltip 에 데이터 표시.
+window._chartHoverGroups = window._chartHoverGroups || {};
+let _chartHoverGroupSeq = 0;
+function _registerChartHoverGroup(payload) {
+  // payload: { labels[], vols[], slas[], ridersA[], ridersC[] }
+  // 메모리 누수 방지: 최근 12개만 유지 (모달 재진입 등으로 누적되는 것 정리)
+  const id = ++_chartHoverGroupSeq;
+  window._chartHoverGroups[id] = payload;
+  const keys = Object.keys(window._chartHoverGroups);
+  if (keys.length > 12) {
+    keys.slice(0, keys.length - 12).forEach(k => delete window._chartHoverGroups[k]);
+  }
+  return id;
+}
+
+// 차트 hover zones (보이지 않는 rect — 마우스 이벤트 영역)
+function _chartHoverZones(n, groupId, padL, padT, chartW, chartH) {
+  const colW = chartW / n;
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    const x = padL + i * colW;
+    out += `<rect x="${x}" y="${padT}" width="${colW}" height="${chartH}" fill="transparent" data-tt-group="${groupId}" data-tt-idx="${i}" pointer-events="all"/>`;
+  }
+  return out;
+}
+
+// 글로벌 mousemove/mouseleave 위임 — 한 번만 바인딩
+let _chartTooltipBound = false;
+function _bindChartTooltipHandlers() {
+  if (_chartTooltipBound) return;
+  _chartTooltipBound = true;
+  const tt = document.getElementById('chartTooltip');
+  if (!tt) return;
+  const fmt = (n, opts) => {
+    opts = opts || {};
+    if (n === null || n === undefined || isNaN(n)) return '-';
+    const d = opts.dec != null ? opts.dec : 0;
+    return Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
+  };
+  document.body.addEventListener('mousemove', (e) => {
+    const zone = e.target.closest && e.target.closest('[data-tt-group]');
+    if (!zone) {
+      if (tt.style.display !== 'none') tt.style.display = 'none';
+      return;
+    }
+    const grp = window._chartHoverGroups[zone.dataset.ttGroup];
+    if (!grp) { tt.style.display = 'none'; return; }
+    const i = +zone.dataset.ttIdx;
+    const label = (grp.labels || [])[i] || '-';
+    const vol   = (grp.vols   || [])[i];
+    const sla   = (grp.slas   || [])[i];
+    const aA    = (grp.ridersA|| [])[i];
+    const aC    = (grp.ridersC|| [])[i];
+    const ratio = (aC && aA != null) ? (aA/aC)*100 : null;
+    tt.innerHTML =
+      `<div style="font-weight:700;color:#fff;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:4px">${label}</div>` +
+      `<div style="display:grid;grid-template-columns:auto auto;gap:3px 14px">` +
+      `  <span style="color:#8fa3b8">처리건수</span><span style="color:#7aa8ff;font-weight:700;text-align:right">${vol != null ? fmt(vol)+'건' : '-'}</span>` +
+      `  <span style="color:#8fa3b8">수락률</span><span style="color:#fbbf24;font-weight:700;text-align:right">${sla != null ? fmt(sla,{dec:1})+'%' : '-'}</span>` +
+      `  <span style="color:#8fa3b8">Active 라이더</span><span style="color:#14b8a6;font-weight:700;text-align:right">${aA != null ? fmt(aA)+'명' : '-'}</span>` +
+      (aC ? `  <span style="color:#8fa3b8">계약 라이더</span><span style="color:#e8edf2;font-weight:600;text-align:right">${fmt(aC)}명</span>` : '') +
+      (ratio != null ? `  <span style="color:#8fa3b8">비중</span><span style="color:#facc15;font-weight:700;text-align:right">${fmt(ratio,{dec:0})}%</span>` : '') +
+      `</div>`;
+    // 위치 — 커서 우측 14px / 하단 12px. 화면 가장자리 처리.
+    const pad = 14;
+    let x = e.clientX + pad;
+    let y = e.clientY + pad;
+    const rect = tt.getBoundingClientRect();
+    if (x + (rect.width || 200) > window.innerWidth)  x = e.clientX - (rect.width || 200) - pad;
+    if (y + (rect.height || 100) > window.innerHeight) y = e.clientY - (rect.height || 100) - pad;
+    tt.style.left = x + 'px';
+    tt.style.top  = y + 'px';
+    tt.style.display = 'block';
+  }, true);
+  document.body.addEventListener('mouseleave', () => { tt.style.display = 'none'; });
+}
+// DOM ready 이후 바인딩 시도 (init 단계에서 호출되어도 OK)
+if (typeof window !== 'undefined') {
+  if (document.readyState !== 'loading') _bindChartTooltipHandlers();
+  else document.addEventListener('DOMContentLoaded', _bindChartTooltipHandlers);
+}
+
 // 공통 SVG 프레임 빌더
 function _svgFrame(title, w, h, inner) {
   const TC = _themeTextColors();
@@ -3554,8 +3780,8 @@ function _themeBgColors() {
 }
 
 // 바+라인 콤보 (처리건수 bar + 수락률 line)
-function _chartVolumeSLA(labels, volumes, slas, _unusedRiders) {
-  // riders 데이터는 이제 별도 차트(_chartActiveRiders)로 분리됨 — 호환을 위해 인자만 유지
+// 4번째 인자 hoverGroupId: 호버 툴팁용 그룹 ID. _registerChartHoverGroup() 반환값.
+function _chartVolumeSLA(labels, volumes, slas, hoverGroupId) {
   const AC = _accentColors();
   const TC = _themeTextColors();
   const BC = _themeBgColors();
@@ -3635,16 +3861,22 @@ function _chartVolumeSLA(labels, volumes, slas, _unusedRiders) {
       <text x="114" y="9" font-size="10" fill="${TC.cell}">수락률(%)</text>
     </g>`;
 
-  // 렌더 순서: 격자 → 바(rect+라벨 g) → SLA 선 → SLA 점(circle+라벨 g) → x축 라벨
-  // 호버 시 같은 g 안의 라벨도 함께 강조됨
+  // 호버 zones — 차트 영역에 인덱스별 투명 rect (마지막에 그려 클릭/마우스 우선순위 확보)
+  const hoverZones = hoverGroupId
+    ? _chartHoverZones(n, hoverGroupId, padL, padT, chartW, chartH)
+    : '';
+
+  // 렌더 순서: 격자 → 바(rect+라벨 g) → SLA 선 → SLA 점(circle+라벨 g) → x축 라벨 → hover zones
+  // 호버 시 같은 g 안의 라벨도 함께 강조됨. hoverZones는 마우스 이벤트 영역(투명).
   return _svgFrame('처리건수 · 수락률', w, h,
-    legend + grid + bars + slaLine + slaPoints + xlabels);
+    legend + grid + bars + slaLine + slaPoints + xlabels + hoverZones);
 }
 
 // ── Active 라이더 차트 (Active 라이더수 + 비중) ──
 //   active     = 일별/주별 운행라이더수
 //   contracted = 일별/주별 계약중라이더수 (없으면 비중 미표시)
-function _chartActiveRiders(labels, active, contracted) {
+//   hoverGroupId = 호버 툴팁 그룹 ID (선택)
+function _chartActiveRiders(labels, active, contracted, hoverGroupId) {
   const TC = _themeTextColors();
   const BC = _themeBgColors();
   // 막대 = 민트색 / 비중 라인 = 노랑
@@ -3732,8 +3964,13 @@ function _chartActiveRiders(labels, active, contracted) {
       ` : ''}
     </g>`;
 
+  // 호버 zones
+  const hoverZones = hoverGroupId
+    ? _chartHoverZones(n, hoverGroupId, padL, padT, chartW, chartH)
+    : '';
+
   return _svgFrame('Active 라이더', w, h,
-    legend + grid + bars + ratioLine + ratioPoints + xlabels);
+    legend + grid + bars + ratioLine + ratioPoints + xlabels + hoverZones);
 }
 
 // 멀티라인 차트 (슬롯 달성률 — 전체+4개 시간대)
@@ -4113,8 +4350,10 @@ function _renderPerfWeekly(body, hist, tgt) {
   const ridersA  = asc.map(w => Math.round(w.riderActAvg  || 0));
   const ridersC  = asc.map(w => Math.round(w.riderJoinAvg || 0));
 
-  const chart1 = _chartVolumeSLA(labels, vols, slas);
-  const chart2 = _chartActiveRiders(labels, ridersA, ridersC);
+  // 호버 툴팁용 공유 그룹 — 두 차트가 같은 인덱스를 공유
+  const hoverGroup = _registerChartHoverGroup({ labels, vols, slas, ridersA, ridersC });
+  const chart1 = _chartVolumeSLA(labels, vols, slas, hoverGroup);
+  const chart2 = _chartActiveRiders(labels, ridersA, ridersC, hoverGroup);
   const chart3 = _chartShareStacked(labels, {
     am: asc.map(w => w.totalVol ? (w.amVol/w.totalVol)*100 : 0),
     pm: asc.map(w => w.totalVol ? (w.pmVol/w.totalVol)*100 : 0),
@@ -4213,8 +4452,10 @@ function _renderPerfDaily(body, hist, tgt) {
   const ridersA    = asc.map(r => Number(r['운행라이더수']||0));
   const ridersC    = asc.map(r => Number(r['계약중라이더수']||r['가입라이더수']||0));
 
-  const chart1 = _chartVolumeSLA(labels, vols, slas);
-  const chart2 = _chartActiveRiders(labels, ridersA, ridersC);
+  // 호버 툴팁용 공유 그룹 — 두 차트가 같은 인덱스를 공유
+  const hoverGroup = _registerChartHoverGroup({ labels, vols, slas, ridersA, ridersC });
+  const chart1 = _chartVolumeSLA(labels, vols, slas, hoverGroup);
+  const chart2 = _chartActiveRiders(labels, ridersA, ridersC, hoverGroup);
   const chart3 = _chartShareStacked(labels, {
     am: asc.map(r => { const t = Number(r['총처리건수']||0); return t ? Number(r['아침점심피크_물량']||0)/t*100 : 0; }),
     pm: asc.map(r => { const t = Number(r['총처리건수']||0); return t ? Number(r['오후논피크_물량']||0)  /t*100 : 0; }),
