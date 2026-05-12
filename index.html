@@ -4670,11 +4670,11 @@ function openPartnerModal(pid) {
   document.getElementById('partnerModal').classList.add('open');
 }
 
-// ── Profile 탭 컨텐츠: 기본 정보 + 실시간 KPI + 활동 로그 ──
+// ── Profile 탭 컨텐츠: 기본 정보 + 연락처 + 활동 로그 ──
 function _renderPartnerProfile(body, pid) {
   const p = STATE.partners.find(x => x['협력사ID'] === pid);
   if (!p) return;
-  // "실시간 운영 지표" 카드는 실시간운행현황 시트 기준
+  // 적용 권역 라벨용으로만 실시간 시트 lookup (실시간 운영 지표 카드는 제거됨)
   const kpi = getRealtimeKPI(pid);
   const operArea = (kpi && kpi['운영지역']) || p['권역명'] || '';
 
@@ -4724,81 +4724,14 @@ function _renderPartnerProfile(body, pid) {
 
   const infoHtml = fixedHtml + managerHtml + noteHtml;
 
-  // KPI snapshot — KPI 행에 운영지역별 목표 함께 저장됨
-  const slaRaw = kpi ? (kpi['SLA_수락률(%)'] !== undefined ? Number(kpi['SLA_수락률(%)']) : Number(kpi['SLA수락률(%)']||0)*100) : null;
-  const tgt    = _slotTargetsFromRow(kpi);
-  const sets   = kpi ? Number(kpi['신청세트수']||kpi['세트수']||p['현재세트수']||0) : Number(p['현재세트수']||0);
-
-  const slotPairs = [
-    ['아침점심','아침점심피크_물량', tgt.am],
-    ['오후',    '오후논피크_물량',   tgt.pm],
-    ['저녁',    '저녁피크_물량',     tgt.ev],
-    ['심야',    '심야논피크_물량',   tgt.ni],
-  ];
-  const slotGridHtml = kpi ? slotPairs.map(([label, volF, tgt]) => {
-    const n    = Number(kpi[volF]||0);
-    const goal = sets * tgt;
-    const pctRaw = goal ? (n/goal)*100 : null;
-    const cls    = pctRaw===null?'dod-neu':pctRaw>=100?'slot-hi':pctRaw>=70?'slot-mid':'slot-lo';
-    // 표시는 소수 1자리 (반올림 X). "100.0%" → "100%" / "99.7%" 그대로
-    const pctTxt = pctRaw===null ? '-' : pctRaw.toFixed(1).replace(/\.0$/,'') + '%';
-    // 보조 라벨: 목표가 있으면 "처리/목표", 없으면 "처리건"
-    const subLabel = goal
-      ? `${n.toLocaleString()}/${Math.round(goal).toLocaleString()}`
-      : `${n.toLocaleString()}건`;
-    return `<div class="slot-item">
-      <div class="slot-item-label">${label}</div>
-      <div class="slot-item-val ${cls}" style="font-size:16px">${pctTxt}</div>
-      <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${subLabel}</div>
-    </div>`;
-  }).join('') : '';
-
-  const kpiSnapshotHtml = kpi ? `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
-      <div class="slot-item">
-        <div class="slot-item-label">SLA 수락률</div>
-        <div class="slot-item-val" style="color:${slaRaw!==null?_slaColor(slaRaw):'var(--text-secondary)'};font-size:18px">${slaRaw!==null?slaRaw.toFixed(1)+'%':'-'}</div>
-      </div>
-      <div class="slot-item">
-        <div class="slot-item-label">총 처리건수</div>
-        <div class="slot-item-val" style="font-size:16px">${Number(kpi['총처리건수']||0).toLocaleString()}건</div>
-      </div>
-      <div class="slot-item">
-        <div class="slot-item-label">Active 라이더</div>
-        <div class="slot-item-val" style="font-size:16px;color:#4ade80">${(() => {
-          const a = Number(kpi['운행라이더수']||0);
-          const c = Number(kpi['계약중라이더수']||kpi['가입라이더수']||0);
-          if (!a && !c) return '-';
-          const ratio = c ? Math.round((a/c)*100) : null;
-          return `${a.toLocaleString()}<span style="color:var(--text-muted);font-weight:600"> / ${c?c.toLocaleString():'-'}</span>${ratio!==null?` <span style="color:var(--text-secondary);font-size:11px;font-weight:600">(${ratio}%)</span>`:''}`;
-        })()}</div>
-        <div style="font-size:10px;color:var(--text-secondary)">운행 / 계약</div>
-      </div>
-    </div>
-    <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">시간대별 달성</div>
-    <div class="slot-grid">${slotGridHtml}</div>
-  ` : '<div style="color:var(--text-muted);text-align:center;padding:20px">KPI 데이터 없음</div>';
-
-  // KPI 기준 일자 (있을 때만 제목 옆에 표시)
-  const kpiDate = (kpi && (kpi['일자'] || kpi['주차시작일'])) || '';
-  const kpiTitleHtml = kpiDate
-    ? `실시간 운영 지표 <span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-left:6px;text-transform:none;letter-spacing:0">${kpiDate} 기준</span>`
-    : `실시간 운영 지표`;
-
   // ── 사장님/담당자 연락처 섹션 ──
   const contactsHtml = _renderPartnerContactsSection(pid);
 
-  // ── Profile 탭 본문 조립: 기본정보 + 실시간KPI + 연락처 + 활동로그 ──
+  // ── Profile 탭 본문 조립: 기본정보 + 연락처 + 활동로그 ──
   body.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
-        <div class="modal-section-title">기본 정보</div>
-        ${infoHtml}
-      </div>
-      <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
-        <div class="modal-section-title">${kpiTitleHtml}</div>
-        ${kpiSnapshotHtml}
-      </div>
+    <div class="modal-section" style="background:var(--bg-section);border-radius:8px;padding:14px">
+      <div class="modal-section-title">기본 정보</div>
+      ${infoHtml}
     </div>
 
     <!-- 활동 로그 -->
