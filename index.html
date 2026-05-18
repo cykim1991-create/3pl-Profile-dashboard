@@ -437,7 +437,7 @@ textarea.form-input{resize:vertical;min-height:60px}
         </div>
         <div class="kpi-card orange">
           <div class="kpi-icon">✅</div>
-          <div class="kpi-label">시간대별 달성률</div>
+          <div class="kpi-label">슬롯 달성 협력사 비중</div>
           <div class="kpi-value" id="rt-sla">-</div>
           <div class="kpi-sub" id="rt-sla-sub">지난 슬롯 평균</div>
         </div>
@@ -2976,7 +2976,7 @@ function renderRealtime() {
   const _totalPartners = rtRows.length;
   const slotAchPct = _totalPartners > 0 ? (_achievedCnt / _totalPartners) * 100 : 0;
   const slotAchSubLabel = _pastSlots.length
-    ? `${_achievedCnt}/${_totalPartners} (${_pastSlots.map(s => s.label).join('·')} 기준)`
+    ? `${_achievedCnt.toLocaleString()}(달성)/${_totalPartners.toLocaleString()}(전체)`
     : '진행 중인 슬롯 없음';
 
   setText('rt-delivery',     totalDel ? totalDel.toLocaleString()+'건' : '-');
