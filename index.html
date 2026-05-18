@@ -628,7 +628,7 @@ textarea.form-input{resize:vertical;min-height:60px}
              style="font-size:12px;padding:5px 9px;background:var(--bg-section);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);width:180px">
       <button class="btn btn-ghost btn-sm" onclick="clearAllRegionSelection()" style="font-size:11px">전체 해제</button>
     </div>
-    <div id="regionFilterBody" style="padding:14px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-height:68vh;overflow-y:auto"></div>
+    <div id="regionFilterBody" style="padding:14px 18px;display:flex;flex-direction:column;gap:4px;max-height:68vh;overflow-y:auto"></div>
     <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="closeRegionFilterModal()">닫기</button>
     </div>
@@ -1461,7 +1461,7 @@ async function init() {
       }
       return r;
     });
-    STATE.kpi          = filterKPIRecent(allKPI, 8);
+    STATE.kpi          = filterKPIRecent(allKPI, 3);
     // 실시간운행현황: 두 가지 형식 자동 감지
     //  (a) 새 형식: row1=헤더(영문 snake_case), row2+=데이터
     //  (b) 샘플 형식: row1=제목, row2=헤더, row3+=데이터
@@ -1663,6 +1663,19 @@ function _groupRgn2ByCity(rgn2List) {
   return others.items.length ? [...groups, others] : groups;
 }
 
+// ── 우선순위 기반 6개 섹션 정의 ────────────────────────
+// 1. 서울 / 2. 경기도 / 3. 인천 / 4. 광역시 / 5. 세종 / 6. 기타(도)
+// '주로 사용하는' 1~3 단일 광역은 별도 섹션으로, 4~6은 묶음 섹션으로.
+const _CITY_SECTIONS = [
+  { id: 'seoul',   label: '⭐ 서울',           cityKeys: ['서울특별시'] },
+  { id: 'gyeonggi',label: '⭐ 경기도',         cityKeys: ['경기도'] },
+  { id: 'incheon', label: '⭐ 인천',           cityKeys: ['인천광역시'] },
+  { id: 'metros',  label: '🏙️ 광역시',         cityKeys: ['부산광역시','대구광역시','광주광역시','대전광역시','울산광역시'] },
+  { id: 'sejong',  label: '🏛️ 세종시',         cityKeys: ['세종특별자치시'] },
+  { id: 'others',  label: '📌 기타 (도·특별자치도)',
+    cityKeys: ['강원도','충청북도','충청남도','전라북도','전라남도','경상북도','경상남도','제주특별자치도'] },
+];
+
 function populateRegionFilter() {
   // 팝업 본문은 모달 열릴 때 _renderRegionFilterModalBody() 에서 빌드.
   // 여기서는 사용자가 이전에 선택한 RGN2 중 시트에서 사라진 항목을 정리.
@@ -1778,8 +1791,11 @@ function _renderRegionFilterModalBody() {
   if (!body) return;
   const rgn2List = _availableRgn2List();
   const groups = _groupRgn2ByCity(rgn2List);
-  body.innerHTML = groups.map(g => {
-    if (!g.items.length) return ''; // 데이터 없는 광역은 카드 자체 숨김
+  const byKey = Object.fromEntries(groups.map(g => [g.key, g]));
+
+  // 광역 카드 1개 빌더
+  const renderCityCard = (g) => {
+    if (!g || !g.items.length) return '';
     const allChecked = g.items.every(r => currentRegionFilter.has(r));
     const someChecked = g.items.some(r => currentRegionFilter.has(r));
     const selCount = g.items.filter(r => currentRegionFilter.has(r)).length;
@@ -1806,7 +1822,33 @@ function _renderRegionFilterModalBody() {
           }).join('')}
         </div>
       </div>`;
-  }).join('');
+  };
+
+  // 섹션 단위 렌더
+  body.innerHTML = _CITY_SECTIONS.map(sec => {
+    // 이 섹션의 광역들이 가진 RGN2 항목 (필터링용)
+    const sectionGroups = sec.cityKeys.map(k => byKey[k]).filter(g => g && g.items.length);
+    if (!sectionGroups.length) return '';
+    const totalItems = sectionGroups.reduce((s,g) => s + g.items.length, 0);
+    const selItems   = sectionGroups.reduce((s,g) => s + g.items.filter(r => currentRegionFilter.has(r)).length, 0);
+    // 광역시·기타 같이 여러 광역이 묶인 섹션은 다중 컬럼, 단일 광역 섹션은 1컬럼
+    const isMulti = sec.cityKeys.length > 1;
+    return `
+      <div class="rgn2-section" data-section-id="${sec.id}" style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px;padding:6px 4px 14px 4px;border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;padding:2px 4px">
+          <div style="font-size:13px;font-weight:800;color:var(--text-primary);letter-spacing:.2px">${sec.label}</div>
+          <span style="font-size:10.5px;color:var(--text-muted);font-weight:600">${selItems}/${totalItems}</span>
+        </div>
+        <div class="rgn2-section-grid" style="display:grid;grid-template-columns:repeat(${isMulti ? 'auto-fill,minmax(220px,1fr)' : '1, 1fr'});gap:12px">
+          ${sectionGroups.map(renderCityCard).join('')}
+        </div>
+      </div>`;
+  }).filter(Boolean).join('');
+
+  // 첫 섹션의 top border 제거 (시각적 깔끔)
+  const firstSection = body.querySelector('.rgn2-section');
+  if (firstSection) firstSection.style.borderTop = 'none';
+
   // 헤더 indeterminate 표시
   body.querySelectorAll('input[data-indeterminate="1"]').forEach(el => { el.indeterminate = true; });
   _updateRegionFilterSummary();
@@ -1815,7 +1857,7 @@ function _renderRegionFilterModalBody() {
   if (search && search.value) _filterRegionSearch(search.value);
 }
 
-// 검색어로 카드/항목 표시 토글 (광역 라벨 + 시/구 이름 매칭)
+// 검색어로 섹션/카드/항목 표시 토글 (광역 라벨 + 시/구 이름 매칭)
 function _filterRegionSearch(q) {
   q = (q || '').trim().toLowerCase();
   const cards = document.querySelectorAll('#regionFilterBody .rgn2-city-card');
@@ -1836,6 +1878,12 @@ function _filterRegionSearch(q) {
       if (hit) anyHit = true;
     });
     card.style.display = anyHit ? '' : 'none';
+  });
+  // 섹션 단위 — 내부 카드 중 하나라도 보이면 노출
+  document.querySelectorAll('#regionFilterBody .rgn2-section').forEach(sec => {
+    const anyCardVisible = [...sec.querySelectorAll('.rgn2-city-card')]
+      .some(c => c.style.display !== 'none');
+    sec.style.display = anyCardVisible ? '' : 'none';
   });
 }
 
