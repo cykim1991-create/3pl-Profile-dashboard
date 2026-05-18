@@ -1428,8 +1428,8 @@ async function init() {
   try {
     // v9 시트 구조: row1=제목, row2=헤더, row3+=데이터 (0-indexed: header=1, data=2)
     // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
-    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals] = await Promise.all([
-      fetchSheet('협력사기본정보',     'A:L'),    // 12열 (마스터 — 전화번호는 별도 시트)
+    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals, rgn2InfoVals] = await Promise.all([
+      fetchSheet('협력사기본정보',     'A:K'),    // 11열 (마스터 — 전화번호는 별도 시트)
       fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
       fetchSheet('실시간운행현황',     'A:AA'),   // 27열 (영문 snake_case 컬럼, 헤더 row1, 데이터 row2+)
       fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
@@ -1437,14 +1437,26 @@ async function init() {
       fetchSheet('RGN2_일별지표',      'A:J'),    // 8~10열 — 사용자 시트는 3pl_라이더수/3pl_DCPO 포함 10열
       // 협력사연락처는 선택 시트 — 없거나 권한 없으면 빈 배열로 폴백
       fetchSheet('협력사연락처',       'A:I').catch(() => []),
+      // RGN2정보 — 권역명 → RGN2 매핑 (3열: 권역명, RGN1, RGN2)
+      fetchSheet('RGN2정보',           'A:C').catch(() => []),
     ]);
     STATE.partners     = parseSheet(partnerVals,  1, 2);
-    // RGN2 매핑 기준 변경 (2026-05): 협력사기본정보의 L열 'RGN2_2' (권역 기준)를 우선 사용.
-    // RGN2_2가 비어있는 행은 기존 D열 'RGN2' (메인 픽업지 기준) 값을 유지 (하위호환).
-    // — 이후 코드는 모두 p['RGN2']를 그대로 사용하므로 자동으로 새 매핑이 반영됨.
+    // RGN2 매핑 기준 (2026-05): 'RGN2정보' 시트의 권역명 → RGN2 매핑을 사용.
+    // 협력사기본정보의 권역명(C열)을 키로 lookup하여 p['RGN2']에 적용.
+    // (이전 RGN2_2 컬럼 의존 제거. 협력사기본정보의 D열 RGN2는 fallback으로만 사용)
+    const _rgn2Info = (rgn2InfoVals && rgn2InfoVals.length > 1)
+      ? rgn2InfoVals.slice(1).reduce((m, row) => {
+          const area = (row && row[0]) ? String(row[0]).trim() : '';
+          const rgn2 = (row && row[2]) ? String(row[2]).trim() : '';
+          if (area && rgn2) m.set(area, rgn2);
+          return m;
+        }, new Map())
+      : new Map();
     (STATE.partners || []).forEach(p => {
-      const v2 = (p['RGN2_2'] || '').toString().trim();
-      if (v2 && v2 !== '-') p['RGN2'] = v2;
+      const area = (p['권역명'] || '').toString().trim();
+      const mapped = area ? _rgn2Info.get(area) : '';
+      if (mapped) p['RGN2'] = mapped;
+      // 매핑 실패 시 기존 RGN2 컬럼 값 유지 (fallback)
     });
     // 데일리운영현황 시트의 목표_* 컬럼은 "총 목표(세트수×per-set)"로 저장됨.
     // 대시보드 내부 계산은 per-set 기준으로 통일되어 있으므로 sets로 나눠 정규화.
