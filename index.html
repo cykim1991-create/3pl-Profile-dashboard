@@ -437,8 +437,9 @@ textarea.form-input{resize:vertical;min-height:60px}
         </div>
         <div class="kpi-card orange">
           <div class="kpi-icon">✅</div>
-          <div class="kpi-label">평균 SLA 수락률</div>
+          <div class="kpi-label">시간대별 달성률</div>
           <div class="kpi-value" id="rt-sla">-</div>
+          <div class="kpi-sub" id="rt-sla-sub">지난 슬롯 평균</div>
         </div>
         <div class="kpi-card purple">
           <div class="kpi-icon">📋</div>
@@ -1431,7 +1432,7 @@ async function init() {
     const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals, rgn2InfoVals] = await Promise.all([
       fetchSheet('협력사기본정보',     'A:K'),    // 11열 (마스터 — 전화번호는 별도 시트)
       fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
-      fetchSheet('실시간운행현황',     'A:AA'),   // 27열 (영문 snake_case 컬럼, 헤더 row1, 데이터 row2+)
+      fetchSheet('실시간운행현황',     'A:AB'),   // 28열 (AB열 = active_rider 추가)
       fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
       fetchSheet('RGN2_담당자',        'A:C'),    // 3열 (RGN2, 담당자, 변경일시)
       fetchSheet('RGN2_일별지표',      'A:J'),    // 8~10열 — 사용자 시트는 3pl_라이더수/3pl_DCPO 포함 10열
@@ -2277,6 +2278,8 @@ function _normalizeRealtimeRow(r) {
     목표_오후:      tgt('target_orders_pl') || Number(r['목표_오후']     || 0),
     목표_저녁:      tgt('target_orders_d')  || Number(r['목표_저녁']     || 0),
     목표_심야:      tgt('target_orders_pd') || Number(r['목표_심야']     || 0),
+    // AB열 active_rider → 한글 표준 필드 운행라이더수 로 노출
+    운행라이더수:   Number(r['active_rider'] || r['운행라이더수'] || 0),
   };
 }
 
@@ -2944,25 +2947,44 @@ function renderRealtime() {
   const totalSets = rtRows.reduce((s,r) =>
     s + _rtNum(r, ['commit_sets','신청세트수','세트수']), 0);
 
-  // SLA — 실시간 시트 row 기준. 처리건수 가중평균.
-  let slaWeightSum = 0, slaWeightTot = 0;
-  rtRows.forEach(r => {
-    const tv = _rtNum(r, ['총처리건수','total_complete','complete_count_total']);
-    const slaCand = r['SLA_수락률(%)'] !== undefined
-      ? Number(r['SLA_수락률(%)'])
-      : (r['SLA수락률(%)'] !== undefined ? Number(r['SLA수락률(%)']) * 100
-      : (r['sla_acceptance_rate'] !== undefined ? Number(r['sla_acceptance_rate'])
-      : 0));
-    const sla = isNaN(slaCand) ? 0 : slaCand;
-    if (sla > 0 && tv > 0) { slaWeightSum += sla * tv; slaWeightTot += tv; }
-  });
-  const avgSLA = slaWeightTot > 0 ? slaWeightSum / slaWeightTot : 0;
+  // 시간대별 달성률 — 협력사 단위 카운트
+  //   분자: 지난 모든 슬롯에서 (target>0인 슬롯 한정) complete ≥ target 을 달성한 협력사 수
+  //   분모: 전체 협력사 수 (rtRows.length)
+  //   ※ 지난 슬롯 중 target이 하나도 없는 협력사는 '측정 불가'로 보고 달성에서 제외
+  const _slotMeta = [
+    { key: 'am', cKey: 'morning_complete_count', tKey: 'target_orders_ml', label: '아점' },
+    { key: 'pm', cKey: 'lunch_complete_count',   tKey: 'target_orders_pl', label: '오후' },
+    { key: 'ev', cKey: 'dinner_complete_count',  tKey: 'target_orders_d',  label: '저녁' },
+    { key: 'ni', cKey: 'night_complete_count',   tKey: 'target_orders_pd', label: '심야' },
+  ];
+  const _phase = _getSlotPhase();
+  const _pastSlots = _slotMeta.filter(s => _phase[s.key] === 'past');
+  let _achievedCnt = 0;
+  if (_pastSlots.length > 0) {
+    rtRows.forEach(r => {
+      let hadAnyTarget = false;
+      const allOk = _pastSlots.every(s => {
+        const tgt = Number(r[s.tKey] || 0);
+        if (tgt <= 0) return true;          // 그 슬롯에 목표 없음 → 평가 대상 아님
+        hadAnyTarget = true;
+        const comp = Number(r[s.cKey] || 0);
+        return comp >= tgt;                  // 달성 여부
+      });
+      if (hadAnyTarget && allOk) _achievedCnt++;
+    });
+  }
+  const _totalPartners = rtRows.length;
+  const slotAchPct = _totalPartners > 0 ? (_achievedCnt / _totalPartners) * 100 : 0;
+  const slotAchSubLabel = _pastSlots.length
+    ? `${_achievedCnt}/${_totalPartners} (${_pastSlots.map(s => s.label).join('·')} 기준)`
+    : '진행 중인 슬롯 없음';
 
   setText('rt-delivery',     totalDel ? totalDel.toLocaleString()+'건' : '-');
   setText('rt-delivery-sub', `${all.length}개 협력사 합산`);
   setText('rt-riders',       totalAct ? totalAct.toLocaleString()+'명' : '-');
   setText('rt-riders-sub',   totalJoin ? `계약 ${totalJoin.toLocaleString()}명 중 운행` : '운행 라이더 합산');
-  setText('rt-sla',          avgSLA ? avgSLA.toFixed(1)+'%' : '-');
+  setText('rt-sla',          _pastSlots.length ? slotAchPct.toFixed(1)+'%' : '-');
+  setText('rt-sla-sub',      slotAchSubLabel);
   setText('rt-sets',         totalSets ? totalSets.toLocaleString()+'세트' : '-');
 
   // RGN2 필터 적용 시 — 영업 브리핑 핵심 지표 (등급 위젯 위)
