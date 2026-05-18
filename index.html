@@ -482,9 +482,6 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center slot-group" data-sort="realtime:pmAch" style="cursor:pointer">오후<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-pmAch"></span></th>
               <th class="center slot-group" data-sort="realtime:evAch" style="cursor:pointer">저녁<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-evAch"></span></th>
               <th class="center slot-group" data-sort="realtime:niAch" style="cursor:pointer">심야<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-niAch"></span></th>
-              <th class="center" data-sort="realtime:sla" style="cursor:pointer">SLA수락률<span id="sort-realtime-sla"></span></th>
-              <th class="center" data-sort="realtime:inSLA" style="cursor:pointer">권내수락률<span id="sort-realtime-inSLA"></span></th>
-              <th class="center" data-sort="realtime:outSLA" style="cursor:pointer">권외수락률<span id="sort-realtime-outSLA"></span></th>
             </tr>
           </thead>
           <tbody id="realtimeBody"></tbody>
@@ -2912,8 +2909,7 @@ function makeDCPOSpark(values) {
 // ═══════════════════════════════════════════════════
 const _RT_SORT_KEYS = [
   'rgn2','region','partnerName','grade',
-  'riderJoin','riderAct','sets','totalVol','amAch','pmAch','evAch','niAch',
-  'sla','inSLA','outSLA'
+  'riderJoin','riderAct','sets','totalVol','amAch','pmAch','evAch','niAch'
 ];
 
 function renderRealtime() {
@@ -3026,7 +3022,7 @@ function renderRealtime() {
   const tableSrc = all;
 
   const tbody = document.getElementById('realtimeBody');
-  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="15" class="empty">데이터 없음</td></tr>`; return; }
+  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="12" class="empty">데이터 없음</td></tr>`; return; }
 
   const st = _tblState.realtime;
 
@@ -3110,7 +3106,7 @@ function renderRealtime() {
   }
 
   if (!records.length) {
-    tbody.innerHTML = `<tr><td colspan="15" class="empty">필터 결과가 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="empty">필터 결과가 없습니다</td></tr>`;
     return;
   }
 
@@ -3155,9 +3151,6 @@ function renderRealtime() {
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.pmVol,r.setsN,r.tgt.pm,slotPhase.pm):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.evVol,r.setsN,r.tgt.ev,slotPhase.ev):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.niVol,r.setsN,r.tgt.ni,slotPhase.ni):'-'}</td>
-      <td style="text-align:center;color:${slaColor};font-weight:600">${r.slaRaw!==null?r.slaRaw.toFixed(1)+'%':'-'}</td>
-      <td style="text-align:center;color:${r.inSLA!==null?(inOk?'#4ade80':'#f87171'):'#8fa3b8'};font-weight:600">${r.inSLA!==null?(r.inSLA*100).toFixed(1)+'%':'-'}</td>
-      <td style="text-align:center;color:${r.outSLA!==null?(outOk?'#4ade80':'#f87171'):'#8fa3b8'}">${r.outSLA!==null?(r.outSLA*100).toFixed(1)+'%':'-'}</td>
     </tr>`;
   }).join('');
 }
