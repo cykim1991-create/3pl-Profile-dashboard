@@ -629,7 +629,7 @@ textarea.form-input{resize:vertical;min-height:60px}
              style="font-size:12px;padding:5px 9px;background:var(--bg-section);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);width:180px">
       <button class="btn btn-ghost btn-sm" onclick="clearAllRegionSelection()" style="font-size:11px">전체 해제</button>
     </div>
-    <div id="regionFilterBody" style="padding:14px 18px;display:flex;flex-direction:column;gap:4px;max-height:68vh;overflow-y:auto"></div>
+    <div id="regionFilterBody" style="padding:14px 18px;display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;max-height:68vh;overflow-y:auto;align-content:start"></div>
     <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="closeRegionFilterModal()">닫기</button>
     </div>
@@ -1676,17 +1676,19 @@ function _groupRgn2ByCity(rgn2List) {
   return others.items.length ? [...groups, others] : groups;
 }
 
-// ── 우선순위 기반 6개 섹션 정의 ────────────────────────
-// 1. 서울 / 2. 경기도 / 3. 인천 / 4. 광역시 / 5. 세종 / 6. 기타(도)
-// '주로 사용하는' 1~3 단일 광역은 별도 섹션으로, 4~6은 묶음 섹션으로.
+// ── 6개 섹션 정의 + 레이아웃 배치 ────────────────────────
+// 행 1: 서울    | 경기도
+// 행 2: 인천    | 세종시
+// 행 3: 광역시  (풀폭)
+// 행 4: 기타    (풀폭)
 const _CITY_SECTIONS = [
-  { id: 'seoul',   label: '⭐ 서울',           cityKeys: ['서울특별시'] },
-  { id: 'gyeonggi',label: '⭐ 경기도',         cityKeys: ['경기도'] },
-  { id: 'incheon', label: '⭐ 인천',           cityKeys: ['인천광역시'] },
-  { id: 'metros',  label: '🏙️ 광역시',         cityKeys: ['부산광역시','대구광역시','광주광역시','대전광역시','울산광역시'] },
-  { id: 'sejong',  label: '🏛️ 세종시',         cityKeys: ['세종특별자치시'] },
+  { id: 'seoul',   label: '⭐ 서울',     cityKeys: ['서울특별시'] },
+  { id: 'gyeonggi',label: '⭐ 경기도',   cityKeys: ['경기도'] },
+  { id: 'incheon', label: '⭐ 인천',     cityKeys: ['인천광역시'] },
+  { id: 'sejong',  label: '🏛️ 세종시',   cityKeys: ['세종특별자치시'] },
+  { id: 'metros',  label: '🏙️ 광역시',   cityKeys: ['부산광역시','대구광역시','광주광역시','대전광역시','울산광역시'], fullWidth: true },
   { id: 'others',  label: '📌 기타 (도·특별자치도)',
-    cityKeys: ['강원도','충청북도','충청남도','전라북도','전라남도','경상북도','경상남도','제주특별자치도'] },
+    cityKeys: ['강원도','충청북도','충청남도','전라북도','전라남도','경상북도','경상남도','제주특별자치도'], fullWidth: true },
 ];
 
 function populateRegionFilter() {
@@ -1838,29 +1840,36 @@ function _renderRegionFilterModalBody() {
   };
 
   // 섹션 단위 렌더
+  //   - fullWidth=true 인 섹션 (광역시, 기타): grid-column 1/-1 로 풀폭
+  //   - 그 외 (서울/경기/인천/세종): 한 컬럼만 차지 → body의 2-col 그리드에서 자동 배치
   body.innerHTML = _CITY_SECTIONS.map(sec => {
-    // 이 섹션의 광역들이 가진 RGN2 항목 (필터링용)
     const sectionGroups = sec.cityKeys.map(k => byKey[k]).filter(g => g && g.items.length);
     if (!sectionGroups.length) return '';
     const totalItems = sectionGroups.reduce((s,g) => s + g.items.length, 0);
     const selItems   = sectionGroups.reduce((s,g) => s + g.items.filter(r => currentRegionFilter.has(r)).length, 0);
-    // 광역시·기타 같이 여러 광역이 묶인 섹션은 다중 컬럼, 단일 광역 섹션은 1컬럼
+    const colSpanStyle = sec.fullWidth ? 'grid-column:1/-1;' : '';
     const isMulti = sec.cityKeys.length > 1;
+    // 풀폭 섹션 내부 그리드: 카드 여러 개 (auto-fill)
+    // 단일 광역 섹션 내부 그리드: 카드 1개 (전체 폭)
+    const innerGrid = isMulti
+      ? 'display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px'
+      : 'display:block';
     return `
-      <div class="rgn2-section" data-section-id="${sec.id}" style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px;padding:6px 4px 14px 4px;border-top:1px solid var(--border)">
+      <div class="rgn2-section" data-section-id="${sec.id}" style="${colSpanStyle}display:flex;flex-direction:column;gap:8px;padding:6px 4px 10px 4px;border-top:1px solid var(--border);min-width:0">
         <div style="display:flex;align-items:center;gap:8px;padding:2px 4px">
           <div style="font-size:13px;font-weight:800;color:var(--text-primary);letter-spacing:.2px">${sec.label}</div>
           <span style="font-size:10.5px;color:var(--text-muted);font-weight:600">${selItems}/${totalItems}</span>
         </div>
-        <div class="rgn2-section-grid" style="display:grid;grid-template-columns:repeat(${isMulti ? 'auto-fill,minmax(220px,1fr)' : '1, 1fr'});gap:12px">
+        <div class="rgn2-section-grid" style="${innerGrid}">
           ${sectionGroups.map(renderCityCard).join('')}
         </div>
       </div>`;
   }).filter(Boolean).join('');
 
-  // 첫 섹션의 top border 제거 (시각적 깔끔)
-  const firstSection = body.querySelector('.rgn2-section');
-  if (firstSection) firstSection.style.borderTop = 'none';
+  // 첫 행(2-컬럼 시작점)의 두 섹션 top border 제거 — 시각적 깔끔
+  const sections = body.querySelectorAll('.rgn2-section');
+  if (sections[0]) sections[0].style.borderTop = 'none';
+  if (sections[1] && !sections[1].style.gridColumn) sections[1].style.borderTop = 'none';
 
   // 헤더 indeterminate 표시
   body.querySelectorAll('input[data-indeterminate="1"]').forEach(el => { el.indeterminate = true; });
