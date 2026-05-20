@@ -602,6 +602,30 @@ textarea.form-input{resize:vertical;min-height:60px}
   </div>
 </div>
 
+<!-- 데이터 업데이트 대기 안내 모달 (영업 브리핑 진입 시 D-1 누락 알림) -->
+<div class="modal-overlay" id="dataStaleModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">⏳ 데이터 업데이트 대기 중</div>
+      <button class="modal-close" id="dataStale-close">✕</button>
+    </div>
+    <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:13px;color:var(--text-primary);line-height:1.55">
+        익일 데이터 업데이트가 안되었어요.<br>
+        <b style="color:var(--accent-soft)">오전 9시 이후</b> 다시 시도해주세요.
+      </div>
+      <div style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;color:var(--text-secondary);display:flex;flex-direction:column;gap:4px">
+        <div>📅 기대 일자(D-1): <b id="dataStale-expected" style="color:var(--text-primary)">-</b></div>
+        <div>📊 시트 최신 일자: <b id="dataStale-latest"   style="color:var(--text-primary)">-</b></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost btn-sm"   id="dataStale-close-2" onclick="document.getElementById('dataStaleModal').classList.remove('open')">취소</button>
+        <button class="btn btn-primary btn-sm" id="dataStale-proceed">그래도 보기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 영업 브리핑 보고서 모달 -->
 <div class="modal-overlay" id="briefingModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()" style="max-width:780px">
@@ -2424,9 +2448,37 @@ const _briefingState = {
 };
 
 function openBriefingModal() {
+  // 어제(D-1) 데이터 누락 시 알람 — 데일리 시트 최대 일자가 운영일 -1 보다 이전이면 노출
+  // 시트는 매일 오전 9시 업데이트 → 9시 이전엔 D-1 데이터가 없을 수 있음.
+  const { isStale, expectedD1, d1 } = _filterD1OpPartners(STATE.partners || []);
+  if (isStale) {
+    showDataStaleModal({ expectedD1, latestD: d1, onProceed: () => {
+      _renderBriefingBody();
+      document.getElementById('briefingModal').classList.add('open');
+    }});
+    return;
+  }
   // 지역은 사용자가 직접 추가 (자동 선택 X)
   _renderBriefingBody();
   document.getElementById('briefingModal').classList.add('open');
+}
+
+// 데일리 시트 업데이트 대기 안내 모달 — 영업 브리핑 진입 시 호출
+// onProceed: 사용자가 '그래도 보기' 선택 시 실행할 콜백 (보통 브리핑 진행)
+function showDataStaleModal({ expectedD1, latestD, onProceed }) {
+  const overlay = document.getElementById('dataStaleModal');
+  if (!overlay) return; // 모달 미설치 시 그냥 진행
+  const exp = document.getElementById('dataStale-expected');
+  const lat = document.getElementById('dataStale-latest');
+  if (exp) exp.textContent = expectedD1 || '-';
+  if (lat) lat.textContent = latestD    || '-';
+  // 버튼 핸들러
+  const proceedBtn = document.getElementById('dataStale-proceed');
+  const closeBtn   = document.getElementById('dataStale-close');
+  const hide = () => overlay.classList.remove('open');
+  if (proceedBtn) proceedBtn.onclick = () => { hide(); if (onProceed) onProceed(); };
+  if (closeBtn)   closeBtn.onclick   = () => { hide(); };
+  overlay.classList.add('open');
 }
 function closeBriefingModal() {
   // plan 텍스트는 유지하되 모달만 닫기
@@ -3354,8 +3406,16 @@ function _bindSortHandlers() {
 // 데이터 소스: 데일리운영현황(STATE.kpi)의 전일(D-1) row
 // 합산 대상: 전일 운행 이력이 있는 협력사(총처리건수 ≥ 1)만
 function _renderPerfTopSummary(partnerList) {
-  const { list: opList, d1 } = _filterD1OpPartners(partnerList);
+  const { list: opList, d1, expectedD1, isStale } = _filterD1OpPartners(partnerList);
   const setEl = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+  // 라벨용 안내 텍스트 — 시트 업데이트 대기 중일 때 노출
+  const _dateLabelText = (date) => {
+    if (!date) return '';
+    if (isStale && expectedD1) {
+      return `${date} 기준 · ⏳ ${expectedD1} 데이터 업데이트 대기`;
+    }
+    return `${date} 기준`;
+  };
 
   if (!d1 || !opList.length) {
     setEl('perf-delivery', '-');
@@ -3367,7 +3427,7 @@ function _renderPerfTopSummary(partnerList) {
     _renderRgn2BriefingPanel(_activeSingleRgn2(), 'perf-rgn2-briefing');
     _renderGradeSummary(opList, 'perf-grade-summary');
     const label = document.getElementById('perf-date-label');
-    if (label) label.textContent = d1 ? `${d1} 기준` : '';
+    if (label) label.textContent = _dateLabelText(d1);
     return;
   }
 
@@ -3401,9 +3461,9 @@ function _renderPerfTopSummary(partnerList) {
   // 등급별 협력사 수 — D-1 운행 협력사 기준
   _renderGradeSummary(opList, 'perf-grade-summary');
 
-  // 기준일 라벨
+  // 기준일 라벨 (필요 시 'D-1 업데이트 대기' 안내 동반)
   const label = document.getElementById('perf-date-label');
-  if (label) label.textContent = `${d1} 기준`;
+  if (label) label.textContent = _dateLabelText(d1);
 }
 
 // RGN2 필터 선택 시 — 영업 브리핑 핵심 지표를 인라인 패널로 노출
@@ -3819,8 +3879,16 @@ function _getPrevDayWindow() {
 // 데일리운영현황(STATE.kpi)의 D-1 일자에서 총처리건수 ≥ 1인 행을 가진 협력사만 통과.
 function _filterD1OpPartners(partnerList) {
   const win = _getPrevDayWindow();
-  if (!win) return { list: [], d1: null };
-  const d1 = win.prev.start;
+  // 기준일자(d1) = 데일리운영현황 시트 일자(A열) 컬럼의 최대값.
+  // 운영일 - 1(expectedD1)과 비교해서 isStale 판정 → UI 안내·브리핑 알람에 활용.
+  const allDates = [...new Set((STATE.kpi || []).map(r => r['일자']).filter(Boolean))].sort();
+  const d1 = allDates.length ? allDates[allDates.length - 1] : null;
+  const expectedD1 = win ? win.prev.start : null;
+  const isStale = !!(expectedD1 && d1 && d1 < expectedD1);
+
+  if (!d1) return { list: [], d1: null, expectedD1, isStale: false };
+
+  // d1 일자의 운행 협력사 추출 (총처리건수 ≥ 1)
   const opPids = new Set();
   const opNames = new Set();
   (STATE.kpi || []).forEach(r => {
@@ -3832,7 +3900,7 @@ function _filterD1OpPartners(partnerList) {
   const list = (partnerList || []).filter(p =>
     opPids.has(p['협력사ID']) || (p['협력사명'] && opNames.has(p['협력사명']))
   );
-  return { list, d1 };
+  return { list, d1, expectedD1, isStale };
 }
 
 // ── 헬퍼 (실시간 운행현황 view용): 실시간 시트에 누적된 협력사 ──
