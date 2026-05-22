@@ -2313,17 +2313,18 @@ function _normalizeRealtimeRow(r) {
   };
 }
 
-// "42%", "42.0%", 0.42, 42, "0.42" 어느 형식이든 0~1 비율로 정규화
+// 시트의 3PL처리비중 컬럼은 항상 퍼센트(0~100) 단위로 입력되어 있음.
+// (예: 0.7 → 0.7%, 52.1 → 52.1%) → 항상 /100 하여 0~1 비율로 정규화.
+// "42%" 같은 문자열도 % 제거 후 동일하게 /100 처리.
 function _parsePercent(v) {
   if (v === null || v === undefined || v === '') return 0;
   if (typeof v === 'number') {
-    return v > 1 ? v / 100 : v;   // 0.42 그대로, 42 → 0.42
+    return isFinite(v) ? v / 100 : 0;
   }
-  // 문자열: "%" 제거 후 숫자 파싱
   const s = String(v).replace(/[%\s,]/g, '').trim();
   const n = Number(s);
   if (!isFinite(n)) return 0;
-  return n > 1 ? n / 100 : n;
+  return n / 100;
 }
 
 // RGN2별 3PL처리비중 조회 (별도 시트로 관리; 미등록 시 null 반환)
