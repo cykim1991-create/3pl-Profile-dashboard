@@ -3,6 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 보안: Content-Security-Policy — 스크립트/연결 출처를 self + Google API 도메인으로 제한해 XSS 주입 표면을 축소.
+     (인라인 스크립트·이벤트핸들러·스타일이 많아 'unsafe-inline'은 현재 불가피.
+      GIS 로그인·시트 API가 동작하려면 아래 google 도메인들이 반드시 허용되어야 함.) -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com;
+  connect-src 'self' https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://content-sheets.googleapis.com;
+  frame-src https://accounts.google.com https://content.googleapis.com;
+  style-src 'self' 'unsafe-inline' https://accounts.google.com;
+  img-src 'self' data: https://*.googleusercontent.com;
+  font-src 'self' data:;
+  base-uri 'self';
+  object-src 'none';
+  form-action 'self';
+">
 <title>3PL 협력사 프로파일 대시보드</title>
 <script src="https://accounts.google.com/gsi/client" async defer onload="typeof initGSI==='function'&&initGSI()"></script>
 <style>
