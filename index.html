@@ -1234,11 +1234,20 @@ async function updateSheetLogWithOAuth(logId, updates) {
 // Sheets API utils
 // ═══════════════════════════════════════════════════
 async function fetchSheet(tabName, range) {
+  // 읽기는 로그인한 사용자의 OAuth 토큰(Bearer)으로 수행한다.
+  // (공개 API Key 읽기 폐지 — 시트를 도메인 전용으로 좁혀도 정상 동작하며,
+  //  비로그인 상태에서는 데이터에 접근할 수 없다.)
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) {
+    throw new Error('[401] 로그인이 필요합니다 (토큰 없음/만료) — 상단 🔑 로그인 버튼을 눌러 다시 로그인해 주세요');
+  }
   const r   = encodeURIComponent(`${tabName}!${range || 'A:ZZ'}`);
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${r}?key=${CONFIG.apiKey}`;
-  const res = await fetch(url);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${r}`;
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + gsiAccessToken } });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`[${res.status}] 접근 권한 오류 — 시트 공유 권한 또는 로그인 상태를 확인해 주세요 (${tabName})`);
+    }
     throw new Error(`[${res.status}] ${err?.error?.message || tabName}`);
   }
   return (await res.json()).values || [];
