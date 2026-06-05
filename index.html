@@ -557,7 +557,8 @@ textarea.form-input{resize:vertical;min-height:60px}
             style="min-width:260px;padding:6px 12px;font-size:12.5px"
           />
           <div id="grade-chip-perfList" style="display:inline-block"></div>
-          <button class="btn btn-ghost btn-sm" onclick="filterRiskOnly()" title="수락률 75% 미만 또는 달성슬롯수 4개 미만">⚠️ 위험만</button>
+          <button id="perf-risk-btn" class="btn btn-ghost btn-sm" onclick="filterRiskOnly()" title="수락률 75% 미만 또는 달성슬롯수 4개 미만">⚠️ 위험만</button>
+          <button id="perf-oper-btn" class="btn btn-ghost btn-sm" onclick="filterOperatingOnly()" title="이번 주차에 실제 운행 이력이 있는 협력사만">🛵 운행만</button>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('perfList')" title="정렬/필터 모두 해제">↻ 초기화</button>
           <span id="perf-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
         </div>
@@ -1296,6 +1297,7 @@ function filterKPIRecent(kpi, weeks) {
 let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, tpl3Share:{}, rgn2Managers:{} };
 let filtered = [];
 let riskOnlyMode = false;
+let operatingOnlyMode = false;   // '운행만' — 이번 주차 실제 운행이력(hasVolThisWeek) 있는 협력사만
 // RGN2 필터 — 다중 선택 Set. 빈 Set = '전체 RGN2'(필터 미적용).
 // 하위 호환: 코드 다른 곳에서 'currentRegionFilter ? ... : null' 패턴을 위해 빈 Set 도 falsy 처럼 동작하게 _activeRgn2() 헬퍼 사용.
 let currentRegionFilter = new Set();
@@ -1804,6 +1806,24 @@ function applyFilters() {
 function filterRiskOnly() {
   riskOnlyMode = !riskOnlyMode;
   applyFilters();
+}
+
+// '운행만' — 이번 주차 실제 운행이력이 있는 협력사만 표시 (토글)
+function filterOperatingOnly() {
+  operatingOnlyMode = !operatingOnlyMode;
+  applyFilters();
+}
+
+// 퍼포먼스 리스트 필터 버튼 활성화 상태 시각 반영
+function _syncPerfFilterBtns() {
+  const set = (id, on) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.classList.toggle('btn-primary', on);
+    b.classList.toggle('btn-ghost', !on);
+  };
+  set('perf-risk-btn', riskOnlyMode);
+  set('perf-oper-btn', operatingOnlyMode);
 }
 
 // ── 상단 필터 핸들러 ──
@@ -3358,7 +3378,12 @@ function _toggleGradeFilter(tableKey, grade) {
 function _clearAllTableFilters(tableKey) {
   _tblState[tableKey] = { sortKey: null, sortDir: null, filterGrades: new Set() };
   if (tableKey === 'realtime') renderRealtime();
-  else if (tableKey === 'perfList') renderPerfList();
+  else if (tableKey === 'perfList') {
+    // 퍼포먼스 리스트의 위험만/운행만 토글도 함께 해제
+    riskOnlyMode = false;
+    operatingOnlyMode = false;
+    renderPerfList();
+  }
 }
 
 function _toggleGradeMenu(tableKey, e) {
@@ -4546,6 +4571,14 @@ function renderPerfList() {
       return slaLow || slotsLow;
     });
   }
+
+  // ── 운행만 필터 (퍼포먼스 리스트 전용) ──
+  // 이번 주차(월~운영일 today)에 실제 운행이력(처리건수 ≥ 1)이 있는 협력사만
+  if (operatingOnlyMode) {
+    recordsFiltered = recordsFiltered.filter(r => r.hasVolThisWeek && !r.empty);
+  }
+
+  _syncPerfFilterBtns();
 
   // ── 정렬 적용 ──
   if (st.sortKey) {
