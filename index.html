@@ -4511,6 +4511,8 @@ function renderPerfList() {
     }));
     return {
       p, pid, rgn2, tpl3, region, grade, prev, prior, priorWeek, hasVolThisWeek,
+      // 노출 기준: 운영상태 '운영중' 협력사
+      isActive: String(p['운영상태'] || '').trim() === '운영중',
       // sort keys
       partnerName: p['협력사명']||'',
       partnerId:   pid||'',
@@ -4530,9 +4532,9 @@ function renderPerfList() {
   });
 
   // ── 노출 기준 ──
-  //   1) '해당 기간 데이터 없음'(empty) 행 제외
-  //   2) 이번 주차(월~운영일 today)에 처리건수가 1건이라도 있는 협력사만
-  let recordsFiltered = records.filter(r => !r.empty && r.hasVolThisWeek);
+  //   협력사 상태가 '운영중'인 협력사 전체를 표시.
+  //   (운행이력이 없어 집계가 비어있는 협력사도 '운영중'이면 노출되며, 지표는 '-'로 렌더됨)
+  let recordsFiltered = records.filter(r => r.isActive);
 
   // ── 위험만 필터 (퍼포먼스 리스트 전용) ──
   // 기준: prev.sla < 75% (수락률 75% 미만)  OR  prev.slotsAchieved < 4 (달성슬롯수 4개 미만)
