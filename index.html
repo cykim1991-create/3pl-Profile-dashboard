@@ -410,6 +410,7 @@ textarea.form-input{resize:vertical;min-height:60px}
     <div class="topbar-nav">
       <button class="nav-btn active" onclick="switchView('performance',this)">📊 협력사 퍼포먼스</button>
       <button class="nav-btn" onclick="switchView('realtime',this)">📡 실시간 운행현황</button>
+      <button class="nav-btn" onclick="switchView('churn',this)">📉 이탈 협력사</button>
     </div>
     <div class="topbar-filters">
       <button class="filter-select" id="regionFilterBtn" onclick="openRegionFilterModal()"
@@ -548,6 +549,8 @@ textarea.form-input{resize:vertical;min-height:60px}
           <span id="perf-date-label" style="font-size:11px;color:var(--text-secondary);font-weight:400;margin-left:8px"></span>
         </div>
         <div class="section-actions">
+          <select class="filter-select" id="perf-date-select" onchange="onPerfDateChange()"
+                  title="기준 일자 선택" style="padding:6px 10px;font-size:12px;cursor:pointer"></select>
           <input
             type="text"
             id="perfSearchInput"
@@ -587,6 +590,44 @@ textarea.form-input{resize:vertical;min-height:60px}
         </table>
       </div>
 
+    </div>
+
+    <!-- ══════════════════════════════════════
+         VIEW 3: 이탈 협력사
+         기준 D-1 총처리건수가 전주 동요일 대비 40%↑ 감소 &
+         전주 동요일 총처리건수 ≥ 100건인 협력사
+    ══════════════════════════════════════ -->
+    <div class="view" id="view-churn">
+      <div class="section-header">
+        <div class="section-title">
+          📉 이탈 협력사
+          <span id="churn-date-label" style="font-size:11px;color:var(--text-secondary);font-weight:400;margin-left:8px"></span>
+        </div>
+        <div class="section-actions">
+          <span id="churn-count-label" style="font-size:11px;color:var(--text-secondary)"></span>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--text-secondary);margin:-4px 0 12px;line-height:1.5">
+        기준일(D-1) 총처리건수가 <b style="color:var(--accent-soft)">전주 동요일 대비 40% 이상 감소</b>하고,
+        전주 동요일 총처리건수가 <b style="color:var(--accent-soft)">100건 이상</b>인 협력사입니다. (감소율 높은 순)
+      </div>
+      <div class="table-wrap table-scroll">
+        <table class="data-table" style="min-width:900px">
+          <thead>
+            <tr>
+              <th>RGN2</th>
+              <th>권역</th>
+              <th>협력사명</th>
+              <th class="center">등급</th>
+              <th class="center">담당자</th>
+              <th class="center">전주 동요일<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
+              <th class="center">기준일(D-1)<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
+              <th class="center">감소율</th>
+            </tr>
+          </thead>
+          <tbody id="churnBody"></tbody>
+        </table>
+      </div>
     </div>
 
 
@@ -1298,6 +1339,7 @@ let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, 
 let filtered = [];
 let riskOnlyMode = false;
 let operatingOnlyMode = false;   // '운행만' — 이번 주차 실제 운행이력(hasVolThisWeek) 있는 협력사만
+let perfRefDate = null;          // 협력사 퍼포먼스 기준 일자 (null = 최신 D-1). 사용자가 select로 변경.
 // RGN2 필터 — 다중 선택 Set. 빈 Set = '전체 RGN2'(필터 미적용).
 // 하위 호환: 코드 다른 곳에서 'currentRegionFilter ? ... : null' 패턴을 위해 빈 Set 도 falsy 처럼 동작하게 _activeRgn2() 헬퍼 사용.
 let currentRegionFilter = new Set();
@@ -1801,6 +1843,7 @@ function applyFilters() {
   _updateRegionFilterBtnLabel();
   renderRealtime();
   renderPerformance();
+  renderChurn();
 }
 
 function filterRiskOnly() {
@@ -3445,8 +3488,8 @@ function _bindSortHandlers() {
 // 협력사 퍼포먼스 상단 KPI + 등급 위젯
 // 데이터 소스: 데일리운영현황(STATE.kpi)의 전일(D-1) row
 // 합산 대상: 전일 운행 이력이 있는 협력사(총처리건수 ≥ 1)만
-function _renderPerfTopSummary(partnerList) {
-  const { list: opList, d1, expectedD1, isStale } = _filterD1OpPartners(partnerList);
+function _renderPerfTopSummary(partnerList, refDate) {
+  const { list: opList, d1, expectedD1, isStale } = _filterD1OpPartners(partnerList, refDate);
   const setEl = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
   // 라벨용 안내 텍스트 — 시트 업데이트 대기 중일 때 노출
   const _dateLabelText = (date) => {
@@ -3899,14 +3942,22 @@ function _getPrevWindow() {
 //   전일       = today - 1일
 //   전전일     = today - 2일
 //   전주 동요일 = today - 8일 (= 전일과 같은 요일, 1주 전)
-function _getPrevDayWindow() {
+// refDate 지정 시 그 날짜를 기준일(prev)로 삼아 윈도우를 구성한다.
+// (미지정 시 기존 동작: 운영일 today 기준으로 D-1 자동 판정)
+function _getPrevDayWindow(refDate) {
   const dates = (STATE.kpi||[]).map(r => _kpiDateOf(r)).filter(Boolean).sort();
   if (!dates.length) return null;
-  const todayBase = _operationalToday().getTime();
-  const dataMaxTs = new Date(dates[dates.length - 1]).getTime();
-  const baseTs = (todayBase - _DAY_MS) <= dataMaxTs
-    ? todayBase
-    : (dataMaxTs + _DAY_MS);
+  let baseTs;
+  if (refDate) {
+    // prev.start = baseTs - 1일 = refDate 가 되도록 baseTs = refDate + 1일
+    baseTs = new Date(refDate).getTime() + _DAY_MS;
+  } else {
+    const todayBase = _operationalToday().getTime();
+    const dataMaxTs = new Date(dates[dates.length - 1]).getTime();
+    baseTs = (todayBase - _DAY_MS) <= dataMaxTs
+      ? todayBase
+      : (dataMaxTs + _DAY_MS);
+  }
   return {
     latest:    _fmtDate(baseTs - _DAY_MS),
     prev:      { start: _fmtDate(baseTs - 1*_DAY_MS), end: _fmtDate(baseTs - 1*_DAY_MS) },
@@ -3917,14 +3968,16 @@ function _getPrevDayWindow() {
 
 // ── 공통 헬퍼 (협력사 퍼포먼스 view용): 전일(D-1) 운행 이력이 있는 협력사 필터 ──
 // 데일리운영현황(STATE.kpi)의 D-1 일자에서 총처리건수 ≥ 1인 행을 가진 협력사만 통과.
-function _filterD1OpPartners(partnerList) {
+function _filterD1OpPartners(partnerList, refDate) {
   const win = _getPrevDayWindow();
-  // 기준일자(d1) = 데일리운영현황 시트 일자(A열) 컬럼의 최대값.
+  // 기준일자(d1): refDate 명시 시 그 날짜, 아니면 데일리운영현황 시트 일자(A열)의 최대값.
   // 운영일 - 1(expectedD1)과 비교해서 isStale 판정 → UI 안내·브리핑 알람에 활용.
+  // (단, 사용자가 과거 일자를 명시 선택한 경우 stale 경고는 표시하지 않음)
   const allDates = [...new Set((STATE.kpi || []).map(r => r['일자']).filter(Boolean))].sort();
-  const d1 = allDates.length ? allDates[allDates.length - 1] : null;
+  const latestD = allDates.length ? allDates[allDates.length - 1] : null;
+  const d1 = refDate || latestD;
   const expectedD1 = win ? win.prev.start : null;
-  const isStale = !!(expectedD1 && d1 && d1 < expectedD1);
+  const isStale = !refDate && !!(expectedD1 && d1 && d1 < expectedD1);
 
   if (!d1) return { list: [], d1: null, expectedD1, isStale: false };
 
@@ -4432,6 +4485,123 @@ function renderPerformance() {
   renderPerfList();
 }
 
+// ═══════════════════════════════════════════════════════════
+// 이탈 협력사 — 기준 D-1 총처리건수가 전주 동요일 대비 40%↑ 감소 &
+//               전주 동요일 총처리건수 ≥ 100건
+//   * 기준일은 항상 최신 운영일(D-1) — 퍼포먼스 날짜 선택과 무관
+//   * 상단 RGN2/담당자 필터는 반영
+// ═══════════════════════════════════════════════════════════
+const CHURN_MIN_PREV = 100;   // 전주 동요일 최소 처리건수
+const CHURN_DROP_RATE = 0.4;  // 감소율 임계 (40%)
+
+function renderChurn() {
+  const body  = document.getElementById('churnBody');
+  const label = document.getElementById('churn-date-label');
+  const countL= document.getElementById('churn-count-label');
+  if (!body) return;
+
+  // 기준일 = 데이터가 실제로 존재하는 최신 운영일(시트 최대 일자).
+  // (운영 D-1을 쓰면 시트 미업데이트 시 기준일이 비어 전 협력사가 100% 감소로 오판될 수 있음)
+  const allDates = _availablePerfDates();   // 최신순
+  if (!allDates.length) {
+    body.innerHTML = `<tr><td colspan="8" class="empty">데이터 없음</td></tr>`;
+    if (label) label.textContent = '';
+    if (countL) countL.textContent = '';
+    return;
+  }
+  const d1 = allDates[0];                                       // 기준일 (최신 운영일)
+  const lw = _fmtDate(new Date(d1).getTime() - 7 * _DAY_MS);    // 전주 동요일 (-7일)
+  if (label) label.textContent = `${d1} (기준일) vs ${lw} (전주 동요일)`;
+
+  // 협력사ID → 해당 일자 총처리건수 합산
+  const volByDate = (dateStr) => {
+    const m = new Map();
+    (STATE.kpi || []).forEach(r => {
+      if (r['일자'] !== dateStr) return;
+      const pid = r['협력사ID']; if (!pid) return;
+      m.set(pid, (m.get(pid) || 0) + Number(r['총처리건수'] || 0));
+    });
+    return m;
+  };
+  const d1Vol = volByDate(d1);
+  const lwVol = volByDate(lw);
+
+  // 상단 RGN2/담당자 필터 반영
+  const baseList = (filtered && filtered.length) ? filtered : (STATE.partners || []);
+  const allowed  = new Set(baseList.map(p => p['협력사ID']).filter(Boolean));
+  const metaByPid = new Map((STATE.partners || []).map(p => [p['협력사ID'], p]));
+
+  const rows = [];
+  lwVol.forEach((prev, pid) => {
+    if (!allowed.has(pid)) return;
+    if (prev < CHURN_MIN_PREV) return;            // 전주 동요일 ≥ 100건
+    const curr = d1Vol.get(pid) || 0;
+    const dropRate = (prev - curr) / prev;        // 감소율
+    if (dropRate < CHURN_DROP_RATE) return;       // 40% 이상 감소
+    const p = metaByPid.get(pid) || {};
+    const rgn2 = getPartnerRgn2(p, getLatestKPI(pid)) || '-';
+    rows.push({
+      pid,
+      name:    p['협력사명'] || pid,
+      rgn2,
+      region:  p['권역명'] || '-',
+      grade:   p['등급'] || '-',
+      manager: getManagerForRGN2(rgn2, p['담당매니저']) || '-',
+      prev, curr, dropRate,
+    });
+  });
+  rows.sort((a, b) => b.dropRate - a.dropRate);
+
+  if (countL) countL.textContent = `${rows.length}개 협력사`;
+
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="8" class="empty">조건에 해당하는 이탈 협력사가 없습니다</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = rows.map(r => `
+    <tr onclick="openPerfDetailModal('${r.pid}')" style="cursor:pointer">
+      <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${r.rgn2}</td>
+      <td style="color:var(--text-secondary);font-size:11px">${r.region}</td>
+      <td><strong style="color:var(--text-strong)">${r.name}</strong>
+        <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
+      <td style="text-align:center">${getGradeBadge(r.grade)}</td>
+      <td style="text-align:center;color:var(--text-secondary);font-size:11px">${r.manager}</td>
+      <td style="text-align:center;color:var(--text-cell)">${r.prev.toLocaleString()}건</td>
+      <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.curr.toLocaleString()}건</td>
+      <td style="text-align:center;font-weight:700;color:#f87171">▼${(r.dropRate*100).toFixed(1)}%</td>
+    </tr>`).join('');
+}
+
+// 데일리운영현황(STATE.kpi)에 존재하는 일자들 (최신순) 반환
+function _availablePerfDates() {
+  return [...new Set((STATE.kpi || []).map(r => r['일자']).filter(Boolean))].sort().reverse();
+}
+
+// 기준 일자 select 옵션 채우기 (데이터 변동 시에만 재구성, 현재 선택값 반영)
+function _populatePerfDateSelect() {
+  const sel = document.getElementById('perf-date-select');
+  if (!sel) return;
+  const dates = _availablePerfDates();
+  if (!dates.length) { sel.innerHTML = ''; return; }
+  const sig = dates.join('|');
+  if (sel.dataset.sig !== sig) {
+    sel.innerHTML = dates.map((d, i) =>
+      `<option value="${d}">${d}${i === 0 ? ' (최신)' : ''}</option>`).join('');
+    sel.dataset.sig = sig;
+  }
+  sel.value = perfRefDate || dates[0];
+}
+
+// 기준 일자 변경 핸들러 — 최신 일자 선택 시 perfRefDate=null(자동 D-1)로 취급
+function onPerfDateChange() {
+  const sel = document.getElementById('perf-date-select');
+  const dates = _availablePerfDates();
+  const latest = dates[0] || null;
+  perfRefDate = (sel && sel.value && sel.value !== latest) ? sel.value : null;
+  renderPerfList();
+}
+
 const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','partnerName','grade','sets','riderAct','totalVol','orderAch','sla','slotsAchieved'];
 
 function renderPerfList() {
@@ -4444,14 +4614,18 @@ function renderPerfList() {
   _renderGradeChip('perfList');
   _updateSortIndicators('perfList', _PERF_SORT_KEYS);
 
+  // 기준 일자 select 채우고 현재 선택값 반영
+  _populatePerfDateSelect();
+  const refDate = perfRefDate;   // null = 최신 D-1
+
   // 슬롯 목표는 협력사 권역별로 다르므로 records.map 안에서 lookup
   // 위험만 필터는 record 빌드 후 prev.sla / prev.slotsAchieved 기준으로 적용 (아래에서 처리)
   const baseList = (filtered && filtered.length) ? filtered : (STATE.partners || []);
   const source   = baseList;
   const st       = _tblState.perfList;
 
-  // ── 상단 데이터 서머리 (KPI 카드 + 등급별 협력사 수) — 전일 기준 ──
-  _renderPerfTopSummary(baseList);
+  // ── 상단 데이터 서머리 (KPI 카드 + 등급별 협력사 수) — 선택 일자(기본 전일) 기준 ──
+  _renderPerfTopSummary(baseList, refDate);
 
   // 검색 + 등급 필터
   const partnersBase = source.filter(p => {
@@ -4466,8 +4640,8 @@ function renderPerfList() {
     return name.includes(search) || id.includes(search) || area.includes(search);
   });
 
-  // 전일 데이터 기준 (단일 일자)
-  const window = _getPrevDayWindow();
+  // 기준 일자 (단일 일자) — refDate 선택 시 그 날짜, 아니면 최신 D-1
+  const window = _getPrevDayWindow(refDate);
   if (label) {
     label.textContent = window ? `${window.prev.start} 기준` : '';
   }
@@ -5569,8 +5743,9 @@ function switchView(name, btn) {
   const el = document.getElementById('view-'+name);
   if (el) el.classList.add('active');
   if (btn) btn.classList.add('active');
-  // trigger render for performance view (lazy)
+  // trigger render (lazy)
   if (name === 'performance') renderPerformance();
+  else if (name === 'churn') renderChurn();
 }
 
 function showToast(msg) {
