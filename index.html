@@ -712,6 +712,7 @@ textarea.form-input{resize:vertical;min-height:60px}
     <div id="regionFilterBody" style="padding:14px 18px;display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;max-height:68vh;overflow-y:auto;align-content:start"></div>
     <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="closeRegionFilterModal()">닫기</button>
+      <button class="btn btn-primary btn-sm" onclick="applyRegionFilter()">✓ 필터 적용</button>
     </div>
   </div>
 </div>
@@ -1345,6 +1346,9 @@ let perfRefDate = null;          // 협력사 퍼포먼스 기준 일자 (null =
 // RGN2 필터 — 다중 선택 Set. 빈 Set = '전체 RGN2'(필터 미적용).
 // 하위 호환: 코드 다른 곳에서 'currentRegionFilter ? ... : null' 패턴을 위해 빈 Set 도 falsy 처럼 동작하게 _activeRgn2() 헬퍼 사용.
 let currentRegionFilter = new Set();
+// 지역 필터 모달에서 편집 중인 임시(staging) 선택. '필터 적용'을 눌러야 currentRegionFilter로 반영된다.
+// (체크할 때마다 즉시 applyFilters 하지 않아 로딩/깜빡임 방지)
+let _pendingRegionFilter = new Set();
 
 const SAMPLE = {
   // 시스템 설정 (활성 키 없음 — 추후 확장용)
@@ -1893,6 +1897,8 @@ function resetTopFilters() {
 // 지역(RGN2) 필터 팝업 모달
 // ═══════════════════════════════════════════════════
 function openRegionFilterModal() {
+  // 현재 적용된 필터를 staging 으로 복사 → 모달은 staging 을 편집
+  _pendingRegionFilter = new Set(currentRegionFilter);
   _renderRegionFilterModalBody();
   document.getElementById('regionFilterModal').classList.add('open');
 }
@@ -1911,9 +1917,9 @@ function _renderRegionFilterModalBody() {
   // 광역 카드 1개 빌더
   const renderCityCard = (g) => {
     if (!g || !g.items.length) return '';
-    const allChecked = g.items.every(r => currentRegionFilter.has(r));
-    const someChecked = g.items.some(r => currentRegionFilter.has(r));
-    const selCount = g.items.filter(r => currentRegionFilter.has(r)).length;
+    const allChecked = g.items.every(r => _pendingRegionFilter.has(r));
+    const someChecked = g.items.some(r => _pendingRegionFilter.has(r));
+    const selCount = g.items.filter(r => _pendingRegionFilter.has(r)).length;
     return `
       <div class="rgn2-city-card" data-city-key="${g.key}" data-city-label="${g.label}" style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0">
         <div style="display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:2px">
@@ -1928,7 +1934,7 @@ function _renderRegionFilterModalBody() {
         </div>
         <div class="rgn2-city-items" style="display:flex;flex-direction:column;gap:3px;max-height:36vh;overflow-y:auto">
           ${g.items.map(r => {
-            const checked = currentRegionFilter.has(r) ? 'checked' : '';
+            const checked = _pendingRegionFilter.has(r) ? 'checked' : '';
             const short = r.replace(g.prefix, '');
             return `<label class="rgn2-item" data-item-text="${short.toLowerCase()}" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);padding:3px 4px;border-radius:4px;cursor:pointer" onmouseover="this.style.background='var(--bg-hover,rgba(255,255,255,.04))'" onmouseout="this.style.background='transparent'">
               <input type="checkbox" ${checked} onclick="_toggleRegion('${r.replace(/'/g,"\\'")}', this.checked)">
@@ -1946,7 +1952,7 @@ function _renderRegionFilterModalBody() {
     const sectionGroups = sec.cityKeys.map(k => byKey[k]).filter(g => g && g.items.length);
     if (!sectionGroups.length) return '';
     const totalItems = sectionGroups.reduce((s,g) => s + g.items.length, 0);
-    const selItems   = sectionGroups.reduce((s,g) => s + g.items.filter(r => currentRegionFilter.has(r)).length, 0);
+    const selItems   = sectionGroups.reduce((s,g) => s + g.items.filter(r => _pendingRegionFilter.has(r)).length, 0);
     const colSpanStyle = sec.fullWidth ? 'grid-column:1/-1;' : '';
     const isMulti = sec.cityKeys.length > 1;
     // 풀폭 섹션 내부 그리드: 카드 여러 개 (auto-fill)
@@ -2012,17 +2018,15 @@ function _filterRegionSearch(q) {
 function _updateRegionFilterSummary() {
   const summary = document.getElementById('regionFilterSummary');
   if (!summary) return;
-  summary.innerHTML = `선택된 지역: <b style="color:var(--accent-soft)">${currentRegionFilter.size}</b>개`;
+  summary.innerHTML = `선택된 지역: <b style="color:var(--accent-soft)">${_pendingRegionFilter.size}</b>개`;
 }
 
+// 아래 토글들은 staging(_pendingRegionFilter)만 수정 → 즉시 applyFilters 하지 않음.
+// 실제 반영은 '필터 적용' 버튼(applyRegionFilter)에서 1회만 수행.
 function _toggleRegion(rgn2, checked) {
-  if (checked) currentRegionFilter.add(rgn2);
-  else currentRegionFilter.delete(rgn2);
-  // RGN2 변경 시 담당자 필터 해제 (상호 배타)
-  const mgrSel = document.getElementById('managerFilter');
-  if (mgrSel && mgrSel.value) mgrSel.value = '';
+  if (checked) _pendingRegionFilter.add(rgn2);
+  else _pendingRegionFilter.delete(rgn2);
   _renderRegionFilterModalBody();   // 그룹 체크박스/카운트 갱신
-  applyFilters();
 }
 
 function _toggleRegionGroup(groupKey, checked) {
@@ -2032,20 +2036,28 @@ function _toggleRegionGroup(groupKey, checked) {
     ? list.filter(r => r.startsWith(grp.prefix))
     : list.filter(r => !_CITY_GROUPS.some(g => r.startsWith(g.prefix))); // '기타'
   items.forEach(r => {
-    if (checked) currentRegionFilter.add(r);
-    else currentRegionFilter.delete(r);
+    if (checked) _pendingRegionFilter.add(r);
+    else _pendingRegionFilter.delete(r);
   });
-  // RGN2 변경 시 담당자 필터 해제
-  const mgrSel = document.getElementById('managerFilter');
-  if (mgrSel && mgrSel.value) mgrSel.value = '';
   _renderRegionFilterModalBody();
-  applyFilters();
 }
 
 function clearAllRegionSelection() {
-  currentRegionFilter.clear();
+  _pendingRegionFilter.clear();
   _renderRegionFilterModalBody();
+}
+
+// '필터 적용' — staging 선택을 실제 필터로 반영하고 1회만 렌더
+function applyRegionFilter() {
+  currentRegionFilter = new Set(_pendingRegionFilter);
+  // RGN2 를 선택한 경우 담당자 필터와 상호 배타 → 담당자 필터 해제
+  if (currentRegionFilter.size > 0) {
+    const mgrSel = document.getElementById('managerFilter');
+    if (mgrSel && mgrSel.value) mgrSel.value = '';
+  }
+  _updateRegionFilterBtnLabel();
   applyFilters();
+  closeRegionFilterModal();
 }
 
 // ═══════════════════════════════════════════════════
