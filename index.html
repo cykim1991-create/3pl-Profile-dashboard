@@ -411,6 +411,7 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="nav-btn active" onclick="switchView('performance',this)">📊 협력사 퍼포먼스</button>
       <button class="nav-btn" onclick="switchView('realtime',this)">📡 실시간 운행현황</button>
       <button class="nav-btn" onclick="switchView('churn',this)">📉 이탈 협력사</button>
+      <button class="nav-btn" onclick="switchView('penalty',this)">⛔ 운영중지 대상</button>
     </div>
     <div class="topbar-filters">
       <button class="filter-select" id="regionFilterBtn" onclick="openRegionFilterModal()"
@@ -632,6 +633,52 @@ textarea.form-input{resize:vertical;min-height:60px}
       </div>
     </div>
 
+    <!-- ══════════════════════════════════════
+         VIEW 4: 운영중지 대상 (패널티) + 유예 결정
+    ══════════════════════════════════════ -->
+    <div class="view" id="view-penalty">
+      <div class="section-header">
+        <div class="section-title">
+          ⛔ 운영중지 대상
+          <span id="penalty-week-label" style="font-size:11px;color:var(--text-secondary);font-weight:400;margin-left:8px"></span>
+        </div>
+        <div class="section-actions">
+          <select class="filter-select" id="penalty-status-filter" onchange="renderPenalty()"
+                  title="유예 결정 상태 필터" style="padding:6px 10px;font-size:12px;cursor:pointer">
+            <option value="">전체 상태</option>
+            <option value="검토중">검토중</option>
+            <option value="유예">유예</option>
+            <option value="운영중지 진행">운영중지 진행</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('penalty')" title="정렬/필터 모두 해제">↻ 초기화</button>
+          <span id="penalty-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--text-secondary);margin:-4px 0 12px;line-height:1.5">
+        차주 <b style="color:#f87171">운영중지(패널티)</b> 대상 협력사입니다. 영업담당이 <b style="color:var(--accent-soft)">유예 여부</b>를 검토·결정합니다.
+        결정은 <code style="font-size:11px">운영중지_유예결정</code> 시트에 누적 저장됩니다.
+      </div>
+      <div class="table-wrap table-scroll">
+        <table class="data-table" style="min-width:1080px">
+          <thead>
+            <tr>
+              <th data-sort="penalty:region" style="cursor:pointer">권역<span id="sort-penalty-region"></span></th>
+              <th class="center" data-sort="penalty:zone" style="cursor:pointer">지역구분<span id="sort-penalty-zone"></span></th>
+              <th data-sort="penalty:partnerName" style="cursor:pointer">협력사명<span id="sort-penalty-partnerName"></span></th>
+              <th class="center" data-sort="penalty:grade" style="cursor:pointer">등급<span id="sort-penalty-grade"></span></th>
+              <th class="center" data-sort="penalty:accept" style="cursor:pointer">수락률<span id="sort-penalty-accept"></span></th>
+              <th class="center" data-sort="penalty:slots" style="cursor:pointer">달성<br><span style="font-size:10px;font-weight:400">슬롯</span><span id="sort-penalty-slots"></span></th>
+              <th class="center" data-sort="penalty:vol" style="cursor:pointer">처리건수<br><span style="font-size:10px;font-weight:400">7일평균</span><span id="sort-penalty-vol"></span></th>
+              <th class="center" data-sort="penalty:consec" style="cursor:pointer">연속<br><span style="font-size:10px;font-weight:400">미달성</span><span id="sort-penalty-consec"></span></th>
+              <th class="center" data-sort="penalty:status" style="cursor:pointer">유예여부<span id="sort-penalty-status"></span></th>
+              <th class="center">결정</th>
+            </tr>
+          </thead>
+          <tbody id="penaltyBody"></tbody>
+        </table>
+      </div>
+    </div>
+
 
   </div><!-- /main -->
 
@@ -680,6 +727,38 @@ textarea.form-input{resize:vertical;min-height:60px}
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button class="btn btn-ghost btn-sm"   id="dataStale-close-2" onclick="document.getElementById('dataStaleModal').classList.remove('open')">취소</button>
         <button class="btn btn-primary btn-sm" id="dataStale-proceed">그래도 보기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 운영중지 유예 결정 모달 -->
+<div class="modal-overlay" id="penaltyDecisionModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">⛔ 유예 여부 결정</div>
+      <button class="modal-close" onclick="closePenaltyDecisionModal()">✕</button>
+    </div>
+    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+      <div id="penaltyDec-info" style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12.5px;color:var(--text-secondary);line-height:1.6"></div>
+      <div>
+        <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">유예 여부</label>
+        <select id="penaltyDec-status" class="filter-select" style="width:100%;padding:8px 10px;font-size:13px">
+          <option value="검토중">검토중</option>
+          <option value="유예">유예</option>
+          <option value="운영중지 진행">운영중지 진행</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">사유 / 메모</label>
+        <textarea id="penaltyDec-reason" placeholder="유예/진행 결정 사유를 입력하세요"
+                  style="width:100%;min-height:72px;padding:8px 10px;font-size:13px;background:var(--bg-section);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-family:inherit;resize:vertical"></textarea>
+      </div>
+      <div id="penaltyDec-meta" style="font-size:11px;color:var(--text-muted)"></div>
+      <div id="penaltyDec-error" style="display:none;color:#f87171;font-size:11.5px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="closePenaltyDecisionModal()">취소</button>
+        <button class="btn btn-primary btn-sm" id="penaltyDec-save" onclick="savePenaltyDecision()">💾 저장</button>
       </div>
     </div>
   </div>
@@ -1338,7 +1417,7 @@ function filterKPIRecent(kpi, weeks) {
 // ═══════════════════════════════════════════════════
 // STATE + SAMPLE DATA
 // ═══════════════════════════════════════════════════
-let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, tpl3Share:{}, rgn2Managers:{} };
+let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, tpl3Share:{}, rgn2Managers:{}, penalty:[], penaltyDecisions:new Map() };
 let filtered = [];
 let riskOnlyMode = false;
 let operatingOnlyMode = false;   // '운행만' — 이번 주차 실제 운행이력(hasVolThisWeek) 있는 협력사만
@@ -1514,7 +1593,7 @@ async function init() {
   try {
     // v9 시트 구조: row1=제목, row2=헤더, row3+=데이터 (0-indexed: header=1, data=2)
     // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
-    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals, rgn2InfoVals] = await Promise.all([
+    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals, rgn2InfoVals, penaltyVals, penaltyDecVals] = await Promise.all([
       fetchSheet('협력사기본정보',     'A:K'),    // 11열 (마스터 — 전화번호는 별도 시트)
       fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
       fetchSheet('실시간운행현황',     'A:AB'),   // 28열 (AB열 = active_rider 추가)
@@ -1525,6 +1604,10 @@ async function init() {
       fetchSheet('협력사연락처',       'A:I').catch(() => []),
       // RGN2정보 — 권역명 → RGN2 매핑 (3열: 권역명, RGN1, RGN2)
       fetchSheet('RGN2정보',           'A:C').catch(() => []),
+      // 운영중지대상 (주차별 패널티 리스트) — 10열. 없으면 빈 배열
+      fetchSheet('운영중지대상',       'A:J').catch(() => []),
+      // 운영중지_유예결정 (영업담당 유예 결정 누적) — 7열. 없으면 빈 배열
+      fetchSheet('운영중지_유예결정',  'A:G').catch(() => []),
     ]);
     STATE.partners     = parseSheet(partnerVals,  1, 2);
     // RGN2 매핑 기준 (2026-05): 'RGN2정보' 시트의 권역명 → RGN2 매핑을 사용.
@@ -1647,6 +1730,52 @@ async function init() {
     } catch (_) {
       STATE.contacts = [];
     }
+
+    // 운영중지대상 (헤더 row1, 데이터 row2+) — 주차별 패널티 리스트
+    try {
+      STATE.penalty = parseSheet(penaltyVals, 0, 1).map(r => ({
+        주차:       String(r['주차'] || '').trim(),
+        협력사명:   (r['협력사명'] || '').toString().trim(),
+        협력사ID:   (r['협력사ID'] || '').toString().trim(),
+        권역:       (r['권역'] || '').toString().trim(),
+        지역구분:   (r['지역구분'] || '').toString().trim(),
+        등급:       (r['등급'] || '').toString().trim(),
+        수락률:     Number(String(r['수락률(%)'] || '').replace(/[%\s,]/g,'')) || 0,
+        달성슬롯:   Number(r['달성슬롯'] || 0) || 0,
+        처리건수:   Number(String(r['처리건수(7일일평균)'] || '').replace(/[,\s]/g,'')) || 0,
+        연속미달성: Number(r['연속미달성주차'] || 0) || 0,
+      })).filter(r => r.협력사ID || r.협력사명);
+    } catch (_) { STATE.penalty = []; }
+
+    // 운영중지_유예결정 (헤더 row1, 데이터 row2+) — 주차+협력사ID 키로 결정 누적.
+    // 시트 행 번호(_row, 1-based)를 보관해 in-place 업데이트에 사용.
+    STATE.penaltyDecisions = (() => {
+      const map = new Map();
+      const vals = penaltyDecVals || [];
+      if (vals.length < 2 || !vals[0]) return map;
+      const headers = vals[0].map(h => String(h == null ? '' : h).trim());
+      const col = n => headers.indexOf(n);
+      const ci = {
+        wk: col('주차'), pid: col('협력사ID'), name: col('협력사명'),
+        status: col('유예여부'), reason: col('사유'), person: col('결정자'), ts: col('결정일시'),
+      };
+      if (ci.wk < 0 || ci.pid < 0) return map;   // 헤더 형식 불일치 시 무시
+      for (let i = 1; i < vals.length; i++) {
+        const row = vals[i]; if (!row) continue;
+        const wk  = String(row[ci.wk]  == null ? '' : row[ci.wk]).trim();
+        const pid = String(row[ci.pid] == null ? '' : row[ci.pid]).trim();
+        if (!wk || !pid) continue;
+        map.set(wk + '||' + pid, {
+          주차: wk, 협력사ID: pid,
+          status: (ci.status >= 0 ? String(row[ci.status] || '').trim() : '') || '검토중',
+          reason: ci.reason >= 0 ? String(row[ci.reason] || '') : '',
+          person: ci.person >= 0 ? String(row[ci.person] || '') : '',
+          ts:     ci.ts     >= 0 ? String(row[ci.ts]     || '') : '',
+          _row:   i + 1,   // vals[0]=시트행1(헤더), vals[i]=시트행 i+1
+        });
+      }
+      return map;
+    })();
 
     // 시트에 이미 올라간 로컬 로그(같은 로그ID)는 로컬에서 정리 → "로컬" 뱃지 중복 방지
     try {
@@ -1850,6 +1979,7 @@ function applyFilters() {
   renderRealtime();
   renderPerformance();
   renderChurn();
+  renderPenalty();
 }
 
 function filterRiskOnly() {
@@ -3415,12 +3545,15 @@ const _tblState = {
   perfList: { sortKey: 'grade', sortDir: 'asc', filterGrades: new Set() },
   // 이탈 협력사 — 기본 정렬: 감소율 내림차순 (가장 심한 순)
   churn:    { sortKey: 'dropRate', sortDir: 'desc', filterGrades: new Set() },
+  // 운영중지 대상 — 기본 정렬: 연속미달성 내림차순
+  penalty:  { sortKey: 'consec', sortDir: 'desc', filterGrades: new Set() },
 };
 
 function _rerenderTable(tableKey) {
   if (tableKey === 'realtime') renderRealtime();
   else if (tableKey === 'perfList') renderPerfList();
   else if (tableKey === 'churn') renderChurn();
+  else if (tableKey === 'penalty') renderPenalty();
 }
 
 function _toggleSort(tableKey, colKey) {
@@ -3439,9 +3572,10 @@ function _toggleGradeFilter(tableKey, grade) {
 }
 
 function _clearAllTableFilters(tableKey) {
-  // 기본 정렬값 복원 (이탈 탭만 감소율 내림차순 기본 유지, 나머지는 기존대로 정렬 해제)
+  // 기본 정렬값 복원 (이탈/운영중지 탭은 고유 기본 정렬 유지, 나머지는 기존대로 정렬 해제)
   const defaults = {
-    churn: { sortKey: 'dropRate', sortDir: 'desc' },
+    churn:   { sortKey: 'dropRate', sortDir: 'desc' },
+    penalty: { sortKey: 'consec', sortDir: 'desc' },
   };
   const d = defaults[tableKey] || { sortKey: null, sortDir: null };
   _tblState[tableKey] = { sortKey: d.sortKey, sortDir: d.sortDir, filterGrades: new Set() };
@@ -3449,6 +3583,10 @@ function _clearAllTableFilters(tableKey) {
     // 퍼포먼스 리스트의 위험만/운행만 토글도 함께 해제
     riskOnlyMode = false;
     operatingOnlyMode = false;
+  }
+  if (tableKey === 'penalty') {
+    const sf = document.getElementById('penalty-status-filter');
+    if (sf) sf.value = '';   // 상태 필터도 해제
   }
   _rerenderTable(tableKey);
 }
@@ -4621,6 +4759,266 @@ function renderChurn() {
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.curr.toLocaleString()}건</td>
       <td style="text-align:center;font-weight:700;color:#f87171">▼${(r.dropRate*100).toFixed(1)}%</td>
     </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// 운영중지 대상 (패널티) + 유예 결정
+// ═══════════════════════════════════════════════════════════
+const _PENALTY_SORT_KEYS = ['region','zone','partnerName','grade','accept','slots','vol','consec','status'];
+
+// HTML 이스케이프 (사용자 입력 사유 등 innerHTML 삽입 시 XSS 방지)
+function _escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// 주차 코드(20260603) → 표시 라벨 (2026-06-03)
+function _fmtPenaltyWeek(w) {
+  const s = String(w || '').trim();
+  return /^\d{8}$/.test(s) ? `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}` : s;
+}
+
+// 지역구분 짧게 ('1.집중지역' → '집중')
+function _zoneShort(z) {
+  const s = String(z || '').replace(/^\s*\d+\s*[.\)]\s*/, '').trim();
+  return s.replace('지역', '') || '-';
+}
+
+function _latestPenaltyWeek() {
+  const weeks = [...new Set((STATE.penalty || []).map(r => r.주차).filter(Boolean))].sort();
+  return weeks.length ? weeks[weeks.length - 1] : null;
+}
+
+function _penaltyDecision(week, pid) {
+  const m = STATE.penaltyDecisions;
+  const d = (m instanceof Map) ? m.get(week + '||' + pid) : null;
+  return d || { status: '검토중', reason: '', person: '', ts: '' };
+}
+
+function _penaltyStatusBadge(status) {
+  const map = {
+    '유예':          '<span class="badge badge-stable">🟢 유예</span>',
+    '운영중지 진행':  '<span class="badge badge-risk">⛔ 운영중지 진행</span>',
+    '검토중':         '<span class="badge badge-onb">🕓 검토중</span>',
+  };
+  return map[status] || `<span class="badge">${_escHtml(status || '검토중')}</span>`;
+}
+
+function renderPenalty() {
+  const body   = document.getElementById('penaltyBody');
+  const label  = document.getElementById('penalty-week-label');
+  const countL = document.getElementById('penalty-count-label');
+  if (!body) return;
+  _updateSortIndicators('penalty', _PENALTY_SORT_KEYS);
+  const st = _tblState.penalty;
+
+  const week = _latestPenaltyWeek();
+  if (!week) {
+    if (label) label.textContent = '';
+    if (countL) countL.textContent = '';
+    body.innerHTML = `<tr><td colspan="10" class="empty">운영중지 대상 데이터가 없습니다 ('운영중지대상' 시트를 확인하세요)</td></tr>`;
+    return;
+  }
+  if (label) label.textContent = `${_fmtPenaltyWeek(week)} 기준 (차주 운영중지)`;
+
+  // 상단 RGN2/담당자 필터가 활성일 때만 협력사ID 교집합으로 좁힘 (비활성 시 전체 노출)
+  const mgrSel = document.getElementById('managerFilter');
+  const filterActive = (currentRegionFilter.size > 0) || (mgrSel && mgrSel.value);
+  const allowed = filterActive ? new Set((filtered || []).map(p => p['협력사ID']).filter(Boolean)) : null;
+
+  const statusF = (document.getElementById('penalty-status-filter') || {}).value || '';
+
+  let rows = (STATE.penalty || []).filter(r => r.주차 === week);
+  if (allowed) rows = rows.filter(r => r.협력사ID && allowed.has(r.협력사ID));
+  rows = rows.map(r => {
+    const dec = _penaltyDecision(week, r.협력사ID);
+    return { ...r, status: dec.status, reason: dec.reason, person: dec.person, ts: dec.ts };
+  });
+  if (statusF) rows = rows.filter(r => r.status === statusF);
+
+  // ── 정렬 ──
+  if (st.sortKey) {
+    const keyMap = {
+      region:      r => r.권역,
+      zone:        r => r.지역구분,
+      partnerName: r => r.협력사명,
+      grade:       r => _gradeRank(r.등급),
+      accept:      r => r.수락률,
+      slots:       r => r.달성슬롯,
+      vol:         r => r.처리건수,
+      consec:      r => r.연속미달성,
+      status:      r => r.status,
+    };
+    const g = keyMap[st.sortKey];
+    if (g) rows.sort((a, b) => _sortCompare(g(a), g(b), st.sortDir));
+  } else {
+    rows.sort((a, b) => b.연속미달성 - a.연속미달성);
+  }
+
+  if (countL) countL.textContent = `${rows.length}개 협력사`;
+
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="10" class="empty">조건에 해당하는 협력사가 없습니다</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = rows.map(r => {
+    const pidEsc = (r.협력사ID || '').replace(/'/g, "\\'");
+    const reasonLine = r.reason
+      ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_escHtml(r.reason)}">${_escHtml(r.reason)}</div>`
+      : '';
+    return `
+    <tr>
+      <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${_escHtml(r.권역 || '-')}</td>
+      <td style="text-align:center;font-size:11px;color:var(--text-secondary)">${_zoneShort(r.지역구분)}</td>
+      <td><strong style="color:var(--text-strong)">${_escHtml(r.협력사명 || '-')}</strong></td>
+      <td style="text-align:center">${getGradeBadge(r.등급)}</td>
+      <td style="text-align:center;color:${_slaColor(r.수락률 || 0)};font-weight:600">${r.수락률 ? r.수락률.toFixed(1) + '%' : '-'}</td>
+      <td style="text-align:center;color:var(--text-cell)">${r.달성슬롯}</td>
+      <td style="text-align:center;color:var(--text-cell)">${r.처리건수 ? r.처리건수.toLocaleString() : '-'}</td>
+      <td style="text-align:center;font-weight:700;color:#f87171">${r.연속미달성}주</td>
+      <td style="text-align:center">${_penaltyStatusBadge(r.status)}${reasonLine}</td>
+      <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick="openPenaltyDecisionModal('${week}','${pidEsc}')">결정</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── 유예 결정 모달 ──────────────────────────────────────────
+let _penaltyDecCtx = null;   // { week, pid, name }
+
+function openPenaltyDecisionModal(week, pid) {
+  const rec = (STATE.penalty || []).find(r => r.주차 === week && r.협력사ID === pid);
+  const name = rec ? rec.협력사명 : pid;
+  _penaltyDecCtx = { week, pid, name };
+  const dec = _penaltyDecision(week, pid);
+
+  const info = document.getElementById('penaltyDec-info');
+  if (info) info.innerHTML = `
+    <div><b style="color:var(--text-primary)">${_escHtml(name)}</b> <span style="color:var(--text-muted)">(${_escHtml(pid)})</span></div>
+    <div>주차: ${_fmtPenaltyWeek(week)} · 권역: ${_escHtml(rec ? rec.권역 : '-')} · ${_zoneShort(rec ? rec.지역구분 : '')}</div>
+    <div>수락률 ${rec && rec.수락률 ? rec.수락률.toFixed(1)+'%' : '-'} · 달성슬롯 ${rec ? rec.달성슬롯 : '-'} · 연속미달성 ${rec ? rec.연속미달성 : '-'}주</div>`;
+
+  const sel = document.getElementById('penaltyDec-status');
+  if (sel) sel.value = dec.status || '검토중';
+  const ta = document.getElementById('penaltyDec-reason');
+  if (ta) ta.value = dec.reason || '';
+  const meta = document.getElementById('penaltyDec-meta');
+  if (meta) meta.textContent = (dec.person || dec.ts) ? `최근 결정: ${dec.person || '-'} · ${dec.ts || '-'}` : '';
+  const err = document.getElementById('penaltyDec-error');
+  if (err) err.style.display = 'none';
+
+  document.getElementById('penaltyDecisionModal').classList.add('open');
+}
+
+function closePenaltyDecisionModal() {
+  document.getElementById('penaltyDecisionModal').classList.remove('open');
+  _penaltyDecCtx = null;
+}
+
+async function savePenaltyDecision() {
+  if (!_penaltyDecCtx) return;
+  const { week, pid, name } = _penaltyDecCtx;
+  const status = (document.getElementById('penaltyDec-status') || {}).value || '검토중';
+  const reason = (document.getElementById('penaltyDec-reason') || {}).value || '';
+  const errEl  = document.getElementById('penaltyDec-error');
+  const saveBtn = document.getElementById('penaltyDec-save');
+  const showErr = (m) => { if (errEl) { errEl.textContent = m; errEl.style.display = 'block'; } };
+
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) {
+    showErr('로그인이 필요합니다. 상단 🔑 로그인 후 다시 시도해 주세요.');
+    return;
+  }
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중…'; }
+
+  // 시트 컬럼 순서: 주차 | 협력사ID | 협력사명 | 유예여부 | 사유 | 결정자 | 결정일시
+  const now = (() => { const d = new Date(); const p = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; })();
+  const row = [week, pid, name || '', status, reason, gsiUserEmail || '', now];
+
+  const existing = (STATE.penaltyDecisions instanceof Map) ? STATE.penaltyDecisions.get(week + '||' + pid) : null;
+  const ok = (existing && existing._row)
+    ? await _updatePenaltyDecisionRow(existing._row, row)
+    : await _appendPenaltyDecisionRow(row);
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 저장'; }
+  if (!ok) {
+    showErr('저장 실패: ' + (_lastOAuthWriteError || '알 수 없는 오류') + " — '운영중지_유예결정' 시트가 있는지 확인하세요.");
+    return;
+  }
+  // 결정 시트만 다시 읽어 STATE 갱신 후 재렌더
+  await _refreshPenaltyDecisions();
+  closePenaltyDecisionModal();
+  renderPenalty();
+  showToast(`✓ 유예 결정 저장됨 (${name} · ${status})`);
+}
+
+async function _appendPenaltyDecisionRow(row) {
+  const range = encodeURIComponent('운영중지_유예결정!A:G');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${range}:append?valueInputOption=RAW`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      _lastOAuthWriteError = `[${res.status}] ${e?.error?.message || res.statusText}`;
+      if (res.status === 401) { gsiAccessToken = null; gsiTokenExpiry = 0; _clearOAuthStorage(); updateGsiBtn(false); }
+      return false;
+    }
+    _lastOAuthWriteError = ''; return true;
+  } catch (e) { _lastOAuthWriteError = '네트워크 오류: ' + (e?.message || e); return false; }
+}
+
+async function _updatePenaltyDecisionRow(rowNum, row) {
+  const range = encodeURIComponent(`운영중지_유예결정!A${rowNum}:G${rowNum}`);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${range}?valueInputOption=RAW`;
+  try {
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      _lastOAuthWriteError = `[${res.status}] ${e?.error?.message || res.statusText}`;
+      if (res.status === 401) { gsiAccessToken = null; gsiTokenExpiry = 0; _clearOAuthStorage(); updateGsiBtn(false); }
+      return false;
+    }
+    _lastOAuthWriteError = ''; return true;
+  } catch (e) { _lastOAuthWriteError = '네트워크 오류: ' + (e?.message || e); return false; }
+}
+
+// 결정 시트만 다시 읽어 STATE.penaltyDecisions 재구성 (행 번호 _row 포함)
+async function _refreshPenaltyDecisions() {
+  try {
+    const vals = await fetchSheet('운영중지_유예결정', 'A:G');
+    const map = new Map();
+    if (vals && vals.length >= 2 && vals[0]) {
+      const headers = vals[0].map(h => String(h == null ? '' : h).trim());
+      const col = n => headers.indexOf(n);
+      const ci = { wk: col('주차'), pid: col('협력사ID'), status: col('유예여부'), reason: col('사유'), person: col('결정자'), ts: col('결정일시') };
+      if (ci.wk >= 0 && ci.pid >= 0) {
+        for (let i = 1; i < vals.length; i++) {
+          const r = vals[i]; if (!r) continue;
+          const wk = String(r[ci.wk] == null ? '' : r[ci.wk]).trim();
+          const pid = String(r[ci.pid] == null ? '' : r[ci.pid]).trim();
+          if (!wk || !pid) continue;
+          map.set(wk + '||' + pid, {
+            주차: wk, 협력사ID: pid,
+            status: (ci.status >= 0 ? String(r[ci.status] || '').trim() : '') || '검토중',
+            reason: ci.reason >= 0 ? String(r[ci.reason] || '') : '',
+            person: ci.person >= 0 ? String(r[ci.person] || '') : '',
+            ts:     ci.ts     >= 0 ? String(r[ci.ts]     || '') : '',
+            _row:   i + 1,
+          });
+        }
+      }
+    }
+    STATE.penaltyDecisions = map;
+  } catch (_) { /* 유지 */ }
 }
 
 // 데일리운영현황(STATE.kpi)에 존재하는 일자들 (최신순) 반환
@@ -5796,6 +6194,7 @@ function switchView(name, btn) {
   // trigger render (lazy)
   if (name === 'performance') renderPerformance();
   else if (name === 'churn') renderChurn();
+  else if (name === 'penalty') renderPenalty();
 }
 
 function showToast(msg) {
