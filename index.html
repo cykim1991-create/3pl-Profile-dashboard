@@ -604,7 +604,9 @@ textarea.form-input{resize:vertical;min-height:60px}
           <span id="churn-date-label" style="font-size:11px;color:var(--text-secondary);font-weight:400;margin-left:8px"></span>
         </div>
         <div class="section-actions">
-          <span id="churn-count-label" style="font-size:11px;color:var(--text-secondary)"></span>
+          <div id="grade-chip-churn" style="display:inline-block"></div>
+          <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('churn')" title="정렬/필터 모두 해제">↻ 초기화</button>
+          <span id="churn-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
         </div>
       </div>
       <div style="font-size:11.5px;color:var(--text-secondary);margin:-4px 0 12px;line-height:1.5">
@@ -615,14 +617,14 @@ textarea.form-input{resize:vertical;min-height:60px}
         <table class="data-table" style="min-width:900px">
           <thead>
             <tr>
-              <th>RGN2</th>
-              <th>권역</th>
-              <th>협력사명</th>
-              <th class="center">등급</th>
-              <th class="center">담당자</th>
-              <th class="center">전주 동요일<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
-              <th class="center">기준일(D-1)<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
-              <th class="center">감소율</th>
+              <th data-sort="churn:rgn2" style="cursor:pointer">RGN2<span id="sort-churn-rgn2"></span></th>
+              <th data-sort="churn:region" style="cursor:pointer">권역<span id="sort-churn-region"></span></th>
+              <th data-sort="churn:partnerName" style="cursor:pointer">협력사명<span id="sort-churn-partnerName"></span></th>
+              <th class="center" data-sort="churn:grade" style="cursor:pointer">등급<span id="sort-churn-grade"></span></th>
+              <th class="center" data-sort="churn:manager" style="cursor:pointer">담당자<span id="sort-churn-manager"></span></th>
+              <th class="center" data-sort="churn:prevVol" style="cursor:pointer">전주 동요일<br><span style="font-size:10px;font-weight:400">처리건수</span><span id="sort-churn-prevVol"></span></th>
+              <th class="center" data-sort="churn:currVol" style="cursor:pointer">기준일(D-1)<br><span style="font-size:10px;font-weight:400">처리건수</span><span id="sort-churn-currVol"></span></th>
+              <th class="center" data-sort="churn:dropRate" style="cursor:pointer">감소율<span id="sort-churn-dropRate"></span></th>
             </tr>
           </thead>
           <tbody id="churnBody"></tbody>
@@ -3399,34 +3401,44 @@ const _tblState = {
   realtime: { sortKey: 'grade', sortDir: 'asc', filterGrades: new Set() },
   // 협력사 퍼포먼스 — 기본 정렬: 등급 오름차순
   perfList: { sortKey: 'grade', sortDir: 'asc', filterGrades: new Set() },
+  // 이탈 협력사 — 기본 정렬: 감소율 내림차순 (가장 심한 순)
+  churn:    { sortKey: 'dropRate', sortDir: 'desc', filterGrades: new Set() },
 };
+
+function _rerenderTable(tableKey) {
+  if (tableKey === 'realtime') renderRealtime();
+  else if (tableKey === 'perfList') renderPerfList();
+  else if (tableKey === 'churn') renderChurn();
+}
 
 function _toggleSort(tableKey, colKey) {
   const st = _tblState[tableKey];
   if (st.sortKey !== colKey)        { st.sortKey = colKey; st.sortDir = 'asc'; }
   else if (st.sortDir === 'asc')    { st.sortDir = 'desc'; }
   else                               { st.sortKey = null;  st.sortDir = null; }
-  if (tableKey === 'realtime') renderRealtime();
-  else if (tableKey === 'perfList') renderPerfList();
+  _rerenderTable(tableKey);
 }
 
 function _toggleGradeFilter(tableKey, grade) {
   const st = _tblState[tableKey];
   if (st.filterGrades.has(grade)) st.filterGrades.delete(grade);
   else                             st.filterGrades.add(grade);
-  if (tableKey === 'realtime') renderRealtime();
-  else if (tableKey === 'perfList') renderPerfList();
+  _rerenderTable(tableKey);
 }
 
 function _clearAllTableFilters(tableKey) {
-  _tblState[tableKey] = { sortKey: null, sortDir: null, filterGrades: new Set() };
-  if (tableKey === 'realtime') renderRealtime();
-  else if (tableKey === 'perfList') {
+  // 기본 정렬값 복원 (이탈 탭만 감소율 내림차순 기본 유지, 나머지는 기존대로 정렬 해제)
+  const defaults = {
+    churn: { sortKey: 'dropRate', sortDir: 'desc' },
+  };
+  const d = defaults[tableKey] || { sortKey: null, sortDir: null };
+  _tblState[tableKey] = { sortKey: d.sortKey, sortDir: d.sortDir, filterGrades: new Set() };
+  if (tableKey === 'perfList') {
     // 퍼포먼스 리스트의 위험만/운행만 토글도 함께 해제
     riskOnlyMode = false;
     operatingOnlyMode = false;
-    renderPerfList();
   }
+  _rerenderTable(tableKey);
 }
 
 function _toggleGradeMenu(tableKey, e) {
@@ -4494,11 +4506,17 @@ function renderPerformance() {
 const CHURN_MIN_PREV = 100;   // 전주 동요일 최소 처리건수
 const CHURN_DROP_RATE = 0.4;  // 감소율 임계 (40%)
 
+const _CHURN_SORT_KEYS = ['rgn2','region','partnerName','grade','manager','prevVol','currVol','dropRate'];
+
 function renderChurn() {
   const body  = document.getElementById('churnBody');
   const label = document.getElementById('churn-date-label');
   const countL= document.getElementById('churn-count-label');
   if (!body) return;
+
+  _renderGradeChip('churn');
+  _updateSortIndicators('churn', _CHURN_SORT_KEYS);
+  const st = _tblState.churn;
 
   // 기준일 = 데이터가 실제로 존재하는 최신 운영일(시트 최대 일자).
   // (운영 D-1을 쓰면 시트 미업데이트 시 기준일이 비어 전 협력사가 100% 감소로 오판될 수 있음)
@@ -4540,17 +4558,37 @@ function renderChurn() {
     if (dropRate < CHURN_DROP_RATE) return;       // 40% 이상 감소
     const p = metaByPid.get(pid) || {};
     const rgn2 = getPartnerRgn2(p, getLatestKPI(pid)) || '-';
+    const grade = p['등급'] || '-';
+    // 등급 필터 (선택된 등급이 있으면 해당 등급만)
+    if (st.filterGrades.size > 0 && !st.filterGrades.has(p['등급'])) return;
     rows.push({
       pid,
       name:    p['협력사명'] || pid,
       rgn2,
       region:  p['권역명'] || '-',
-      grade:   p['등급'] || '-',
+      grade,
       manager: getManagerForRGN2(rgn2, p['담당매니저']) || '-',
       prev, curr, dropRate,
     });
   });
-  rows.sort((a, b) => b.dropRate - a.dropRate);
+
+  // ── 정렬 ──
+  if (st.sortKey) {
+    const keyMap = {
+      rgn2:        r => r.rgn2,
+      region:      r => r.region,
+      partnerName: r => r.name,
+      grade:       r => _gradeRank(r.grade),
+      manager:     r => r.manager,
+      prevVol:     r => r.prev,
+      currVol:     r => r.curr,
+      dropRate:    r => r.dropRate,
+    };
+    const getter = keyMap[st.sortKey];
+    if (getter) rows.sort((a, b) => _sortCompare(getter(a), getter(b), st.sortDir));
+  } else {
+    rows.sort((a, b) => b.dropRate - a.dropRate);   // 기본: 감소율 내림차순
+  }
 
   if (countL) countL.textContent = `${rows.length}개 협력사`;
 
