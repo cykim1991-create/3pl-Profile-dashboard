@@ -4854,8 +4854,11 @@ function renderPenalty() {
     const rgn2 = master ? (getPartnerRgn2(master, getLatestKPI(r.협력사ID)) || '-') : '-';
     const opStatus = master ? (master['운영상태'] || '') : '';
     const vol7sum = Math.round((r.처리건수 || 0) * 7);   // 7일일평균 × 7 = 최근 7일 합계
+    // 등급은 프로파일과 동일 기준: 마스터(협력사기본정보) 등급 → 실시간 KPI 등급 → (없으면) 패널티 원본 등급
+    const _rtKpi = getRealtimeKPI(r.협력사ID);
+    const gradeView = (master && master['등급']) || (_rtKpi && _rtKpi['등급']) || r.등급 || '-';
     return { ...r, status: dec.status, reason: dec.reason, person: dec.person, ts: dec.ts,
-             rgn2, opStatus, vol7sum, _master: master };
+             rgn2, opStatus, vol7sum, gradeView, _master: master };
   });
   if (statusF) rows = rows.filter(r => r.status === statusF);
 
@@ -4866,7 +4869,7 @@ function renderPenalty() {
       region:      r => r.권역,
       partnerName: r => r.협력사명,
       opstatus:    r => r.opStatus,
-      grade:       r => _gradeRank(r.등급),
+      grade:       r => _gradeRank(r.gradeView),
       accept:      r => r.수락률,
       slots:       r => r.달성슬롯,
       vol7sum:     r => r.vol7sum,
@@ -4902,7 +4905,7 @@ function renderPenalty() {
       <td><strong style="color:var(--text-strong)">${_escHtml(r.협력사명 || '-')}</strong>
         <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
       <td style="text-align:center">${opStatusCell}</td>
-      <td style="text-align:center">${getGradeBadge(r.등급)}</td>
+      <td style="text-align:center">${getGradeBadge(r.gradeView)}</td>
       <td style="text-align:center;color:${_slaColor(r.수락률 || 0)};font-weight:600">${r.수락률 ? r.수락률.toFixed(1) + '%' : '-'}</td>
       <td style="text-align:center;color:var(--text-cell)">${r.달성슬롯}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.vol7sum ? r.vol7sum.toLocaleString() : '-'}</td>
