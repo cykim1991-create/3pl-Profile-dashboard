@@ -4882,10 +4882,11 @@ function renderPenalty() {
       ? getStatusBadge(r._master)
       : '<span style="color:var(--text-muted)">-</span>';
     return `
-    <tr>
+    <tr onclick="_openPenaltyPartner('${pidEsc}')" style="cursor:pointer">
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${_escHtml(r.rgn2 || '-')}</td>
       <td style="color:var(--text-secondary);font-size:11px">${_escHtml(r.권역 || '-')}</td>
-      <td><strong style="color:var(--text-strong)">${_escHtml(r.협력사명 || '-')}</strong></td>
+      <td><strong style="color:var(--text-strong)">${_escHtml(r.협력사명 || '-')}</strong>
+        <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
       <td style="text-align:center">${opStatusCell}</td>
       <td style="text-align:center">${getGradeBadge(r.등급)}</td>
       <td style="text-align:center;color:${_slaColor(r.수락률 || 0)};font-weight:600">${r.수락률 ? r.수락률.toFixed(1) + '%' : '-'}</td>
@@ -4893,9 +4894,19 @@ function renderPenalty() {
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.vol7sum ? r.vol7sum.toLocaleString() : '-'}</td>
       <td style="text-align:center;font-weight:700;color:#f87171">${r.연속미달성}주</td>
       <td style="text-align:center">${_penaltyStatusBadge(r.status)}${reasonLine}</td>
-      <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick="openPenaltyDecisionModal('${week}','${pidEsc}')">결정</button></td>
+      <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openPenaltyDecisionModal('${week}','${pidEsc}')">결정</button></td>
     </tr>`;
   }).join('');
+}
+
+// 운영중지 행 클릭 → 협력사 상세 모달 (Profile/일자별/주차별). 마스터에 없으면 안내.
+function _openPenaltyPartner(pid) {
+  const p = (STATE.partners || []).find(x => x['협력사ID'] === pid);
+  if (!p) {
+    showToast('이 협력사의 마스터 정보가 없어 상세를 표시할 수 없습니다');
+    return;
+  }
+  openPerfDetailModal(pid);
 }
 
 // ── 유예 결정 모달 ──────────────────────────────────────────
