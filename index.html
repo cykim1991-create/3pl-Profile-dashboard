@@ -662,13 +662,14 @@ textarea.form-input{resize:vertical;min-height:60px}
         <table class="data-table" style="min-width:1080px">
           <thead>
             <tr>
+              <th data-sort="penalty:rgn2" style="cursor:pointer">RGN2<span id="sort-penalty-rgn2"></span></th>
               <th data-sort="penalty:region" style="cursor:pointer">권역<span id="sort-penalty-region"></span></th>
-              <th class="center" data-sort="penalty:zone" style="cursor:pointer">지역구분<span id="sort-penalty-zone"></span></th>
               <th data-sort="penalty:partnerName" style="cursor:pointer">협력사명<span id="sort-penalty-partnerName"></span></th>
+              <th class="center" data-sort="penalty:opstatus" style="cursor:pointer">운영 상태<span id="sort-penalty-opstatus"></span></th>
               <th class="center" data-sort="penalty:grade" style="cursor:pointer">등급<span id="sort-penalty-grade"></span></th>
               <th class="center" data-sort="penalty:accept" style="cursor:pointer">수락률<span id="sort-penalty-accept"></span></th>
               <th class="center" data-sort="penalty:slots" style="cursor:pointer">달성<br><span style="font-size:10px;font-weight:400">슬롯</span><span id="sort-penalty-slots"></span></th>
-              <th class="center" data-sort="penalty:vol" style="cursor:pointer">처리건수<br><span style="font-size:10px;font-weight:400">7일평균</span><span id="sort-penalty-vol"></span></th>
+              <th class="center" data-sort="penalty:vol7sum" style="cursor:pointer">최근 7일<br><span style="font-size:10px;font-weight:400">처리건수(합계)</span><span id="sort-penalty-vol7sum"></span></th>
               <th class="center" data-sort="penalty:consec" style="cursor:pointer">연속<br><span style="font-size:10px;font-weight:400">미달성</span><span id="sort-penalty-consec"></span></th>
               <th class="center" data-sort="penalty:status" style="cursor:pointer">유예여부<span id="sort-penalty-status"></span></th>
               <th class="center">결정</th>
@@ -4764,7 +4765,7 @@ function renderChurn() {
 // ═══════════════════════════════════════════════════════════
 // 운영중지 대상 (패널티) + 유예 결정
 // ═══════════════════════════════════════════════════════════
-const _PENALTY_SORT_KEYS = ['region','zone','partnerName','grade','accept','slots','vol','consec','status'];
+const _PENALTY_SORT_KEYS = ['rgn2','region','partnerName','opstatus','grade','accept','slots','vol7sum','consec','status'];
 
 // HTML 이스케이프 (사용자 입력 사유 등 innerHTML 삽입 시 XSS 방지)
 function _escHtml(s) {
@@ -4817,7 +4818,7 @@ function renderPenalty() {
   if (!week) {
     if (label) label.textContent = '';
     if (countL) countL.textContent = '';
-    body.innerHTML = `<tr><td colspan="10" class="empty">운영중지 대상 데이터가 없습니다 ('운영중지대상' 시트를 확인하세요)</td></tr>`;
+    body.innerHTML = `<tr><td colspan="11" class="empty">운영중지 대상 데이터가 없습니다 ('운영중지대상' 시트를 확인하세요)</td></tr>`;
     return;
   }
   if (label) label.textContent = `${_fmtPenaltyWeek(week)} 기준 (차주 운영중지)`;
@@ -4829,24 +4830,33 @@ function renderPenalty() {
 
   const statusF = (document.getElementById('penalty-status-filter') || {}).value || '';
 
+  // 협력사 마스터 lookup (RGN2 / 운영상태 join용)
+  const metaByPid = new Map((STATE.partners || []).map(p => [p['협력사ID'], p]));
+
   let rows = (STATE.penalty || []).filter(r => r.주차 === week);
   if (allowed) rows = rows.filter(r => r.협력사ID && allowed.has(r.협력사ID));
   rows = rows.map(r => {
     const dec = _penaltyDecision(week, r.협력사ID);
-    return { ...r, status: dec.status, reason: dec.reason, person: dec.person, ts: dec.ts };
+    const master = metaByPid.get(r.협력사ID);
+    const rgn2 = master ? (getPartnerRgn2(master, getLatestKPI(r.협력사ID)) || '-') : '-';
+    const opStatus = master ? (master['운영상태'] || '') : '';
+    const vol7sum = Math.round((r.처리건수 || 0) * 7);   // 7일일평균 × 7 = 최근 7일 합계
+    return { ...r, status: dec.status, reason: dec.reason, person: dec.person, ts: dec.ts,
+             rgn2, opStatus, vol7sum, _master: master };
   });
   if (statusF) rows = rows.filter(r => r.status === statusF);
 
   // ── 정렬 ──
   if (st.sortKey) {
     const keyMap = {
+      rgn2:        r => r.rgn2,
       region:      r => r.권역,
-      zone:        r => r.지역구분,
       partnerName: r => r.협력사명,
+      opstatus:    r => r.opStatus,
       grade:       r => _gradeRank(r.등급),
       accept:      r => r.수락률,
       slots:       r => r.달성슬롯,
-      vol:         r => r.처리건수,
+      vol7sum:     r => r.vol7sum,
       consec:      r => r.연속미달성,
       status:      r => r.status,
     };
@@ -4859,7 +4869,7 @@ function renderPenalty() {
   if (countL) countL.textContent = `${rows.length}개 협력사`;
 
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="10" class="empty">조건에 해당하는 협력사가 없습니다</td></tr>`;
+    body.innerHTML = `<tr><td colspan="11" class="empty">조건에 해당하는 협력사가 없습니다</td></tr>`;
     return;
   }
 
@@ -4868,15 +4878,19 @@ function renderPenalty() {
     const reasonLine = r.reason
       ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_escHtml(r.reason)}">${_escHtml(r.reason)}</div>`
       : '';
+    const opStatusCell = r._master
+      ? getStatusBadge(r._master)
+      : '<span style="color:var(--text-muted)">-</span>';
     return `
     <tr>
-      <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${_escHtml(r.권역 || '-')}</td>
-      <td style="text-align:center;font-size:11px;color:var(--text-secondary)">${_zoneShort(r.지역구분)}</td>
+      <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${_escHtml(r.rgn2 || '-')}</td>
+      <td style="color:var(--text-secondary);font-size:11px">${_escHtml(r.권역 || '-')}</td>
       <td><strong style="color:var(--text-strong)">${_escHtml(r.협력사명 || '-')}</strong></td>
+      <td style="text-align:center">${opStatusCell}</td>
       <td style="text-align:center">${getGradeBadge(r.등급)}</td>
       <td style="text-align:center;color:${_slaColor(r.수락률 || 0)};font-weight:600">${r.수락률 ? r.수락률.toFixed(1) + '%' : '-'}</td>
       <td style="text-align:center;color:var(--text-cell)">${r.달성슬롯}</td>
-      <td style="text-align:center;color:var(--text-cell)">${r.처리건수 ? r.처리건수.toLocaleString() : '-'}</td>
+      <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.vol7sum ? r.vol7sum.toLocaleString() : '-'}</td>
       <td style="text-align:center;font-weight:700;color:#f87171">${r.연속미달성}주</td>
       <td style="text-align:center">${_penaltyStatusBadge(r.status)}${reasonLine}</td>
       <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick="openPenaltyDecisionModal('${week}','${pidEsc}')">결정</button></td>
