@@ -1461,13 +1461,31 @@ function _opTransitionDate(p) {
   const s = String(raw);
   return (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) ? s.slice(0,10) : s;
 }
+// 운영중 전환일 '이전'에 운행 기록(총처리건수 ≥ 1)이 있었는지
+// (데일리운영현황 STATE.kpi 기준 — 보존기간 내 데이터에서 판단)
+function _hasOpHistoryBeforeTransition(p) {
+  const trans = _opTransitionDate(p);
+  const pid = p && p['협력사ID'];
+  if (!trans || !pid) return false;
+  return (STATE.kpi || []).some(r => {
+    if (r['협력사ID'] !== pid) return false;
+    if (Number(r['총처리건수'] || 0) < 1) return false;
+    const d = String(r['일자'] || '').slice(0, 10);
+    return d && d < trans;   // 전환일 이전 일자
+  });
+}
+
 function _isNewPartner(p) {
+  // ① 운영중 전환일이 4주(28일) 이내
   const s = _opTransitionDate(p);
   if (!s) return false;
   const t = new Date(s).getTime();
   if (isNaN(t)) return false;
   const diffDays = (Date.now() - t) / 86400000;
-  return diffDays <= NEW_TAG_DAYS && diffDays >= -2;   // 미래 1~2일 오차 허용
+  if (!(diffDays <= NEW_TAG_DAYS && diffDays >= -2)) return false;   // 미래 1~2일 오차 허용
+  // ② 전환일 이전에 운행 기록이 없어야 신규 (재전환 협력사 제외)
+  if (_hasOpHistoryBeforeTransition(p)) return false;
+  return true;
 }
 function _newBadge(isNew) {
   return isNew
@@ -3840,9 +3858,16 @@ function _renderGradeSummary(partnerList, elId) {
       </div>`;
     }).join('');
   const total = list.length;
+  // 신규 협력사 수 (집계 대상 중 신규 태그 조건 충족)
+  const newCount = list.filter(p => _isNewPartner(p)).length;
+  const newItem = `<div class="grade-summary-item" style="border-left:1px solid var(--border);padding-left:12px;margin-left:4px">
+        <span class="badge-new"><span class="spark">✨</span>NEW</span>
+        <span class="count">${newCount.toLocaleString()}</span><span class="unit">개</span>
+      </div>`;
   el.innerHTML = `
     <div class="grade-summary-title">📊 등급별 협력사 수</div>
     ${items || '<span style="color:var(--text-muted);font-size:12px">표시할 협력사가 없습니다</span>'}
+    ${newItem}
     <div style="margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:11px">
       <span>합계</span>
       <span style="color:var(--text-primary);font-weight:700;font-size:14px">${total.toLocaleString()}</span>
