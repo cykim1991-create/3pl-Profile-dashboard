@@ -5755,10 +5755,14 @@ function openPartnerModal(pid) {
     : '';
 
   // ── Header (협력사 퍼포먼스 모달과 동일 형식) ──
+  const transDate = _opTransitionDate(p);
+  const transBadge = transDate
+    ? `<span style="font-size:11px;color:var(--text-secondary);margin-left:8px">운영중 전환일 <b style="color:var(--text-primary)">${transDate}</b>${_isNewPartner(p) ? _newBadge(true) : ''}</span>`
+    : '';
   document.getElementById('modalTitle').innerHTML = `
     <strong style="color:var(--text-strong)">${p['협력사명']}</strong>
     <span style="color:var(--text-secondary);font-size:12px;margin-left:4px">${pid} · ${region}</span>
-    ${getGradeBadge(grade)} ${setsBadge} ${getStatusBadge(p)}
+    ${getGradeBadge(grade)} ${setsBadge} ${getStatusBadge(p)}${transBadge}
   `;
 
   // 탭 활성: 일자별 기본
