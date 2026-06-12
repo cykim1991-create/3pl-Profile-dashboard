@@ -168,6 +168,16 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .badge-tier1{background:var(--accent-bg);color:var(--accent-soft)}
 .badge-tier2{background:#2d1854;color:#a78bfa}
 .badge-tier3{background:var(--bg-filter);color:#94a3b8}
+/* 신규 태그 — 그라데이션 + 은은한 글로우 펄스 */
+.badge-new{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 9px;border-radius:999px;
+  font-size:10px;font-weight:800;letter-spacing:.4px;color:#fff;white-space:nowrap;vertical-align:middle;
+  background:linear-gradient(135deg,#6366f1 0%,#3b82f6 45%,#06b6d4 100%);background-size:180% 180%;
+  border:1px solid rgba(125,211,252,.45);text-shadow:0 1px 1px rgba(0,0,0,.25);
+  animation:newGlow 2.4s ease-in-out infinite}
+.badge-new .spark{font-size:9px;line-height:1;filter:drop-shadow(0 0 2px rgba(255,255,255,.7))}
+@keyframes newGlow{
+  0%,100%{box-shadow:0 0 0 1px rgba(99,102,241,.35),0 0 5px rgba(34,211,238,.40);background-position:0% 50%}
+  50%    {box-shadow:0 0 0 1px rgba(99,102,241,.65),0 0 12px rgba(34,211,238,.80);background-position:100% 50%}}
 
 /* ── Grade badges (Dark) */
 .badge-master{background:#2d1a54;color:#e879f9;border:1px solid #7c3aed}
@@ -563,6 +573,7 @@ textarea.form-input{resize:vertical;min-height:60px}
           <div id="grade-chip-perfList" style="display:inline-block"></div>
           <button id="perf-risk-btn" class="btn btn-ghost btn-sm" onclick="filterRiskOnly()" title="수락률 75% 미만 또는 달성슬롯수 4개 미만">⚠️ 위험만</button>
           <button id="perf-oper-btn" class="btn btn-ghost btn-sm" onclick="filterOperatingOnly()" title="이번 주차에 실제 운행 이력이 있는 협력사만">🛵 운행만</button>
+          <button id="perf-new-btn" class="btn btn-ghost btn-sm" onclick="filterNewOnly()" title="최근운영중전환 28일(4주) 이내 신규 협력사만">🆕 신규만</button>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('perfList')" title="정렬/필터 모두 해제">↻ 초기화</button>
           <span id="perf-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
         </div>
@@ -1435,7 +1446,34 @@ let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, 
 let filtered = [];
 let riskOnlyMode = false;
 let operatingOnlyMode = false;   // '운행만' — 이번 주차 실제 운행이력(hasVolThisWeek) 있는 협력사만
+let newOnlyMode = false;         // '신규만' — 최근운영중전환 날짜가 N일 이내인 협력사만
 let perfRefDate = null;          // 협력사 퍼포먼스 기준 일자 (null = 최신 D-1). 사용자가 select로 변경.
+
+// 신규 태그 기준: 최근운영중전환 날짜로부터 28일(4주) 이내
+const NEW_TAG_DAYS = 28;
+function _opTransitionDate(p) {
+  const raw = p && (p['최근운영중전환 날짜'] || p['최근운영중전환날짜'] || '');
+  if (!raw) return '';
+  if (raw instanceof Date) {
+    const pad = n => String(n).padStart(2,'0');
+    return `${raw.getFullYear()}-${pad(raw.getMonth()+1)}-${pad(raw.getDate())}`;
+  }
+  const s = String(raw);
+  return (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) ? s.slice(0,10) : s;
+}
+function _isNewPartner(p) {
+  const s = _opTransitionDate(p);
+  if (!s) return false;
+  const t = new Date(s).getTime();
+  if (isNaN(t)) return false;
+  const diffDays = (Date.now() - t) / 86400000;
+  return diffDays <= NEW_TAG_DAYS && diffDays >= -2;   // 미래 1~2일 오차 허용
+}
+function _newBadge(isNew) {
+  return isNew
+    ? '<span class="badge-new"><span class="spark">✨</span>NEW</span>'
+    : '';
+}
 // RGN2 필터 — 다중 선택 Set. 빈 Set = '전체 RGN2'(필터 미적용).
 // 하위 호환: 코드 다른 곳에서 'currentRegionFilter ? ... : null' 패턴을 위해 빈 Set 도 falsy 처럼 동작하게 _activeRgn2() 헬퍼 사용.
 let currentRegionFilter = new Set();
@@ -1608,7 +1646,7 @@ async function init() {
     // v9 시트 구조: row1=제목, row2=헤더, row3+=데이터 (0-indexed: header=1, data=2)
     // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
     const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals, rgn2InfoVals, penaltyVals, penaltyDecVals] = await Promise.all([
-      fetchSheet('협력사기본정보',     'A:K'),    // 11열 (마스터 — 전화번호는 별도 시트)
+      fetchSheet('협력사기본정보',     'A:L'),    // 12열 (K=최근운영중전환 날짜, L=주요애로사항)
       fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
       fetchSheet('실시간운행현황',     'A:AB'),   // 28열 (AB열 = active_rider 추가)
       fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
@@ -2007,6 +2045,12 @@ function filterOperatingOnly() {
   applyFilters();
 }
 
+// '신규만' — 최근운영중전환 N일 이내 협력사만 표시 (토글)
+function filterNewOnly() {
+  newOnlyMode = !newOnlyMode;
+  applyFilters();
+}
+
 // 퍼포먼스 리스트 필터 버튼 활성화 상태 시각 반영
 function _syncPerfFilterBtns() {
   const set = (id, on) => {
@@ -2017,6 +2061,7 @@ function _syncPerfFilterBtns() {
   };
   set('perf-risk-btn', riskOnlyMode);
   set('perf-oper-btn', operatingOnlyMode);
+  set('perf-new-btn', newOnlyMode);
 }
 
 // ── 상단 필터 핸들러 ──
@@ -3594,9 +3639,10 @@ function _clearAllTableFilters(tableKey) {
   const d = defaults[tableKey] || { sortKey: null, sortDir: null };
   _tblState[tableKey] = { sortKey: d.sortKey, sortDir: d.sortDir, filterGrades: new Set() };
   if (tableKey === 'perfList') {
-    // 퍼포먼스 리스트의 위험만/운행만 토글도 함께 해제
+    // 퍼포먼스 리스트의 위험만/운행만/신규만 토글도 함께 해제
     riskOnlyMode = false;
     operatingOnlyMode = false;
+    newOnlyMode = false;
   }
   if (tableKey === 'penalty') {
     const sf = document.getElementById('penalty-status-filter');
@@ -5313,6 +5359,8 @@ function renderPerfList() {
       p, pid, rgn2, tpl3, region, grade, prev, prior, priorWeek, hasVolThisWeek,
       // 노출 기준: 운영상태 '운영중' 협력사
       isActive: String(p['운영상태'] || '').trim() === '운영중',
+      // 신규 태그: 최근운영중전환 날짜가 N일 이내
+      isNew: _isNewPartner(p),
       // sort keys
       partnerName: p['협력사명']||'',
       partnerId:   pid||'',
@@ -5351,6 +5399,12 @@ function renderPerfList() {
   // 이번 주차(월~운영일 today)에 실제 운행이력(처리건수 ≥ 1)이 있는 협력사만
   if (operatingOnlyMode) {
     recordsFiltered = recordsFiltered.filter(r => r.hasVolThisWeek && !r.empty);
+  }
+
+  // ── 신규만 필터 (퍼포먼스 리스트 전용) ──
+  // 최근운영중전환 날짜가 N일 이내인 협력사만
+  if (newOnlyMode) {
+    recordsFiltered = recordsFiltered.filter(r => r.isNew);
   }
 
   _syncPerfFilterBtns();
@@ -5394,7 +5448,7 @@ function renderPerfList() {
         <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${r.rgn2}</td>
         ${tpl3Cell(r.tpl3)}
         <td style="color:var(--text-secondary);font-size:11px">${r.region}</td>
-        <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
+        <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>${_newBadge(r.isNew)}</td>
         <td style="text-align:center">${getGradeBadge(r.grade)}</td>
         <td colspan="8" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
       </tr>`;
@@ -5437,7 +5491,7 @@ function renderPerfList() {
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       ${tpl3Cell(r.tpl3)}
       <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.region}</td>
-      <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>
+      <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>${_newBadge(r.isNew)}
         <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
       <td style="text-align:center">${getGradeBadge(r.grade)}</td>
       <td style="text-align:center;color:var(--text-cell);font-weight:600">${prev.sets ? Math.round(prev.sets).toLocaleString() : '-'}</td>
