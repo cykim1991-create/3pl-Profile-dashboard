@@ -3084,11 +3084,11 @@ function slotAchievementFmt(vol, sets, targetPerSet, slotStatus) {
   const s = Number(sets) || 0;
   const tgt = Number(targetPerSet) || 0;
   const status = slotStatus || 'past';
-  // 세트수가 0이면 처리건수만 노출
-  if (!s) {
-    return `<span class="ach-cnt" style="font-size:13px;color:var(--text-cell);font-weight:700">${n.toLocaleString()}건</span>`;
-  }
-  const goal = s * tgt;
+  // 목표 = (세트수>0 ? 세트수 : 1) × per-set 목표.
+  // normalize 단계에서 목표 = target_orders_* ÷ (세트수 or 1) 이므로,
+  // 위 식은 세트수와 무관하게 항상 원래 일일 총 목표(target_orders_*)로 환원된다.
+  // → 세트수 0이어도 저장된 목표가 있으면 달성률 표시. 목표 자체가 없을 때만 처리건수만.
+  const goal = (s > 0 ? s : 1) * tgt;
   if (!goal) {
     return `<span class="ach-cnt" style="font-size:13px;color:var(--text-cell);font-weight:700">${n.toLocaleString()}건</span>`;
   }
@@ -3405,10 +3405,12 @@ function renderRealtime() {
     const pmVol = kpi ? Number(kpi['오후논피크_물량']||0)   : 0;
     const evVol = kpi ? Number(kpi['저녁피크_물량']||0)     : 0;
     const niVol = kpi ? Number(kpi['심야논피크_물량']||0)   : 0;
-    const amAchN = setsN ? (amVol / (setsN * tgt.am)) * 100 : null;
-    const pmAchN = setsN ? (pmVol / (setsN * tgt.pm)) * 100 : null;
-    const evAchN = setsN ? (evVol / (setsN * tgt.ev)) * 100 : null;
-    const niAchN = setsN ? (niVol / (setsN * tgt.ni)) * 100 : null;
+    // 목표 = (세트수>0 ? 세트수 : 1) × per-set 목표 (= 원래 일일 총 목표). 세트수 0이어도 달성률 산출
+    const _effSets = setsN > 0 ? setsN : 1;
+    const amAchN = tgt.am ? (amVol / (_effSets * tgt.am)) * 100 : null;
+    const pmAchN = tgt.pm ? (pmVol / (_effSets * tgt.pm)) * 100 : null;
+    const evAchN = tgt.ev ? (evVol / (_effSets * tgt.ev)) * 100 : null;
+    const niAchN = tgt.ni ? (niVol / (_effSets * tgt.ni)) * 100 : null;
 
     const slaRaw = kpi ? (kpi['SLA_수락률(%)'] !== undefined ? Number(kpi['SLA_수락률(%)']) : Number(kpi['SLA수락률(%)']||0)*100) : null;
     const inSLA  = kpi ? Number(kpi['권내수락률'] || kpi['권내수락률(%)'] || 0) : null;
