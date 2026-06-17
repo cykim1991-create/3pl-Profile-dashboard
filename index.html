@@ -5483,10 +5483,10 @@ function renderPerfList() {
     const slotColor = _achColor(prev.slotsRatio || 0);
     const ordColor  = _orderAchColor(prev.orderAch);
 
-    // 세트수가 0이면 운영 안 한 기간 → 발주물량 달성률은 "-" 로 비활성화
-    // 그 외에는 [달성률 %] 위에 + [처리건수/발주물량] 아래에 보조 표시
-    const orderCell = (!prev.sets || prev.orderAch === null)
-      ? `<td style="text-align:center;color:var(--text-muted)" title="${!prev.sets ? '신청세트수 0' : '발주물량 컬럼에 값이 없습니다'}">-</td>`
+    // 발주물량 달성률 = 처리건수 / 발주물량 (세트수와 무관).
+    // 발주물량 데이터가 있으면 세트수가 0이어도 달성률 표시. (없을 때만 "-")
+    const orderCell = (prev.orderAch === null)
+      ? `<td style="text-align:center;color:var(--text-muted)" title="발주물량 컬럼에 값이 없습니다">-</td>`
       : `<td style="text-align:center"><span class="ach-pct" style="color:${ordColor}">${prev.orderAch.toFixed(1)}%</span><span class="ach-cnt">${(prev.totalVol||0).toLocaleString()}/${(prev.orderVol||0).toLocaleString()}</span></td>`;
 
     // 슬롯 셀: "X / Y" 달성/가능 (이진 합산 — 정수)
