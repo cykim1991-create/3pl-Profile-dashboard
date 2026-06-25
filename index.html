@@ -2303,9 +2303,9 @@ function getContractBadge(type) {
   const t = (type || '').toString().trim();
   if (!t) return '<span style="color:var(--text-muted)">-</span>';
   const style = (t === '직계약')
-    ? 'background:#052e1a;color:#5eead4;border:1px solid #115e4a'   // 직계약 = 청록(teal)
+    ? 'background:#0a233f;color:#60a5fa;border:1px solid #1d4ed8'   // 직계약 = 파랑
     : (t === '중개사')
-      ? 'background:#2a1a05;color:#fbbf24;border:1px solid #7c4a0f' // 중개사 = 앰버
+      ? 'background:#3a1206;color:#fb7a4b;border:1px solid #9a3412' // 중개사 = 다홍
       : 'background:var(--bg-filter);color:#94a3b8;border:1px solid var(--border)';
   return `<span style="display:inline-block;padding:2px 9px;border-radius:11px;font-size:10.5px;font-weight:700;white-space:nowrap;${style}">${_escHtml(t)}</span>`;
 }
