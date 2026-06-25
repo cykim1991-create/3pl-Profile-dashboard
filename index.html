@@ -498,6 +498,7 @@ textarea.form-input{resize:vertical;min-height:60px}
           />
           <div id="grade-chip-realtime" style="display:inline-block"></div>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('realtime')" title="정렬/필터 모두 해제">↻ 초기화</button>
+          <span id="rt-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
         </div>
       </div>
 
@@ -913,7 +914,7 @@ const ALLOWLIST_SHEET_TAB = '허용계정';
 // 세션 유효시간 — Google access token 자체는 1시간 한도이지만,
 // 그 안에서 만료 직전에 silent reauth (prompt:'') 로 자동 갱신하여
 // 사용자 체감 세션을 SESSION_TIMEOUT_MS 만큼 유지.
-const SESSION_TIMEOUT_MS = 3 * 60 * 60 * 1000; // 3시간
+const SESSION_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12시간
 let gsiTokenClient   = null;
 let gsiAccessToken   = null;
 let gsiTokenExpiry   = 0;
@@ -2297,6 +2298,18 @@ function getStatusBadge(p) {
   return map[s] || `<span class="badge">${s}</span>`;
 }
 
+// 계약형태 뱃지 — 직계약/중개사를 색상으로 구분
+function getContractBadge(type) {
+  const t = (type || '').toString().trim();
+  if (!t) return '<span style="color:var(--text-muted)">-</span>';
+  const style = (t === '직계약')
+    ? 'background:#052e1a;color:#5eead4;border:1px solid #115e4a'   // 직계약 = 청록(teal)
+    : (t === '중개사')
+      ? 'background:#2a1a05;color:#fbbf24;border:1px solid #7c4a0f' // 중개사 = 앰버
+      : 'background:var(--bg-filter);color:#94a3b8;border:1px solid var(--border)';
+  return `<span style="display:inline-block;padding:2px 9px;border-radius:11px;font-size:10.5px;font-weight:700;white-space:nowrap;${style}">${_escHtml(t)}</span>`;
+}
+
 function getGradeBadge(grade) {
   const map = {
     '마스터':   'badge-master',
@@ -3464,8 +3477,17 @@ function renderRealtime() {
     if (getter) records.sort((a,b) => _sortCompare(getter(a), getter(b), st.sortDir));
   }
 
+  // 협력사 수 라벨 (검색/등급 필터 적용 후 / 전체)
+  const rtCountL = document.getElementById('rt-count-label');
+  if (rtCountL) {
+    const total = all.length;
+    rtCountL.textContent = records.length === total
+      ? `${records.length.toLocaleString()}개 협력사`
+      : `${records.length.toLocaleString()} / ${total.toLocaleString()}개 협력사`;
+  }
+
   if (!records.length) {
-    tbody.innerHTML = `<tr><td colspan="12" class="empty">필터 결과가 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="empty">필터 결과가 없습니다</td></tr>`;
     return;
   }
 
@@ -3500,7 +3522,7 @@ function renderRealtime() {
     return `<tr class="${rowCls}" onclick="openPartnerModal('${r.p['협력사ID']}')">
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.regionDisp}</td>
-      <td style="text-align:center;color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.p['계약형태'] || '-'}</td>
+      <td style="text-align:center;white-space:nowrap">${getContractBadge(r.p['계약형태'])}</td>
       <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
       <td>${getGradeBadge(r.grade)}</td>
       <td style="text-align:center;color:var(--accent-soft);font-weight:600">${r.riderJoinN ? r.riderJoinN.toLocaleString() : '-'}</td>
@@ -5471,7 +5493,7 @@ function renderPerfList() {
         <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${r.rgn2}</td>
         ${tpl3Cell(r.tpl3)}
         <td style="color:var(--text-secondary);font-size:11px">${r.region}</td>
-        <td style="text-align:center;color:var(--text-secondary);font-size:11px">${r.contract || '-'}</td>
+        <td style="text-align:center">${getContractBadge(r.contract)}</td>
         <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>${_newBadge(r.isNew)}</td>
         <td style="text-align:center">${getGradeBadge(r.grade)}</td>
         <td colspan="8" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
@@ -5515,7 +5537,7 @@ function renderPerfList() {
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       ${tpl3Cell(r.tpl3)}
       <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.region}</td>
-      <td style="text-align:center;color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.contract || '-'}</td>
+      <td style="text-align:center;white-space:nowrap">${getContractBadge(r.contract)}</td>
       <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>${_newBadge(r.isNew)}
         <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
       <td style="text-align:center">${getGradeBadge(r.grade)}</td>
