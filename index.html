@@ -488,6 +488,14 @@ textarea.form-input{resize:vertical;min-height:60px}
           <span id="rt-date-label" style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px"></span>
         </div>
         <div class="section-actions">
+          <input
+            type="text"
+            id="rtSearchInput"
+            placeholder="🔍 협력사명, ID, 사업자번호, 지역 검색…"
+            oninput="renderRealtime()"
+            class="filter-select"
+            style="min-width:260px;padding:6px 12px;font-size:12.5px"
+          />
           <div id="grade-chip-realtime" style="display:inline-block"></div>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('realtime')" title="정렬/필터 모두 해제">↻ 초기화</button>
         </div>
@@ -499,6 +507,7 @@ textarea.form-input{resize:vertical;min-height:60px}
             <tr>
               <th data-sort="realtime:rgn2" style="cursor:pointer">RGN2<span id="sort-realtime-rgn2"></span></th>
               <th data-sort="realtime:region" style="cursor:pointer">권역<span id="sort-realtime-region"></span></th>
+              <th class="center" data-sort="realtime:contract" style="cursor:pointer">계약형태<span id="sort-realtime-contract"></span></th>
               <th data-sort="realtime:partnerName" style="cursor:pointer">협력사명<span id="sort-realtime-partnerName"></span></th>
               <th data-sort="realtime:grade" style="cursor:pointer">등급<span id="sort-realtime-grade"></span></th>
               <th class="center" data-sort="realtime:riderJoin" style="cursor:pointer">가입중<br><span style="font-size:10px;font-weight:400">라이더</span><span id="sort-realtime-riderJoin"></span></th>
@@ -565,14 +574,12 @@ textarea.form-input{resize:vertical;min-height:60px}
           <input
             type="text"
             id="perfSearchInput"
-            placeholder="🔍 협력사명, ID, 지역 검색…"
+            placeholder="🔍 협력사명, ID, 사업자번호, 지역 검색…"
             oninput="renderPerfList()"
             class="filter-select"
             style="min-width:260px;padding:6px 12px;font-size:12.5px"
           />
           <div id="grade-chip-perfList" style="display:inline-block"></div>
-          <button id="perf-risk-btn" class="btn btn-ghost btn-sm" onclick="filterRiskOnly()" title="수락률 75% 미만 또는 달성슬롯수 4개 미만">⚠️ 위험만</button>
-          <button id="perf-oper-btn" class="btn btn-ghost btn-sm" onclick="filterOperatingOnly()" title="이번 주차에 실제 운행 이력이 있는 협력사만">🛵 운행만</button>
           <button id="perf-new-btn" class="btn btn-ghost btn-sm" onclick="filterNewOnly()" title="최근운영중전환 28일(4주) 이내 신규 협력사만">🆕 신규만</button>
           <button class="btn btn-ghost btn-sm" onclick="_clearAllTableFilters('perfList')" title="정렬/필터 모두 해제">↻ 초기화</button>
           <span id="perf-count-label" style="font-size:11px;color:var(--text-secondary);margin-left:6px"></span>
@@ -586,6 +593,7 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th data-sort="perfList:rgn2" style="cursor:pointer">RGN2<span id="sort-perfList-rgn2"></span></th>
               <th class="center" data-sort="perfList:tpl3Share" style="cursor:pointer">3PL<br><span style="font-size:10px;font-weight:400">처리비중</span><span id="sort-perfList-tpl3Share"></span></th>
               <th data-sort="perfList:region" style="cursor:pointer">권역<span id="sort-perfList-region"></span></th>
+              <th class="center" data-sort="perfList:contract" style="cursor:pointer">계약형태<span id="sort-perfList-contract"></span></th>
               <th data-sort="perfList:partnerName" style="cursor:pointer">협력사명<span id="sort-perfList-partnerName"></span></th>
               <th class="center" data-sort="perfList:grade" style="cursor:pointer">등급<span id="sort-perfList-grade"></span></th>
               <th class="center" data-sort="perfList:sets" style="cursor:pointer">세트수<span id="sort-perfList-sets"></span></th>
@@ -1444,8 +1452,6 @@ function filterKPIRecent(kpi, weeks) {
 // ═══════════════════════════════════════════════════
 let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, tpl3Share:{}, rgn2Managers:{}, penalty:[], penaltyDecisions:new Map() };
 let filtered = [];
-let riskOnlyMode = false;
-let operatingOnlyMode = false;   // '운행만' — 이번 주차 실제 운행이력(hasVolThisWeek) 있는 협력사만
 let newOnlyMode = false;         // '신규만' — 최근운영중전환 날짜가 N일 이내인 협력사만
 let perfRefDate = null;          // 협력사 퍼포먼스 기준 일자 (null = 최신 D-1). 사용자가 select로 변경.
 
@@ -2052,17 +2058,6 @@ function applyFilters() {
   renderPenalty();
 }
 
-function filterRiskOnly() {
-  riskOnlyMode = !riskOnlyMode;
-  applyFilters();
-}
-
-// '운행만' — 이번 주차 실제 운행이력이 있는 협력사만 표시 (토글)
-function filterOperatingOnly() {
-  operatingOnlyMode = !operatingOnlyMode;
-  applyFilters();
-}
-
 // '신규만' — 최근운영중전환 N일 이내 협력사만 표시 (토글)
 function filterNewOnly() {
   newOnlyMode = !newOnlyMode;
@@ -2077,8 +2072,6 @@ function _syncPerfFilterBtns() {
     b.classList.toggle('btn-primary', on);
     b.classList.toggle('btn-ghost', !on);
   };
-  set('perf-risk-btn', riskOnlyMode);
-  set('perf-oper-btn', operatingOnlyMode);
   set('perf-new-btn', newOnlyMode);
 }
 
@@ -3259,7 +3252,7 @@ function makeDCPOSpark(values) {
 // VIEW 1: 실시간 운행현황
 // ═══════════════════════════════════════════════════
 const _RT_SORT_KEYS = [
-  'rgn2','region','partnerName','grade',
+  'rgn2','region','contract','partnerName','grade',
   'riderJoin','riderAct','sets','totalVol','amAch','pmAch','evAch','niAch'
 ];
 
@@ -3373,7 +3366,7 @@ function renderRealtime() {
   const tableSrc = all;
 
   const tbody = document.getElementById('realtimeBody');
-  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="12" class="empty">데이터 없음</td></tr>`; return; }
+  if (!tableSrc.length) { tbody.innerHTML = `<tr><td colspan="13" class="empty">데이터 없음</td></tr>`; return; }
 
   const st = _tblState.realtime;
 
@@ -3382,8 +3375,21 @@ function renderRealtime() {
     ? tableSrc.filter(p => st.filterGrades.has(p['등급']))
     : tableSrc;
 
+  // 검색 필터 (협력사명 / ID / 사업자번호 / 지역)
+  const rtSearch = (document.getElementById('rtSearchInput')?.value || '').trim().toLowerCase();
+  const searched = !rtSearch ? gradeFiltered : gradeFiltered.filter(p => {
+    const name = (p['협력사명']||'').toLowerCase();
+    const id   = (p['협력사ID']||'').toLowerCase();
+    const kpi  = getRealtimeKPI(p['협력사ID']);
+    const area = ((kpi && kpi['운영지역']) || p['권역명'] || '').toLowerCase();
+    const biz  = (p['사업자번호']||'').toString().toLowerCase();
+    const sd   = rtSearch.replace(/\D/g,'');
+    const bizMatch = biz.includes(rtSearch) || (sd && biz.replace(/\D/g,'').includes(sd));
+    return name.includes(rtSearch) || id.includes(rtSearch) || area.includes(rtSearch) || bizMatch;
+  });
+
   // ── 레코드 빌드 ──
-  const records = gradeFiltered.map(p => {
+  const records = searched.map(p => {
     const kpi  = getRealtimeKPI(p['협력사ID']);   // 실시간 시트 사용
     const rLvl = getRiskLevel(p);
 
@@ -3494,6 +3500,7 @@ function renderRealtime() {
     return `<tr class="${rowCls}" onclick="openPartnerModal('${r.p['협력사ID']}')">
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.regionDisp}</td>
+      <td style="text-align:center;color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.p['계약형태'] || '-'}</td>
       <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong></td>
       <td>${getGradeBadge(r.grade)}</td>
       <td style="text-align:center;color:var(--accent-soft);font-weight:600">${r.riderJoinN ? r.riderJoinN.toLocaleString() : '-'}</td>
@@ -3659,9 +3666,7 @@ function _clearAllTableFilters(tableKey) {
   const d = defaults[tableKey] || { sortKey: null, sortDir: null };
   _tblState[tableKey] = { sortKey: d.sortKey, sortDir: d.sortDir, filterGrades: new Set() };
   if (tableKey === 'perfList') {
-    // 퍼포먼스 리스트의 위험만/운행만/신규만 토글도 함께 해제
-    riskOnlyMode = false;
-    operatingOnlyMode = false;
+    // 퍼포먼스 리스트의 신규만 토글도 함께 해제
     newOnlyMode = false;
   }
   if (tableKey === 'penalty') {
@@ -5276,7 +5281,7 @@ function onPerfDateChange() {
   renderPerfList();
 }
 
-const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','partnerName','grade','sets','riderAct','totalVol','orderAch','sla','slotsAchieved'];
+const _PERF_SORT_KEYS = ['rgn2','tpl3Share','region','contract','partnerName','grade','sets','riderAct','totalVol','orderAch','sla','slotsAchieved'];
 
 function renderPerfList() {
   const body   = document.getElementById('perfListBody');
@@ -5311,7 +5316,11 @@ function renderPerfList() {
     const id   = (p['협력사ID']||'').toLowerCase();
     const kpi  = getLatestKPI(p['협력사ID']);
     const area = ((kpi && kpi['운영지역']) || p['권역명'] || '').toLowerCase();
-    return name.includes(search) || id.includes(search) || area.includes(search);
+    const biz  = (p['사업자번호']||'').toString().toLowerCase();
+    // 사업자번호는 하이픈 유무 모두 매칭 (검색어에 숫자가 있을 때만 숫자비교 적용)
+    const searchDigits = search.replace(/\D/g,'');
+    const bizMatch = biz.includes(search) || (searchDigits && biz.replace(/\D/g,'').includes(searchDigits));
+    return name.includes(search) || id.includes(search) || area.includes(search) || bizMatch;
   });
 
   // 기준 일자 (단일 일자) — refDate 선택 시 그 날짜, 아니면 최신 D-1
@@ -5327,11 +5336,11 @@ function renderPerfList() {
   }
 
   if (!partnersBase.length) {
-    body.innerHTML = `<tr><td colspan="13" class="empty">검색/필터 결과가 없습니다</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14" class="empty">검색/필터 결과가 없습니다</td></tr>`;
     return;
   }
   if (!window) {
-    body.innerHTML = `<tr><td colspan="13" class="empty">KPI 데이터 없음</td></tr>`;
+    body.innerHTML = `<tr><td colspan="14" class="empty">KPI 데이터 없음</td></tr>`;
     return;
   }
 
@@ -5388,11 +5397,14 @@ function renderPerfList() {
       isActive: String(p['운영상태'] || '').trim() === '운영중',
       // 신규 태그: 최근운영중전환 날짜가 N일 이내
       isNew: _isNewPartner(p),
+      // 계약형태 (중개사/직계약)
+      contract:    (p['계약형태'] || '').toString().trim(),
       // sort keys
       partnerName: p['협력사명']||'',
       partnerId:   pid||'',
       rgn2Sort:    rgn2 || '',
       regionSort:  region,
+      contractSort:(p['계약형태'] || '').toString().trim(),
       tpl3Sort:    tpl3,                                 // null이면 정렬 시 뒤로
       statusSort:  p['운영상태'] || '',
       gradeSort:   _gradeRank(grade),
@@ -5407,26 +5419,9 @@ function renderPerfList() {
   });
 
   // ── 노출 기준 ──
-  //   협력사 상태가 '운영중'인 협력사 전체를 표시.
-  //   (운행이력이 없어 집계가 비어있는 협력사도 '운영중'이면 노출되며, 지표는 '-'로 렌더됨)
-  let recordsFiltered = records.filter(r => r.isActive);
-
-  // ── 위험만 필터 (퍼포먼스 리스트 전용) ──
-  // 기준: prev.sla < 75% (수락률 75% 미만)  OR  prev.slotsAchieved < 4 (달성슬롯수 4개 미만)
-  if (riskOnlyMode) {
-    recordsFiltered = recordsFiltered.filter(r => {
-      if (!r.prev) return false;
-      const slaLow = (r.prev.sla != null) && (r.prev.sla < 75);
-      const slotsLow = (r.prev.slotsAchieved != null) && (r.prev.slotsAchieved < 4);
-      return slaLow || slotsLow;
-    });
-  }
-
-  // ── 운행만 필터 (퍼포먼스 리스트 전용) ──
-  // 이번 주차(월~운영일 today)에 실제 운행이력(처리건수 ≥ 1)이 있는 협력사만
-  if (operatingOnlyMode) {
-    recordsFiltered = recordsFiltered.filter(r => r.hasVolThisWeek && !r.empty);
-  }
+  //   운영상태와 무관하게, 기준일(전일/선택일)에 데일리운영현황에서 실제 운행한
+  //   (처리건수 ≥ 1) 협력사를 노출. (상단 KPI 카드의 '전일 운행 협력사' 기준과 동일)
+  let recordsFiltered = records.filter(r => !r.empty && Number((r.prev && r.prev.totalVol) || 0) >= 1);
 
   // ── 신규만 필터 (퍼포먼스 리스트 전용) ──
   // 최근운영중전환 날짜가 N일 이내인 협력사만
@@ -5442,6 +5437,7 @@ function renderPerfList() {
       rgn2:        r => r.rgn2Sort,
       tpl3Share:   r => r.tpl3Sort,
       region:      r => r.regionSort,
+      contract:    r => r.contractSort,
       partnerName: r => r.partnerName,
       partnerId:   r => r.partnerId,
       status:      r => r.statusSort,
@@ -5475,6 +5471,7 @@ function renderPerfList() {
         <td style="font-weight:700;color:var(--accent-soft);font-size:12px">${r.rgn2}</td>
         ${tpl3Cell(r.tpl3)}
         <td style="color:var(--text-secondary);font-size:11px">${r.region}</td>
+        <td style="text-align:center;color:var(--text-secondary);font-size:11px">${r.contract || '-'}</td>
         <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>${_newBadge(r.isNew)}</td>
         <td style="text-align:center">${getGradeBadge(r.grade)}</td>
         <td colspan="8" class="empty" style="padding:10px">해당 기간 데이터 없음</td>
@@ -5518,6 +5515,7 @@ function renderPerfList() {
       <td style="font-weight:700;color:var(--accent-soft);font-size:12px;white-space:nowrap">${r.rgn2}</td>
       ${tpl3Cell(r.tpl3)}
       <td style="color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.region}</td>
+      <td style="text-align:center;color:var(--text-secondary);font-size:11px;white-space:nowrap">${r.contract || '-'}</td>
       <td><strong style="color:var(--text-strong)">${r.p['협력사명']}</strong>${_newBadge(r.isNew)}
         <span style="color:var(--text-muted);margin-left:4px;font-size:10px">›</span></td>
       <td style="text-align:center">${getGradeBadge(r.grade)}</td>
