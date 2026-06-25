@@ -2706,37 +2706,58 @@ function _savePartnerNote(pid, value) {
 
 // ── RGN2 담당자 관리 모달 ───────────────────────────
 function openRgn2ManagerModal() {
-  // 메인 RGN2 필터와 동일한 출처 — 협력사기본정보 시트의 RGN2 컬럼에 등록된 값만
-  const rgn2Set = new Set();
-  (STATE.partners || []).forEach(p => {
-    const v = (p['RGN2'] || '').toString().trim();
-    if (v && v !== '-') rgn2Set.add(v);
-  });
-  // 단, 시트에는 없지만 RGN2_담당자 매핑에 이미 존재하는 키는 유지 (편집 가능하도록)
-  Object.keys(STATE.rgn2Managers || {}).forEach(r => rgn2Set.add(r));
+  // 메인 RGN2 필터와 동일한 출처(전국) — 협력사기본정보 시트의 RGN2 컬럼
+  const rgn2Set = new Set(_availableRgn2List());
+  // 시트엔 없지만 RGN2_담당자 매핑에 이미 존재하는 키도 유지 (편집 가능하도록)
+  Object.keys(STATE.rgn2Managers || {}).forEach(r => { if (r && r !== '-') rgn2Set.add(r); });
   const rgn2List = [...rgn2Set].sort();
+  const groups = _groupRgn2ByCity(rgn2List).filter(g => g.items.length);
 
   const body = document.getElementById('rgn2ManagerBody');
   if (!body) return;
 
+  const rowHtml = (r, prefix) => {
+    const cur = ((STATE.rgn2Managers || {})[r] || '').replace(/"/g, '&quot;');
+    const short = prefix ? r.replace(prefix, '') : r;   // 광역 prefix 제거해 시/구만 표기
+    const rEsc = r.replace(/'/g, "\\'");
+    return `<div class="rgn2mgr-row" data-rgn2="${r.toLowerCase()}" style="display:grid;grid-template-columns:130px 1fr;gap:12px;align-items:center;padding:5px 4px">
+      <span style="color:var(--accent-soft);font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r}">${short}</span>
+      <input type="text" value="${cur}" placeholder="담당자 이름"
+             style="background:var(--bg-section);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:7px 11px;font-size:12.5px;font-family:inherit;width:100%;box-sizing:border-box"
+             onchange="_saveRgn2Manager('${rEsc}', this.value)">
+    </div>`;
+  };
+
   body.innerHTML = `
-    <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.6;background:var(--bg-section);border-radius:6px;padding:10px 12px;margin-bottom:6px">
-      지역별 담당자를 입력하면 해당 지역의 모든 협력사 Profile에 자동 적용됩니다.<br>
-      <span style="color:var(--text-muted)">변경 시 자동 저장</span>
+    <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.6;background:var(--bg-section);border-radius:6px;padding:10px 12px;margin-bottom:8px">
+      지역별 담당자를 입력하면 해당 지역의 모든 협력사 Profile에 자동 적용됩니다. <span style="color:var(--text-muted)">(변경 시 자동 저장 · 전국 ${rgn2List.length}개 지역)</span>
     </div>
-    ${rgn2List.length ? rgn2List.map(r => {
-      const cur = (STATE.rgn2Managers || {})[r] || '';
-      return `<div style="display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center;padding:6px 4px">
-        <span style="color:var(--accent-soft);font-weight:600;font-size:13px">${r}</span>
-        <input type="text"
-               value="${cur.replace(/"/g,'&quot;')}"
-               placeholder="담당자 이름"
-               style="background:var(--bg-section);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:7px 11px;font-size:12.5px;font-family:inherit;width:100%;box-sizing:border-box"
-               onchange="_saveRgn2Manager('${r}', this.value)">
-      </div>`;
-    }).join('') : '<div class="empty" style="padding:20px;color:var(--text-muted);text-align:center">등록된 RGN2가 없습니다 — KPI 데이터를 먼저 불러와 주세요</div>'}
+    <input id="rgn2MgrSearch" type="text" placeholder="🔍 지역(시·구) 검색…" oninput="_filterRgn2ManagerSearch(this.value)"
+           style="background:var(--bg-section);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:7px 11px;font-size:12.5px;font-family:inherit;width:100%;box-sizing:border-box;margin-bottom:10px">
+    ${groups.length ? groups.map(g => `
+      <div class="rgn2mgr-section">
+        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;color:var(--text-primary);border-bottom:1px solid var(--border);padding:8px 2px 6px;margin-top:4px">
+          ${g.label}<span style="font-size:10.5px;color:var(--text-muted);font-weight:600">${g.items.length}</span>
+        </div>
+        ${g.items.map(r => rowHtml(r, g.prefix)).join('')}
+      </div>`).join('')
+      : '<div class="empty" style="padding:20px;color:var(--text-muted);text-align:center">등록된 RGN2가 없습니다 — 데이터를 먼저 불러와 주세요</div>'}
   `;
   document.getElementById('rgn2ManagerModal').classList.add('open');
+}
+
+// 지역 담당자 관리 모달 — 시·구 검색 (행/섹션 토글)
+function _filterRgn2ManagerSearch(q) {
+  q = (q || '').trim().toLowerCase();
+  document.querySelectorAll('#rgn2ManagerBody .rgn2mgr-section').forEach(sec => {
+    let any = false;
+    sec.querySelectorAll('.rgn2mgr-row').forEach(row => {
+      const hit = !q || (row.dataset.rgn2 || '').includes(q);
+      row.style.display = hit ? '' : 'none';
+      if (hit) any = true;
+    });
+    sec.style.display = any ? '' : 'none';
+  });
 }
 
 function closeRgn2ManagerModal() {
