@@ -172,9 +172,10 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .perf-ticker{display:flex;align-items:center;gap:0;background:var(--bg-section);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px}
 .perf-ticker .ticker-label{flex-shrink:0;display:flex;align-items:center;gap:5px;padding:9px 14px;font-size:12px;font-weight:700;color:#f87171;background:#2a0d0d;border-right:1px solid var(--border);white-space:nowrap}
 .perf-ticker .ticker-track{flex:1;overflow:hidden;min-width:0}
-.perf-ticker .ticker-move{display:inline-flex;align-items:center;gap:30px;white-space:nowrap;padding-left:30px;will-change:transform;animation:tickerScroll 28s linear infinite}
+.perf-ticker .ticker-move{display:inline-flex;align-items:center;white-space:nowrap;will-change:transform;animation:tickerScroll 30s linear infinite}
 .perf-ticker:hover .ticker-move{animation-play-state:paused}
-.perf-ticker .ticker-item{font-size:12.5px;color:var(--text-secondary)}
+.perf-ticker .ticker-item{font-size:12.5px;color:var(--text-secondary);margin-right:40px;flex-shrink:0;cursor:pointer;transition:color .12s}
+.perf-ticker .ticker-item:hover{color:var(--text-primary);text-decoration:underline}
 .perf-ticker .ticker-item b{color:#fb7a4b;font-weight:700;margin-left:5px}
 @keyframes tickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 /* 신규 태그 — 그라데이션 + 은은한 글로우 펄스 */
@@ -4810,7 +4811,7 @@ function _renderPerf3plBanner() {
     const pct = Number(map[rgn2]) * 100;
     // 0% 또는 데이터 없음(추정)은 제외, 30% 미만만
     if (!isFinite(pct) || pct <= 0 || pct >= 30) return null;
-    return { name: pre.label + ' ' + rgn2.replace(pre.p, ''), pct };
+    return { rgn2, name: pre.label + ' ' + rgn2.replace(pre.p, ''), pct };
   }).filter(Boolean).sort((a, b) => a.pct - b.pct);
 
   if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
@@ -4820,10 +4821,22 @@ function _renderPerf3plBanner() {
   const refDate = dates.length ? dates[dates.length - 1] : '';
   const dateTxt = refDate ? `<span style="font-weight:400;color:var(--text-muted);font-size:10px;margin-left:5px">${refDate} 기준</span>` : '';
   const piece = items.map(o =>
-    `<span class="ticker-item">📍 ${_escHtml(o.name)} <b>${o.pct.toFixed(1)}%</b></span>`).join('');
+    `<span class="ticker-item" onclick="_applyRegionFromBanner('${o.rgn2.replace(/'/g,"\\'")}')" title="클릭 시 '${_escHtml(o.rgn2)}' 지역 필터 적용">📍 ${_escHtml(o.name)} <b>${o.pct.toFixed(1)}%</b></span>`).join('');
   el.innerHTML = `
     <div class="ticker-label">⚠️ 3PL처리비중 30%↓${dateTxt}</div>
     <div class="ticker-track"><div class="ticker-move">${piece}${piece}</div></div>`;
+}
+
+// 배너 항목 클릭 → 해당 RGN2로 지역 필터 적용
+function _applyRegionFromBanner(rgn2) {
+  if (!rgn2) return;
+  currentRegionFilter = new Set([rgn2]);
+  _pendingRegionFilter = new Set([rgn2]);   // 지역 필터 팝업과도 동기화
+  const mgrSel = document.getElementById('managerFilter');
+  if (mgrSel && mgrSel.value) mgrSel.value = '';   // 담당자 필터와 상호 배타
+  _updateRegionFilterBtnLabel();
+  applyFilters();
+  if (typeof showToast === 'function') showToast(`📍 ${rgn2} 지역 필터 적용`);
 }
 
 // ═══════════════════════════════════════════════════════════
