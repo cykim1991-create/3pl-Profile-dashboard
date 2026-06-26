@@ -4815,10 +4815,14 @@ function _renderPerf3plBanner() {
 
   if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = 'flex';
+  // 기준 일자 = RGN2_일별지표 시트의 최신 일자
+  const dates = (STATE.rgn2Daily || []).map(r => r.일자).filter(Boolean).sort();
+  const refDate = dates.length ? dates[dates.length - 1] : '';
+  const dateTxt = refDate ? `<span style="font-weight:400;color:var(--text-muted);font-size:10px;margin-left:5px">${refDate} 기준</span>` : '';
   const piece = items.map(o =>
     `<span class="ticker-item">📍 ${_escHtml(o.name)} <b>${o.pct.toFixed(1)}%</b></span>`).join('');
   el.innerHTML = `
-    <div class="ticker-label">⚠️ 3PL처리비중 30%↓</div>
+    <div class="ticker-label">⚠️ 3PL처리비중 30%↓${dateTxt}</div>
     <div class="ticker-track"><div class="ticker-move">${piece}${piece}</div></div>`;
 }
 
