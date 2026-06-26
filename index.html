@@ -4796,23 +4796,26 @@ function renderPerformance() {
   renderPerfList();
 }
 
-// 3PL처리비중 30% 미만 (수도권: 서울/경기/인천) 흐르는 배너
+// 3PL처리비중 30% 미만 (서울/경기/인천/세종) 흐르는 배너
 function _renderPerf3plBanner() {
   const el = document.getElementById('perf-3pl-banner');
   if (!el) return;
+  // city = 접미사(_) 없는 광역명 — '세종특별자치시'처럼 구가 없어 접미사 없는 RGN2도 매칭
   const PREFIX = [
-    { p: '서울특별시_', label: '서울' },
-    { p: '경기도_',     label: '경기' },
-    { p: '인천광역시_', label: '인천' },
+    { city: '서울특별시',     label: '서울' },
+    { city: '경기도',         label: '경기' },
+    { city: '인천광역시',     label: '인천' },
+    { city: '세종특별자치시', label: '세종' },
   ];
   const map = STATE.tpl3Share || {};
   const items = Object.keys(map).map(rgn2 => {
-    const pre = PREFIX.find(x => rgn2.startsWith(x.p));
+    const pre = PREFIX.find(x => rgn2.startsWith(x.city));
     if (!pre) return null;
     const pct = Number(map[rgn2]) * 100;
     // 0% 또는 데이터 없음(추정)은 제외, 30% 미만만
     if (!isFinite(pct) || pct <= 0 || pct >= 30) return null;
-    return { rgn2, name: pre.label + ' ' + rgn2.replace(pre.p, ''), pct };
+    const sub = rgn2.slice(pre.city.length).replace(/^_/, '').trim();   // 시/구 부분
+    return { rgn2, name: sub ? (pre.label + ' ' + sub) : pre.label, pct };
   }).filter(Boolean).sort((a, b) => a.pct - b.pct);
 
   if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
