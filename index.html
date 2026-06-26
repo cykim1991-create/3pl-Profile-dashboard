@@ -177,6 +177,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .perf-ticker .ticker-item{font-size:12.5px;color:var(--text-secondary);margin-right:40px;flex-shrink:0;cursor:pointer;transition:color .12s}
 .perf-ticker .ticker-item:hover{color:var(--text-primary);text-decoration:underline}
 .perf-ticker .ticker-item b{color:#fb7a4b;font-weight:700;margin-left:5px}
+.perf-ticker .ticker-gap{display:inline-block;width:220px;flex-shrink:0}
 @keyframes tickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 /* 신규 태그 — 그라데이션 + 은은한 글로우 펄스 */
 .badge-new{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 9px;border-radius:999px;
@@ -4821,7 +4822,8 @@ function _renderPerf3plBanner() {
   const refDate = dates.length ? dates[dates.length - 1] : '';
   const dateTxt = refDate ? `<span style="font-weight:400;color:var(--text-muted);font-size:10px;margin-left:5px">${refDate} 기준</span>` : '';
   const piece = items.map(o =>
-    `<span class="ticker-item" onclick="_applyRegionFromBanner('${o.rgn2.replace(/'/g,"\\'")}')" title="클릭 시 '${_escHtml(o.rgn2)}' 지역 필터 적용">📍 ${_escHtml(o.name)} <b>${o.pct.toFixed(1)}%</b></span>`).join('');
+    `<span class="ticker-item" onclick="_applyRegionFromBanner('${o.rgn2.replace(/'/g,"\\'")}')" title="클릭 시 '${_escHtml(o.rgn2)}' 지역 필터 적용">📍 ${_escHtml(o.name)} <b>${o.pct.toFixed(1)}%</b></span>`).join('')
+    + `<span class="ticker-gap" aria-hidden="true"></span>`;   // 마지막 지역 뒤 여백 (회전문 간격)
   el.innerHTML = `
     <div class="ticker-label">⚠️ 3PL처리비중 30%↓${dateTxt}</div>
     <div class="ticker-track"><div class="ticker-move">${piece}${piece}</div></div>`;
