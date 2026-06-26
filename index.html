@@ -168,6 +168,15 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .badge-tier1{background:var(--accent-bg);color:var(--accent-soft)}
 .badge-tier2{background:#2d1854;color:#a78bfa}
 .badge-tier3{background:var(--bg-filter);color:#94a3b8}
+/* 3PL처리비중 경고 흐르는 배너 (marquee) */
+.perf-ticker{display:flex;align-items:center;gap:0;background:var(--bg-section);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px}
+.perf-ticker .ticker-label{flex-shrink:0;display:flex;align-items:center;gap:5px;padding:9px 14px;font-size:12px;font-weight:700;color:#f87171;background:#2a0d0d;border-right:1px solid var(--border);white-space:nowrap}
+.perf-ticker .ticker-track{flex:1;overflow:hidden;min-width:0}
+.perf-ticker .ticker-move{display:inline-flex;align-items:center;gap:30px;white-space:nowrap;padding-left:30px;will-change:transform;animation:tickerScroll 28s linear infinite}
+.perf-ticker:hover .ticker-move{animation-play-state:paused}
+.perf-ticker .ticker-item{font-size:12.5px;color:var(--text-secondary)}
+.perf-ticker .ticker-item b{color:#fb7a4b;font-weight:700;margin-left:5px}
+@keyframes tickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 /* 신규 태그 — 그라데이션 + 은은한 글로우 펄스 */
 .badge-new{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 9px;border-radius:999px;
   font-size:10px;font-weight:800;letter-spacing:.4px;color:#fff;white-space:nowrap;vertical-align:middle;
@@ -530,6 +539,9 @@ textarea.form-input{resize:vertical;min-height:60px}
          VIEW 2: 협력사 퍼포먼스 (리스트 + 검색 + 클릭 시 상세)
     ══════════════════════════════════════ -->
     <div class="view active" id="view-performance">
+
+      <!-- 3PL처리비중 30% 미만 (수도권) 흐르는 배너 -->
+      <div id="perf-3pl-banner" class="perf-ticker" style="display:none"></div>
 
       <!-- KPI cards (전일 기준) -->
       <div class="kpi-grid">
@@ -4782,6 +4794,34 @@ function renderPerformance() {
   renderPerfList();
 }
 
+// 3PL처리비중 30% 미만 (수도권: 서울/경기/인천) 흐르는 배너
+function _renderPerf3plBanner() {
+  const el = document.getElementById('perf-3pl-banner');
+  if (!el) return;
+  const PREFIX = [
+    { p: '서울특별시_', label: '서울' },
+    { p: '경기도_',     label: '경기' },
+    { p: '인천광역시_', label: '인천' },
+  ];
+  const map = STATE.tpl3Share || {};
+  const items = Object.keys(map).map(rgn2 => {
+    const pre = PREFIX.find(x => rgn2.startsWith(x.p));
+    if (!pre) return null;
+    const pct = Number(map[rgn2]) * 100;
+    // 0% 또는 데이터 없음(추정)은 제외, 30% 미만만
+    if (!isFinite(pct) || pct <= 0 || pct >= 30) return null;
+    return { name: pre.label + ' ' + rgn2.replace(pre.p, ''), pct };
+  }).filter(Boolean).sort((a, b) => a.pct - b.pct);
+
+  if (!items.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  const piece = items.map(o =>
+    `<span class="ticker-item">📍 ${_escHtml(o.name)} <b>${o.pct.toFixed(1)}%</b></span>`).join('');
+  el.innerHTML = `
+    <div class="ticker-label">⚠️ 3PL처리비중 30%↓</div>
+    <div class="ticker-track"><div class="ticker-move">${piece}${piece}</div></div>`;
+}
+
 // ═══════════════════════════════════════════════════════════
 // 이탈 협력사 — 기준 D-1 총처리건수가 전주 동요일 대비 40%↑ 감소 &
 //               전주 동요일 총처리건수 ≥ 100건
@@ -5335,6 +5375,9 @@ function renderPerfList() {
 
   _renderGradeChip('perfList');
   _updateSortIndicators('perfList', _PERF_SORT_KEYS);
+
+  // 3PL처리비중 30% 미만 (수도권) 배너
+  _renderPerf3plBanner();
 
   // 기준 일자 select 채우고 현재 선택값 반영
   _populatePerfDateSelect();
