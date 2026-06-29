@@ -4858,10 +4858,11 @@ function _applyRegionFromBanner(rgn2) {
 }
 
 // 범용 멀티라인 추이 차트 (RGN2 품질 팝업용)
-//   series: [{label, color, values:[]}], fmt: (v)=>표시문자열
-function _qualityLineChart(title, labels, series, fmt) {
+//   series: [{label, color, values:[]}], fmt: (v)=>표시문자열, labelFmt: 데이터라벨용(미지정 시 fmt)
+function _qualityLineChart(title, labels, series, fmt, labelFmt) {
+  const lf = labelFmt || fmt;
   const TC = _themeTextColors(); const BC = _themeBgColors();
-  const w = 820, h = 200, padL = 54, padR = 16, padT = 46, padB = 28;
+  const w = 820, h = 210, padL = 54, padR = 16, padT = 46, padB = 28;
   const cW = w - padL - padR, cH = h - padT - padB;
   const n = labels.length || 1;
   const allVals = series.flatMap(s => s.values.filter(v => isFinite(v)));
@@ -4883,10 +4884,13 @@ function _qualityLineChart(title, labels, series, fmt) {
              <text x="${padL-6}" y="${y+3}" font-size="9" fill="${TC.muted}" text-anchor="end">${fmt(val)}</text>`;
   }
   let lines = '';
-  series.forEach(s => {
-    const pts = s.values.map((v, i) => isFinite(v) ? { x: xFor(i), y: yFor(v) } : null).filter(Boolean);
+  series.forEach((s, si) => {
+    const pts = s.values.map((v, i) => isFinite(v) ? { x: xFor(i), y: yFor(v), v } : null).filter(Boolean);
     if (pts.length > 1) lines += `<polyline points="${pts.map(p=>p.x+','+p.y).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
     lines += pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="${BC.card}" stroke="${s.color}" stroke-width="2"/>`).join('');
+    // 데이터 라벨 — 첫 시리즈는 위, 둘째 시리즈는 아래로 (비교차트 겹침 방지)
+    const dy = si === 0 ? -8 : 15;
+    lines += pts.map(p => `<text x="${p.x}" y="${p.y+dy}" font-size="8.5" fill="${s.color}" text-anchor="middle" font-weight="700" stroke="${BC.card}" stroke-width="2.5" paint-order="stroke">${lf(p.v)}</text>`).join('');
   });
   const legend = series.map((s, i) => {
     const last = [...s.values].reverse().find(v => isFinite(v));
@@ -4925,10 +4929,28 @@ function openRgn2QualityModal(rgn2) {
   });
   const num = (r, k) => Number(r[k] || 0);
 
+  // 액티브 협력사수: 데일리운영현황(STATE.kpi)에서 해당 RGN2·날짜별 총처리건수≥1 협력사 수
+  const pidToRgn2 = new Map((STATE.partners || []).map(p => [p['협력사ID'], (p['RGN2'] || '').toString().trim()]));
+  const activeByDate = {};
+  (STATE.kpi || []).forEach(r => {
+    if (Number(r['총처리건수'] || 0) < 1) return;
+    const pid = r['협력사ID']; if (!pid) return;
+    if (pidToRgn2.get(pid) !== rgn2) return;
+    const d = String(r['일자'] || '').slice(0, 10); if (!d) return;
+    (activeByDate[d] = activeByDate[d] || new Set()).add(pid);
+  });
+  const activeValues = recent.map(rr => {
+    const d = String(rr.일자 || '').slice(0, 10);
+    return activeByDate[d] ? activeByDate[d].size : 0;
+  });
+
   const charts = [
     _qualityLineChart('3PL처리비중 (%)', labels,
       [{ label: '3PL처리비중', color: '#2dd4bf', values: recent.map(r => num(r, '3PL처리비중') * 100) }],
       v => v.toFixed(1) + '%'),
+    _qualityLineChart('액티브 협력사수 (운행 1건↑)', labels,
+      [{ label: '액티브 협력사', color: '#a3e635', values: activeValues }],
+      v => Math.round(v).toLocaleString() + '개', v => Math.round(v).toLocaleString()),
     _qualityLineChart('60분 초과율 (%)', labels,
       [{ label: '60분초과율', color: '#fb923c', values: recent.map(r => num(r, '60분초과율')) }],
       v => v.toFixed(1) + '%'),
