@@ -4915,7 +4915,15 @@ function openRgn2QualityModal(rgn2) {
 
   const rows = (STATE.rgn2Daily || []).filter(r => r.RGN2 === rgn2)
     .slice().sort((a, b) => (a.일자 > b.일자 ? 1 : -1));
-  const recent = rows.slice(-14);   // 최근 14일
+  // 최근 2주(14일) 윈도우: 데이터 최신 일자 기준 13일 전까지
+  const _dlist = rows.map(r => String(r.일자 || '').slice(0, 10)).filter(Boolean).sort();
+  const maxD = _dlist.length ? _dlist[_dlist.length - 1] : '';
+  let recent = rows;
+  if (maxD) {
+    const cutoff = _fmtDate(new Date(maxD).getTime() - 13 * _DAY_MS);
+    recent = rows.filter(r => String(r.일자 || '').slice(0, 10) >= cutoff);
+  }
+  recent = recent.slice(-14);   // 안전 상한 (하루 복수 행 대비)
 
   if (!recent.length) {
     body.innerHTML = `<div class="empty" style="padding:30px;text-align:center;color:var(--text-muted)">${rgn2} 의 RGN2_일별지표 데이터가 없습니다</div>`;
@@ -4923,9 +4931,15 @@ function openRgn2QualityModal(rgn2) {
     return;
   }
 
+  const _WD = ['일','월','화','수','목','금','토'];
   const labels = recent.map(r => {
     const s = String(r.일자 || '');
-    return s.length >= 10 ? `${Number(s.slice(5,7))}/${Number(s.slice(8,10))}` : s;
+    if (s.length >= 10) {
+      const dt = new Date(s);
+      const wd = isNaN(dt.getTime()) ? '' : `(${_WD[dt.getDay()]})`;
+      return `${Number(s.slice(5,7))}/${Number(s.slice(8,10))}${wd}`;
+    }
+    return s;
   });
   const num = (r, k) => Number(r[k] || 0);
 
@@ -4951,12 +4965,6 @@ function openRgn2QualityModal(rgn2) {
     _qualityLineChart('액티브 협력사수 (운행 1건↑)', labels,
       [{ label: '액티브 협력사', color: '#a3e635', values: activeValues }],
       v => Math.round(v).toLocaleString() + '개', v => Math.round(v).toLocaleString()),
-    _qualityLineChart('60분 초과율 (%)', labels,
-      [{ label: '60분초과율', color: '#fb923c', values: recent.map(r => num(r, '60분초과율')) }],
-      v => v.toFixed(1) + '%'),
-    _qualityLineChart('UTR', labels,
-      [{ label: 'UTR', color: '#60a5fa', values: recent.map(r => num(r, 'UTR')) }],
-      v => v.toFixed(2)),
     _qualityLineChart('운행 라이더수 (3PL vs FL)', labels, [
       { label: '3PL', color: '#34d399', values: recent.map(r => num(r, '3pl_라이더수')) },
       { label: 'FL',  color: '#a78bfa', values: recent.map(r => num(r, 'FL_라이더수')) },
@@ -4965,6 +4973,12 @@ function openRgn2QualityModal(rgn2) {
       { label: '3PL DCPO', color: '#f472b6', values: recent.map(r => num(r, '3pl_DCPO')) },
       { label: 'FL DCPO',  color: '#38bdf8', values: recent.map(r => num(r, 'FL_DCPO')) },
     ], v => Math.round(v).toLocaleString() + '원'),
+    _qualityLineChart('60분 초과율 (%)', labels,
+      [{ label: '60분초과율', color: '#fb923c', values: recent.map(r => num(r, '60분초과율')) }],
+      v => v.toFixed(1) + '%'),
+    _qualityLineChart('UTR', labels,
+      [{ label: 'UTR', color: '#60a5fa', values: recent.map(r => num(r, 'UTR')) }],
+      v => v.toFixed(2)),
   ];
   body.innerHTML = charts.map(c => `<div class="modal-section" style="margin-bottom:10px">${c}</div>`).join('');
   document.getElementById('rgn2QualityModal').classList.add('open');
