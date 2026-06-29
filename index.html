@@ -756,6 +756,17 @@ textarea.form-input{resize:vertical;min-height:60px}
   </div>
 </div>
 
+<!-- RGN2 데일리 품질 추이 모달 (배너 지역 클릭 시) -->
+<div class="modal-overlay" id="rgn2QualityModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:880px;width:92vw">
+    <div class="modal-header">
+      <div class="modal-title" id="rgn2QualityTitle">데일리 품질 추이</div>
+      <button class="modal-close" onclick="closeRgn2QualityModal()">✕</button>
+    </div>
+    <div id="rgn2QualityBody" style="padding:14px 18px;max-height:80vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 <!-- 데이터 업데이트 대기 안내 모달 (영업 브리핑 진입 시 D-1 누락 알림) -->
 <div class="modal-overlay" id="dataStaleModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()" style="max-width:460px">
@@ -4842,6 +4853,103 @@ function _applyRegionFromBanner(rgn2) {
   _updateRegionFilterBtnLabel();
   applyFilters();
   if (typeof showToast === 'function') showToast(`📍 ${rgn2} 지역 필터 적용`);
+  // 해당 지역 데일리 품질 추이 팝업
+  openRgn2QualityModal(rgn2);
+}
+
+// 범용 멀티라인 추이 차트 (RGN2 품질 팝업용)
+//   series: [{label, color, values:[]}], fmt: (v)=>표시문자열
+function _qualityLineChart(title, labels, series, fmt) {
+  const TC = _themeTextColors(); const BC = _themeBgColors();
+  const w = 820, h = 200, padL = 54, padR = 16, padT = 46, padB = 28;
+  const cW = w - padL - padR, cH = h - padT - padB;
+  const n = labels.length || 1;
+  const allVals = series.flatMap(s => s.values.filter(v => isFinite(v)));
+  let lo = Math.min(...allVals), hi = Math.max(...allVals);
+  if (!isFinite(lo)) { lo = 0; hi = 1; }
+  if (lo === hi) { lo -= (Math.abs(lo) * 0.1 || 1); hi += (Math.abs(hi) * 0.1 || 1); }
+  const pad = (hi - lo) * 0.15 || 1;
+  let bot = lo - pad, top = hi + pad;
+  if (lo >= 0 && bot < 0) bot = 0;     // 0 이상 지표는 baseline 0
+  const yFor = v => padT + cH - ((v - bot) / ((top - bot) || 1)) * cH;
+  const xFor = i => padL + (n === 1 ? cW / 2 : (i / (n - 1)) * cW);
+
+  let grid = '';
+  const ticks = 4;
+  for (let t = 0; t <= ticks; t++) {
+    const y = padT + cH - (t / ticks) * cH;
+    const val = bot + (t / ticks) * (top - bot);
+    grid += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${BC.border}" stroke-width="1"/>
+             <text x="${padL-6}" y="${y+3}" font-size="9" fill="${TC.muted}" text-anchor="end">${fmt(val)}</text>`;
+  }
+  let lines = '';
+  series.forEach(s => {
+    const pts = s.values.map((v, i) => isFinite(v) ? { x: xFor(i), y: yFor(v) } : null).filter(Boolean);
+    if (pts.length > 1) lines += `<polyline points="${pts.map(p=>p.x+','+p.y).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    lines += pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="${BC.card}" stroke="${s.color}" stroke-width="2"/>`).join('');
+  });
+  const legend = series.map((s, i) => {
+    const last = [...s.values].reverse().find(v => isFinite(v));
+    return `<g transform="translate(${padL + i * 165}, 30)">
+      <line x1="0" y1="0" x2="16" y2="0" stroke="${s.color}" stroke-width="2.5"/>
+      <text x="22" y="4" font-size="10.5" fill="${TC.cell}">${s.label}${last != null ? ` <tspan fill="${s.color}" font-weight="700">${fmt(last)}</tspan>` : ''}</text>
+    </g>`;
+  }).join('');
+  const step = Math.max(1, Math.ceil(n / 8));
+  const xlabels = labels.map((l, i) =>
+    (i % step === 0 || i === n - 1) ? `<text x="${xFor(i)}" y="${h-padB+14}" font-size="9" fill="${TC.secondary}" text-anchor="middle">${l}</text>` : ''
+  ).join('');
+  return _svgFrame(title, w, h, grid + lines + legend + xlabels);
+}
+
+// 배너 지역 클릭 → 해당 RGN2 데일리 품질 추이 팝업
+function openRgn2QualityModal(rgn2) {
+  const body = document.getElementById('rgn2QualityBody');
+  const titleEl = document.getElementById('rgn2QualityTitle');
+  if (!body) return;
+  if (titleEl) titleEl.textContent = `📈 ${rgn2} · 데일리 품질 추이`;
+
+  const rows = (STATE.rgn2Daily || []).filter(r => r.RGN2 === rgn2)
+    .slice().sort((a, b) => (a.일자 > b.일자 ? 1 : -1));
+  const recent = rows.slice(-14);   // 최근 14일
+
+  if (!recent.length) {
+    body.innerHTML = `<div class="empty" style="padding:30px;text-align:center;color:var(--text-muted)">${rgn2} 의 RGN2_일별지표 데이터가 없습니다</div>`;
+    document.getElementById('rgn2QualityModal').classList.add('open');
+    return;
+  }
+
+  const labels = recent.map(r => {
+    const s = String(r.일자 || '');
+    return s.length >= 10 ? `${Number(s.slice(5,7))}/${Number(s.slice(8,10))}` : s;
+  });
+  const num = (r, k) => Number(r[k] || 0);
+
+  const charts = [
+    _qualityLineChart('3PL처리비중 (%)', labels,
+      [{ label: '3PL처리비중', color: '#2dd4bf', values: recent.map(r => num(r, '3PL처리비중') * 100) }],
+      v => v.toFixed(1) + '%'),
+    _qualityLineChart('60분 초과율 (%)', labels,
+      [{ label: '60분초과율', color: '#fb923c', values: recent.map(r => num(r, '60분초과율')) }],
+      v => v.toFixed(1) + '%'),
+    _qualityLineChart('UTR', labels,
+      [{ label: 'UTR', color: '#60a5fa', values: recent.map(r => num(r, 'UTR')) }],
+      v => v.toFixed(2)),
+    _qualityLineChart('운행 라이더수 (3PL vs FL)', labels, [
+      { label: '3PL', color: '#34d399', values: recent.map(r => num(r, '3pl_라이더수')) },
+      { label: 'FL',  color: '#a78bfa', values: recent.map(r => num(r, 'FL_라이더수')) },
+    ], v => Math.round(v).toLocaleString() + '명'),
+    _qualityLineChart('DCPO (3PL vs FL)', labels, [
+      { label: '3PL DCPO', color: '#f472b6', values: recent.map(r => num(r, '3pl_DCPO')) },
+      { label: 'FL DCPO',  color: '#38bdf8', values: recent.map(r => num(r, 'FL_DCPO')) },
+    ], v => Math.round(v).toLocaleString() + '원'),
+  ];
+  body.innerHTML = charts.map(c => `<div class="modal-section" style="margin-bottom:10px">${c}</div>`).join('');
+  document.getElementById('rgn2QualityModal').classList.add('open');
+}
+
+function closeRgn2QualityModal() {
+  document.getElementById('rgn2QualityModal').classList.remove('open');
 }
 
 // ═══════════════════════════════════════════════════════════
