@@ -4880,7 +4880,8 @@ function _qualityLineChart(title, labels, series, fmt, labelFmt) {
   const w = 820, h = 210, padL = 54, padR = 16, padT = 46, padB = 28;
   const cW = w - padL - padR, cH = h - padT - padB;
   const n = labels.length || 1;
-  const allVals = series.flatMap(s => s.values.filter(v => isFinite(v)));
+  // 스케일 계산엔 시리즈 값 + RGN1 범위 밴드(bandLo/bandHi)까지 포함
+  const allVals = series.flatMap(s => [...s.values, ...(s.bandLo || []), ...(s.bandHi || [])].filter(v => isFinite(v)));
   let lo = Math.min(...allVals), hi = Math.max(...allVals);
   if (!isFinite(lo)) { lo = 0; hi = 1; }
   if (lo === hi) { lo -= (Math.abs(lo) * 0.1 || 1); hi += (Math.abs(hi) * 0.1 || 1); }
@@ -4899,6 +4900,19 @@ function _qualityLineChart(title, labels, series, fmt, labelFmt) {
              <text x="${padL-6}" y="${y+3}" font-size="9" fill="${TC.muted}" text-anchor="end">${fmt(val)}</text>`;
   }
   let lines = '';
+  // RGN1 범위 밴드 (보조 지표) — 저채도·저투명 영역으로 라인 뒤에 먼저 렌더
+  series.forEach(s => {
+    if (!s.bandLo || !s.bandHi) return;
+    const hiPts = [], loPts = [];
+    s.bandHi.forEach((hv, i) => {
+      const lv = s.bandLo[i];
+      if (isFinite(hv) && isFinite(lv)) { hiPts.push(`${xFor(i)},${yFor(hv)}`); loPts.push(`${xFor(i)},${yFor(lv)}`); }
+    });
+    if (hiPts.length >= 2) {
+      const poly = hiPts.concat(loPts.reverse()).join(' ');
+      lines += `<polygon points="${poly}" fill="${s.color}" opacity="0.06" stroke="none"/>`;
+    }
+  });
   series.forEach((s, si) => {
     const pts = s.values.map((v, i) => isFinite(v) ? { x: xFor(i), y: yFor(v), v } : null).filter(Boolean);
     if (pts.length > 1) lines += `<polyline points="${pts.map(p=>p.x+','+p.y).join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
@@ -4921,13 +4935,42 @@ function _qualityLineChart(title, labels, series, fmt, labelFmt) {
   return _svgFrame(title, w, h, grid + lines + legend + xlabels);
 }
 
-// RGN2_일별지표에 데이터가 있는 지역을 광역(RGN1)별로 그룹화 → [{key,label,prefix,items:[rgn2...]}]
-function _qualityRgn1Groups() {
-  const allR = [...new Set((STATE.rgn2Daily || []).map(r => r.RGN2).filter(Boolean))].sort();
-  return _groupRgn2ByCity(allR).filter(g => g.items.length);
+// 광역명 → 짧은 표기 (RGN2 옵션 라벨용). 서울/경기/인천은 접두 생략(구/시만)
+const _RGN1_SHORT = {
+  '서울특별시': '', '경기도': '', '인천광역시': '',
+  '세종특별자치시': '세종',
+  '부산광역시': '부산', '대구광역시': '대구', '광주광역시': '광주', '대전광역시': '대전', '울산광역시': '울산',
+  '강원도': '강원', '강원특별자치도': '강원', '충청북도': '충북', '충청남도': '충남',
+  '전라북도': '전북', '전북특별자치도': '전북', '전라남도': '전남',
+  '경상북도': '경북', '경상남도': '경남', '제주특별자치도': '제주',
+};
+function _rgn2ShortLabel(r) {
+  const i = r.indexOf('_');
+  if (i < 0) return _RGN1_SHORT[r] || r;   // 구가 없는 경우(세종 등)
+  const wide = r.slice(0, i), rest = r.slice(i + 1);
+  const sh = _RGN1_SHORT[wide];
+  if (sh === '') return rest;              // 서울/경기/인천 → 구/시만
+  return sh ? `${sh} ${rest}` : `${wide} ${rest}`;
 }
 
-// 선택된 RGN1(광역)에 속한 RGN2 드롭다운 채우기 → 선택된 RGN2 값 반환
+// RGN2_일별지표에 데이터가 있는 지역을 RGN1 6구분으로 그룹화 (요청 순서)
+//   1.서울시 2.경기도 3.인천광역시 4.세종시 5.광역시(부산·대구·광주·대전·울산) 6.기타 지방(도)
+function _qualityRgn1Groups() {
+  const allR = [...new Set((STATE.rgn2Daily || []).map(r => r.RGN2).filter(Boolean))].sort();
+  const defs = [
+    { key: 'seoul',    label: '⭐ 서울시',     match: r => r.startsWith('서울특별시') },
+    { key: 'gyeonggi', label: '⭐ 경기도',     match: r => r.startsWith('경기도') },
+    { key: 'incheon',  label: '⭐ 인천광역시', match: r => r.startsWith('인천광역시') },
+    { key: 'sejong',   label: '🏛️ 세종시',     match: r => r.startsWith('세종특별자치시') },
+    { key: 'metros',   label: '🏙️ 광역시',     match: r => /^(부산|대구|광주|대전|울산)광역시/.test(r) },
+    { key: 'others',   label: '📌 기타 지방',  match: () => true },   // 나머지(도 단위) 전부
+  ];
+  const groups = defs.map(d => ({ key: d.key, label: d.label, match: d.match, items: [] }));
+  allR.forEach(r => { const g = groups.find(x => x.match(r)); if (g) g.items.push(r); });
+  return groups.filter(g => g.items.length);
+}
+
+// 선택된 RGN1 그룹에 속한 RGN2 드롭다운 채우기 → 선택된 RGN2 값 반환
 function _fillQualityRgn2(rgn1Key, selectRgn2) {
   const groups = _qualityRgn1Groups();
   const g = groups.find(x => x.key === rgn1Key) || groups[0];
@@ -4935,7 +4978,7 @@ function _fillQualityRgn2(rgn1Key, selectRgn2) {
   if (!g || !sel2) return '';
   const pick = (selectRgn2 && g.items.includes(selectRgn2)) ? selectRgn2 : g.items[0];
   sel2.innerHTML = g.items.map(r =>
-    `<option value="${_escHtml(r)}"${r === pick ? ' selected' : ''}>${_escHtml((g.prefix && r.replace(g.prefix, '')) || r)}</option>`).join('');
+    `<option value="${_escHtml(r)}"${r === pick ? ' selected' : ''}>${_escHtml(_rgn2ShortLabel(r))}</option>`).join('');
   sel2.value = pick;
   return pick;
 }
@@ -5025,26 +5068,60 @@ function _renderRgn2QualityCharts(rgn2) {
     return activeByDate[d] ? activeByDate[d].size : 0;
   });
 
+  // ── RGN1(광역) 범위 밴드: 같은 광역 내 지역들의 날짜별 최저~최고 (보조 지표) ──
+  const recentDates = recent.map(r => String(r.일자 || '').slice(0, 10));
+  const _grp = _qualityRgn1Groups().find(g => g.items.includes(rgn2));
+  const groupSet = new Set(_grp ? _grp.items : [rgn2]);
+  // rgn2Daily 기반 지표 밴드
+  const bandFor = (extractor) => {
+    const byDate = {};
+    (STATE.rgn2Daily || []).forEach(r => {
+      if (!groupSet.has(r.RGN2)) return;
+      const d = String(r.일자 || '').slice(0, 10); if (!d) return;
+      const v = extractor(r); if (!isFinite(v)) return;
+      (byDate[d] = byDate[d] || []).push(v);
+    });
+    return {
+      bandLo: recentDates.map(d => (byDate[d] && byDate[d].length) ? Math.min(...byDate[d]) : null),
+      bandHi: recentDates.map(d => (byDate[d] && byDate[d].length) ? Math.max(...byDate[d]) : null),
+    };
+  };
+  // 액티브 협력사수 밴드: 그룹 내 RGN2별·날짜별 운행≥1 협력사 수
+  const grpActive = {};   // key: `${rgn2}|${date}` → Set(pid)
+  (STATE.kpi || []).forEach(r => {
+    if (Number(r['총처리건수'] || 0) < 1) return;
+    const pid = r['협력사ID']; if (!pid) return;
+    const rr = pidToRgn2.get(pid); if (!groupSet.has(rr)) return;
+    const d = String(r['일자'] || '').slice(0, 10); if (!d) return;
+    const k = rr + '|' + d;
+    (grpActive[k] = grpActive[k] || new Set()).add(pid);
+  });
+  const activeBand = {
+    bandLo: recentDates.map(d => { const vs = [...groupSet].map(rr => (grpActive[rr + '|' + d] || new Set()).size).filter(v => v > 0); return vs.length ? Math.min(...vs) : null; }),
+    bandHi: recentDates.map(d => { const vs = [...groupSet].map(rr => (grpActive[rr + '|' + d] || new Set()).size).filter(v => v > 0); return vs.length ? Math.max(...vs) : null; }),
+  };
+
   const charts = [
     _qualityLineChart('3PL처리비중 (%)', labels,
-      [{ label: '3PL처리비중', color: '#2dd4bf', values: recent.map(r => num(r, '3PL처리비중') * 100) }],
+      [{ label: '3PL처리비중', color: '#2dd4bf', values: recent.map(r => num(r, '3PL처리비중') * 100),
+         ...bandFor(r => num(r, '3PL처리비중') * 100) }],
       v => v.toFixed(1) + '%'),
     _qualityLineChart('액티브 협력사수 (운행 1건↑)', labels,
-      [{ label: '액티브 협력사', color: '#a3e635', values: activeValues }],
+      [{ label: '액티브 협력사', color: '#a3e635', values: activeValues, ...activeBand }],
       v => Math.round(v).toLocaleString() + '개', v => Math.round(v).toLocaleString()),
     _qualityLineChart('운행 라이더수 (3PL vs FL)', labels, [
-      { label: '3PL', color: '#34d399', values: recent.map(r => num(r, '3pl_라이더수')) },
-      { label: 'FL',  color: '#a78bfa', values: recent.map(r => num(r, 'FL_라이더수')) },
+      { label: '3PL', color: '#34d399', values: recent.map(r => num(r, '3pl_라이더수')), ...bandFor(r => num(r, '3pl_라이더수')) },
+      { label: 'FL',  color: '#a78bfa', values: recent.map(r => num(r, 'FL_라이더수')), ...bandFor(r => num(r, 'FL_라이더수')) },
     ], v => Math.round(v).toLocaleString() + '명'),
     _qualityLineChart('DCPO (3PL vs FL)', labels, [
-      { label: '3PL DCPO', color: '#f472b6', values: recent.map(r => num(r, '3pl_DCPO')) },
-      { label: 'FL DCPO',  color: '#38bdf8', values: recent.map(r => num(r, 'FL_DCPO')) },
+      { label: '3PL DCPO', color: '#f472b6', values: recent.map(r => num(r, '3pl_DCPO')), ...bandFor(r => num(r, '3pl_DCPO')) },
+      { label: 'FL DCPO',  color: '#38bdf8', values: recent.map(r => num(r, 'FL_DCPO')), ...bandFor(r => num(r, 'FL_DCPO')) },
     ], v => Math.round(v).toLocaleString() + '원'),
     _qualityLineChart('60분 초과율 (%)', labels,
-      [{ label: '60분초과율', color: '#fb923c', values: recent.map(r => num(r, '60분초과율')) }],
+      [{ label: '60분초과율', color: '#fb923c', values: recent.map(r => num(r, '60분초과율')), ...bandFor(r => num(r, '60분초과율')) }],
       v => v.toFixed(1) + '%'),
     _qualityLineChart('UTR', labels,
-      [{ label: 'UTR', color: '#60a5fa', values: recent.map(r => num(r, 'UTR')) }],
+      [{ label: 'UTR', color: '#60a5fa', values: recent.map(r => num(r, 'UTR')), ...bandFor(r => num(r, 'UTR')) }],
       v => v.toFixed(2)),
   ];
   body.innerHTML = charts.map(c => `<div class="modal-section" style="margin-bottom:10px">${c}</div>`).join('');
