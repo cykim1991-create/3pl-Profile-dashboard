@@ -736,18 +736,24 @@ textarea.form-input{resize:vertical;min-height:60px}
   </div><!-- /main -->
 
   <!-- 우측 하단 floating action button — 지역 담당자 관리 -->
-  <button id="rgn2ManagerFab" onclick="openRgn2ManagerModal()" title="지역 담당자 관리"
-          style="position:fixed;right:24px;bottom:24px;z-index:50;
-                 background:var(--accent);color:#ffffff;
-                 border:1px solid var(--accent);border-radius:24px;
-                 padding:11px 18px;font-size:12.5px;font-weight:600;
-                 cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);
-                 font-family:inherit;display:inline-flex;align-items:center;gap:7px;
-                 transition:transform .12s,background .15s"
-          onmouseover="this.style.background='#1d4ed8';this.style.transform='translateY(-1px)'"
-          onmouseout="this.style.background='var(--accent)';this.style.transform='translateY(0)'">
-    <span>🧑‍💼</span><span>지역 담당자 관리</span>
-  </button>
+  <div style="position:fixed;right:24px;bottom:24px;z-index:50;display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+    <button id="rgn2ManagerFab" onclick="openRgn2ManagerModal()" title="지역 담당자 관리"
+            style="background:var(--accent);color:#ffffff;border:1px solid var(--accent);border-radius:24px;
+                   padding:11px 18px;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);
+                   font-family:inherit;display:inline-flex;align-items:center;gap:7px;transition:transform .12s,background .15s"
+            onmouseover="this.style.background='#1d4ed8';this.style.transform='translateY(-1px)'"
+            onmouseout="this.style.background='var(--accent)';this.style.transform='translateY(0)'">
+      <span>🧑‍💼</span><span>지역 담당자 관리</span>
+    </button>
+    <button id="relaxFab" onclick="openRelaxModal()" title="발주량/수락률 완화 이력"
+            style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:24px;
+                   padding:11px 18px;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);
+                   font-family:inherit;display:inline-flex;align-items:center;gap:7px;transition:transform .12s,background .15s"
+            onmouseover="this.style.background='var(--bg-filter)';this.style.transform='translateY(-1px)'"
+            onmouseout="this.style.background='var(--bg-card)';this.style.transform='translateY(0)'">
+      <span>🪧</span><span>완화 이력</span>
+    </button>
+  </div>
 </div><!-- /app -->
 
 <!-- RGN2별 담당자 관리 모달 -->
@@ -758,6 +764,17 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="modal-close" onclick="closeRgn2ManagerModal()">✕</button>
     </div>
     <div id="rgn2ManagerBody" style="padding:20px;display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- 발주량/수락률 완화 이력 모달 -->
+<div class="modal-overlay" id="relaxModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:860px;width:94vw">
+    <div class="modal-header">
+      <div class="modal-title">🪧 발주량 / 수락률 완화 이력</div>
+      <button class="modal-close" onclick="closeRelaxModal()">✕</button>
+    </div>
+    <div id="relaxBody" style="padding:16px 18px;max-height:80vh;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -1489,7 +1506,7 @@ function filterKPIRecent(kpi, weeks) {
 // ═══════════════════════════════════════════════════
 // STATE + SAMPLE DATA
 // ═══════════════════════════════════════════════════
-let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, tpl3Share:{}, rgn2Managers:{}, penalty:[], penaltyDecisions:new Map() };
+let STATE = { partners:[], kpi:[], logs:[], promo:[], pipeline:[], settings:{}, tpl3Share:{}, rgn2Managers:{}, penalty:[], penaltyDecisions:new Map(), relaxations:[] };
 let filtered = [];
 let newOnlyMode = false;         // '신규만' — 최근운영중전환 날짜가 N일 이내인 협력사만
 let perfRefDate = null;          // 협력사 퍼포먼스 기준 일자 (null = 최신 D-1). 사용자가 select로 변경.
@@ -1708,7 +1725,7 @@ async function init() {
   try {
     // v9 시트 구조: row1=제목, row2=헤더, row3+=데이터 (0-indexed: header=1, data=2)
     // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
-    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals, rgn2InfoVals, penaltyVals, penaltyDecVals] = await Promise.all([
+    const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals, rgn2InfoVals, penaltyVals, penaltyDecVals, relaxVals] = await Promise.all([
       fetchSheet('협력사기본정보',     'A:L'),    // 12열 (K=최근운영중전환 날짜, L=주요애로사항)
       fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
       fetchSheet('실시간운행현황',     'A:AB'),   // 28열 (AB열 = active_rider 추가)
@@ -1723,6 +1740,8 @@ async function init() {
       fetchSheet('운영중지대상',       'A:J').catch(() => []),
       // 운영중지_유예결정 (영업담당 유예 결정 누적) — 7열. 없으면 빈 배열
       fetchSheet('운영중지_유예결정',  'A:G').catch(() => []),
+      // 완화이력 (발주량/수락률 완화) — 8열. 없으면 빈 배열
+      fetchSheet('완화이력',           'A:H').catch(() => []),
     ]);
     STATE.partners     = parseSheet(partnerVals,  1, 2);
     // RGN2 매핑 기준 (2026-05): 'RGN2정보' 시트의 권역명 → RGN2 매핑을 사용.
@@ -1890,6 +1909,32 @@ async function init() {
         });
       }
       return map;
+    })();
+
+    // 완화이력 (발주량/수락률 완화) — 헤더 row1, 데이터 row2+.
+    //   컬럼: ID | 일자 | RGN1 | RGN2 | 완화유형 | 완화내용 | 작성자 | 작성일시
+    //   _row(1-based 시트행) 보관 → 수정/삭제에 사용
+    STATE.relaxations = (() => {
+      const arr = [];
+      const vals = relaxVals || [];
+      if (vals.length < 2 || !vals[0]) return arr;
+      const headers = vals[0].map(h => String(h == null ? '' : h).trim());
+      const col = n => headers.indexOf(n);
+      const ci = { id: col('ID'), date: col('일자'), rgn1: col('RGN1'), rgn2: col('RGN2'),
+                   type: col('완화유형'), content: col('완화내용'), person: col('작성자'), ts: col('작성일시') };
+      for (let i = 1; i < vals.length; i++) {
+        const row = vals[i]; if (!row) continue;
+        const g = (idx) => (idx >= 0 && row[idx] != null) ? String(row[idx]).trim() : '';
+        const id = g(ci.id), date = g(ci.date);
+        if (!id && !date) continue;   // 빈 행 스킵
+        arr.push({
+          id, 일자: (date.length > 10 ? date.slice(0, 10) : date),
+          rgn1: g(ci.rgn1), rgn2: g(ci.rgn2), type: g(ci.type),
+          content: (ci.content >= 0 && row[ci.content] != null) ? String(row[ci.content]) : '',
+          person: g(ci.person), ts: g(ci.ts), _row: i + 1,
+        });
+      }
+      return arr;
     })();
 
     // 시트에 이미 올라간 로컬 로그(같은 로그ID)는 로컬에서 정리 → "로컬" 뱃지 중복 방지
@@ -5154,12 +5199,12 @@ function _renderRgn2QualityCharts(rgn2) {
       [{ label: '액티브 협력사', color: '#a3e635', values: activeValues, ...activeBand }],
       v => Math.round(v).toLocaleString() + '개', v => Math.round(v).toLocaleString()),
     _qualityLineChart('운행 라이더수 (3PL vs FL)', labels, [
-      { label: '3PL', color: '#34d399', values: recent.map(r => num(r, '3pl_라이더수')), ...bandFor(r => num(r, '3pl_라이더수')) },
-      { label: 'FL',  color: '#a78bfa', values: recent.map(r => num(r, 'FL_라이더수')), ...bandFor(r => num(r, 'FL_라이더수')) },
+      { label: '3PL', color: '#34d399', values: recent.map(r => num(r, '3pl_라이더수')) },
+      { label: 'FL',  color: '#a78bfa', values: recent.map(r => num(r, 'FL_라이더수')) },
     ], v => Math.round(v).toLocaleString() + '명'),
     _qualityLineChart('DCPO (3PL vs FL)', labels, [
-      { label: '3PL DCPO', color: '#f472b6', values: recent.map(r => num(r, '3pl_DCPO')), ...bandFor(r => num(r, '3pl_DCPO')) },
-      { label: 'FL DCPO',  color: '#38bdf8', values: recent.map(r => num(r, 'FL_DCPO')), ...bandFor(r => num(r, 'FL_DCPO')) },
+      { label: '3PL DCPO', color: '#f472b6', values: recent.map(r => num(r, '3pl_DCPO')) },
+      { label: 'FL DCPO',  color: '#38bdf8', values: recent.map(r => num(r, 'FL_DCPO')) },
     ], v => Math.round(v).toLocaleString() + '원'),
     _qualityLineChart('60분 초과율 (%)', labels,
       [{ label: '60분초과율', color: '#fb923c', values: recent.map(r => num(r, '60분초과율')), ...bandFor(r => num(r, '60분초과율')) }],
@@ -5177,6 +5222,277 @@ function _renderRgn2QualityCharts(rgn2) {
 
 function closeRgn2QualityModal() {
   document.getElementById('rgn2QualityModal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════
+// 발주량 / 수락률 완화 이력 (완화이력 시트: ID|일자|RGN1|RGN2|완화유형|완화내용|작성자|작성일시)
+// ═══════════════════════════════════════════════════════════
+const _RELAX_SLOTS = ['아침점심', '오후', '저녁피크', '심야'];
+let _relaxForm = null;   // 현재 폼 상태 (추가/수정)
+
+// RGN1(광역) 목록 — 협력사기본정보 RGN2에서 광역명 추출, _CITY_GROUPS 순서
+function _relaxRgn1List() {
+  const set = new Set();
+  _availableRgn2List().forEach(r => { const i = r.indexOf('_'); set.add(i < 0 ? r : r.slice(0, i)); });
+  const order = _CITY_GROUPS.map(g => g.key);
+  return [...set].sort((a, b) => ((order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b))) || a.localeCompare(b));
+}
+function _relaxRgn2List(rgn1) {
+  return _availableRgn2List().filter(r => { const i = r.indexOf('_'); return (i < 0 ? r : r.slice(0, i)) === rgn1; });
+}
+function _relaxRgn2Short(r) { const i = r.indexOf('_'); return i < 0 ? r : r.slice(i + 1); }
+
+function _relaxDefaultForm() {
+  const r1 = _relaxRgn1List(); const rgn1 = r1[0] || '';
+  const r2 = _relaxRgn2List(rgn1);
+  const d = new Date(); const p = n => String(n).padStart(2, '0');
+  const today = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return { editing: false, id: '', 일자: today, rgn1, rgn2: (r2[0] || ''), type: '발주량', pct: '', acceptMode: '종일', slots: [] };
+}
+
+function _relaxTypeBadge(t) {
+  if (t === '발주량') return `<span class="badge" style="background:#0a233f;color:#60a5fa;border:1px solid #1d4ed8">발주량</span>`;
+  if (t === '수락률') return `<span class="badge" style="background:#2a1a05;color:#fbbf24;border:1px solid #7c4a0f">수락률</span>`;
+  return `<span class="badge">${_escHtml(t || '-')}</span>`;
+}
+
+function openRelaxModal() {
+  _relaxForm = _relaxDefaultForm();
+  renderRelaxModal();
+  document.getElementById('relaxModal').classList.add('open');
+}
+function closeRelaxModal() {
+  document.getElementById('relaxModal').classList.remove('open');
+}
+
+function renderRelaxModal() {
+  const body = document.getElementById('relaxBody');
+  if (!body) return;
+  const f = _relaxForm || (_relaxForm = _relaxDefaultForm());
+  const rgn1List = _relaxRgn1List();
+  const rgn2List = _relaxRgn2List(f.rgn1);
+
+  const opt = (v, cur, label) => `<option value="${_escHtml(v)}"${v === cur ? ' selected' : ''}>${_escHtml(label != null ? label : v)}</option>`;
+  const showOrder = f.type === '발주량';
+  const showSlots = f.acceptMode === '시간대';
+
+  const form = `
+    <div style="background:var(--bg-section);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:12.5px;font-weight:700;color:var(--text-primary);margin-bottom:10px">
+        ${f.editing ? '✏️ 완화 이력 수정' : '➕ 완화 이력 추가'}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 14px;align-items:end">
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:600">일자
+          <input type="date" id="relax-date" value="${_escHtml(f.일자)}" style="width:100%;margin-top:4px;padding:6px 9px;font-size:12.5px;background:var(--bg-page);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
+        </label>
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:600">지역 (RGN1)
+          <select id="relax-rgn1" onchange="_relaxRgn1Change()" style="width:100%;margin-top:4px;padding:6px 9px;font-size:12.5px;background:var(--bg-page);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
+            ${rgn1List.map(r => opt(r, f.rgn1)).join('')}
+          </select>
+        </label>
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:600">지역 (RGN2)
+          <select id="relax-rgn2" style="width:100%;margin-top:4px;padding:6px 9px;font-size:12.5px;background:var(--bg-page);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
+            ${rgn2List.map(r => opt(r, f.rgn2, _relaxRgn2Short(r))).join('')}
+          </select>
+        </label>
+        <label style="font-size:11px;color:var(--text-secondary);font-weight:600">완화 유형
+          <select id="relax-type" onchange="_relaxTypeChange()" style="width:100%;margin-top:4px;padding:6px 9px;font-size:12.5px;background:var(--bg-page);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
+            ${opt('발주량', f.type)}${opt('수락률', f.type)}
+          </select>
+        </label>
+      </div>
+      <div style="margin-top:12px">
+        <div id="relax-block-order" style="display:${showOrder ? 'flex' : 'none'};align-items:center;gap:8px">
+          <span style="font-size:11px;color:var(--text-secondary);font-weight:600">완화율</span>
+          <input type="number" id="relax-pct" value="${_escHtml(f.pct)}" min="0" max="100" step="0.1" placeholder="예: 20"
+                 style="width:110px;padding:6px 9px;font-size:12.5px;background:var(--bg-page);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
+          <span style="font-size:12.5px;color:var(--text-secondary)">%</span>
+        </div>
+        <div id="relax-block-accept" style="display:${showOrder ? 'none' : 'block'}">
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <label style="font-size:12px;color:var(--text-cell);display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="radio" name="relax-accept" value="종일" ${f.acceptMode === '종일' ? 'checked' : ''} onchange="_relaxAcceptModeChange()"> 종일 완화</label>
+            <label style="font-size:12px;color:var(--text-cell);display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="radio" name="relax-accept" value="시간대" ${f.acceptMode === '시간대' ? 'checked' : ''} onchange="_relaxAcceptModeChange()"> 시간대 완화</label>
+          </div>
+          <div id="relax-slot-wrap" style="display:${showSlots ? 'flex' : 'none'};gap:12px;flex-wrap:wrap;margin-top:8px">
+            ${_RELAX_SLOTS.map(s => `<label style="font-size:12px;color:var(--text-cell);display:flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" class="relax-slot" value="${s}" ${f.slots.includes(s) ? 'checked' : ''}> ${s}</label>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        ${f.editing ? `<button class="btn btn-ghost btn-sm" onclick="relaxResetForm()">취소</button>` : ''}
+        <button class="btn btn-primary btn-sm" id="relax-save" onclick="saveRelaxation()">${f.editing ? '💾 수정 저장' : '➕ 추가'}</button>
+      </div>
+      <div id="relax-error" style="display:none;color:#f87171;font-size:11.5px;margin-top:8px"></div>
+    </div>`;
+
+  const list = [...(STATE.relaxations || [])].sort((a, b) => (a.일자 < b.일자 ? 1 : a.일자 > b.일자 ? -1 : 0));
+  const rows = list.length ? list.map(r => `
+    <tr>
+      <td style="white-space:nowrap;color:var(--text-cell)">${_escHtml(r.일자 || '-')}</td>
+      <td style="color:var(--text-secondary);font-size:11.5px">${_escHtml(r.rgn1 || '-')} <span style="color:var(--accent-soft)">${_escHtml(_relaxRgn2Short(r.rgn2 || ''))}</span></td>
+      <td style="text-align:center">${_relaxTypeBadge(r.type)}</td>
+      <td style="color:var(--text-cell)">${_escHtml(r.content || '-')}</td>
+      <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${_escHtml((r.person || '').split('@')[0])}</td>
+      <td style="text-align:center;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" style="padding:3px 8px" onclick="relaxStartEdit('${_escHtml(r.id).replace(/'/g,"\\'")}')">수정</button>
+        <button class="btn btn-ghost btn-sm" style="padding:3px 8px;color:#f87171" onclick="deleteRelaxation('${_escHtml(r.id).replace(/'/g,"\\'")}')">삭제</button>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="6" class="empty" style="padding:20px;text-align:center;color:var(--text-muted)">등록된 완화 이력이 없습니다</td></tr>`;
+
+  body.innerHTML = form + `
+    <div class="table-wrap table-scroll">
+      <table class="data-table" style="min-width:640px">
+        <thead><tr>
+          <th>일자</th><th>지역</th><th class="center">유형</th><th>완화 내용</th><th>작성자</th><th class="center">관리</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function _relaxRgn1Change() {
+  const rgn1 = document.getElementById('relax-rgn1').value;
+  const sel2 = document.getElementById('relax-rgn2');
+  const list = _relaxRgn2List(rgn1);
+  sel2.innerHTML = list.map(r => `<option value="${_escHtml(r)}">${_escHtml(_relaxRgn2Short(r))}</option>`).join('');
+}
+function _relaxTypeChange() {
+  const t = document.getElementById('relax-type').value;
+  document.getElementById('relax-block-order').style.display = (t === '발주량') ? 'flex' : 'none';
+  document.getElementById('relax-block-accept').style.display = (t === '발주량') ? 'none' : 'block';
+}
+function _relaxAcceptModeChange() {
+  const m = (document.querySelector('input[name="relax-accept"]:checked') || {}).value;
+  document.getElementById('relax-slot-wrap').style.display = (m === '시간대') ? 'flex' : 'none';
+}
+
+function relaxStartEdit(id) {
+  const r = (STATE.relaxations || []).find(x => x.id === id);
+  if (!r) return;
+  const c = r.content || '';
+  let pct = '', acceptMode = '종일', slots = [];
+  if (r.type === '발주량') { pct = (c.match(/[\d.]+/) || [''])[0]; }
+  else { if (/^시간대/.test(c)) { acceptMode = '시간대'; slots = c.replace(/^시간대\s*:?\s*/, '').split(/[·,\s]+/).filter(Boolean); } else acceptMode = '종일'; }
+  _relaxForm = { editing: true, id: r.id, 일자: r.일자 || '', rgn1: r.rgn1 || '', rgn2: r.rgn2 || '', type: r.type || '발주량', pct, acceptMode, slots };
+  renderRelaxModal();
+  document.getElementById('relaxBody').scrollTop = 0;
+}
+function relaxResetForm() {
+  _relaxForm = _relaxDefaultForm();
+  renderRelaxModal();
+}
+
+async function saveRelaxation() {
+  const errEl = document.getElementById('relax-error');
+  const showErr = (m) => { if (errEl) { errEl.textContent = m; errEl.style.display = 'block'; } };
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) { showErr('로그인이 필요합니다 — 🔑 로그인 후 다시 시도해 주세요'); return; }
+
+  const date = (document.getElementById('relax-date') || {}).value || '';
+  const rgn1 = (document.getElementById('relax-rgn1') || {}).value || '';
+  const rgn2 = (document.getElementById('relax-rgn2') || {}).value || '';
+  const type = (document.getElementById('relax-type') || {}).value || '';
+  if (!date) { showErr('일자를 입력해 주세요'); return; }
+  if (!rgn2) { showErr('지역(RGN2)을 선택해 주세요'); return; }
+
+  let content = '';
+  if (type === '발주량') {
+    const pct = (document.getElementById('relax-pct') || {}).value;
+    if (pct === '' || isNaN(Number(pct))) { showErr('발주량 완화율(%)을 입력해 주세요'); return; }
+    content = `${Number(pct)}%`;
+  } else {
+    const mode = (document.querySelector('input[name="relax-accept"]:checked') || {}).value || '종일';
+    if (mode === '종일') content = '종일';
+    else {
+      const slots = [...document.querySelectorAll('.relax-slot:checked')].map(c => c.value);
+      if (!slots.length) { showErr('완화할 시간대를 하나 이상 선택해 주세요'); return; }
+      content = '시간대: ' + slots.join('·');
+    }
+  }
+
+  const editing = _relaxForm && _relaxForm.editing;
+  const existing = editing ? (STATE.relaxations || []).find(x => x.id === _relaxForm.id) : null;
+  const id = existing ? existing.id : ('R' + Date.now());
+  const now = (() => { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; })();
+  // 컬럼 순서: ID | 일자 | RGN1 | RGN2 | 완화유형 | 완화내용 | 작성자 | 작성일시
+  const row = [id, date, rgn1, rgn2, type, content, gsiUserEmail || '', now];
+
+  const btn = document.getElementById('relax-save');
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중…'; }
+  const ok = (existing && existing._row)
+    ? await _updateRelaxRow(existing._row, row)
+    : await _appendRelaxRow(row);
+  if (btn) { btn.disabled = false; }
+
+  if (!ok) { showErr('저장 실패: ' + (_lastOAuthWriteError || '알 수 없는 오류') + " — '완화이력' 시트 확인"); return; }
+  await _refreshRelaxations();
+  _relaxForm = _relaxDefaultForm();
+  renderRelaxModal();
+  showToast(`✓ 완화 이력 ${existing ? '수정' : '추가'}됨`);
+}
+
+async function deleteRelaxation(id) {
+  const r = (STATE.relaxations || []).find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`이 완화 이력을 삭제할까요?\n${r.일자} · ${r.rgn1} ${_relaxRgn2Short(r.rgn2)} · ${r.type}`)) return;
+  if (!gsiAccessToken || Date.now() >= gsiTokenExpiry) { showToast('로그인이 필요합니다'); return; }
+  const ok = await _deleteRelaxRow(r._row);
+  if (!ok) { showToast('삭제 실패: ' + (_lastOAuthWriteError || '오류')); return; }
+  await _refreshRelaxations();
+  if (_relaxForm && _relaxForm.editing && _relaxForm.id === id) _relaxForm = _relaxDefaultForm();
+  renderRelaxModal();
+  showToast('✓ 완화 이력 삭제됨');
+}
+
+// ── 완화이력 시트 쓰기 헬퍼 ──
+async function _appendRelaxRow(row) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${encodeURIComponent('완화이력!A:H')}:append?valueInputOption=RAW`;
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ values: [row] }) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); _lastOAuthWriteError = `[${res.status}] ${e?.error?.message || res.statusText}`; if (res.status === 401) { gsiAccessToken = null; gsiTokenExpiry = 0; _clearOAuthStorage(); updateGsiBtn(false); } return false; }
+    _lastOAuthWriteError = ''; return true;
+  } catch (e) { _lastOAuthWriteError = '네트워크 오류: ' + (e?.message || e); return false; }
+}
+async function _updateRelaxRow(rowNum, row) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${encodeURIComponent('완화이력!A' + rowNum + ':H' + rowNum)}?valueInputOption=RAW`;
+  try {
+    const res = await fetch(url, { method: 'PUT', headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ values: [row] }) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); _lastOAuthWriteError = `[${res.status}] ${e?.error?.message || res.statusText}`; if (res.status === 401) { gsiAccessToken = null; gsiTokenExpiry = 0; _clearOAuthStorage(); updateGsiBtn(false); } return false; }
+    _lastOAuthWriteError = ''; return true;
+  } catch (e) { _lastOAuthWriteError = '네트워크 오류: ' + (e?.message || e); return false; }
+}
+async function _deleteRelaxRow(rowNum) {
+  if (!rowNum) { _lastOAuthWriteError = '행 번호 없음'; return false; }
+  const gid = await _getSheetGid('완화이력');
+  if (gid == null) { _lastOAuthWriteError = "'완화이력' 시트 메타데이터를 가져올 수 없음"; return false; }
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}:batchUpdate`;
+  const body = { requests: [{ deleteDimension: { range: { sheetId: gid, dimension: 'ROWS', startIndex: rowNum - 1, endIndex: rowNum } } }] };
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Authorization': `Bearer ${gsiAccessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); _lastOAuthWriteError = `[${res.status}] ${e?.error?.message || res.statusText}`; return false; }
+    _lastOAuthWriteError = ''; return true;
+  } catch (e) { _lastOAuthWriteError = '네트워크 오류: ' + (e?.message || e); return false; }
+}
+async function _refreshRelaxations() {
+  try {
+    const vals = await fetchSheet('완화이력', 'A:H');
+    const arr = [];
+    if (vals && vals.length >= 2 && vals[0]) {
+      const headers = vals[0].map(h => String(h == null ? '' : h).trim());
+      const col = n => headers.indexOf(n);
+      const ci = { id: col('ID'), date: col('일자'), rgn1: col('RGN1'), rgn2: col('RGN2'), type: col('완화유형'), content: col('완화내용'), person: col('작성자'), ts: col('작성일시') };
+      for (let i = 1; i < vals.length; i++) {
+        const rr = vals[i]; if (!rr) continue;
+        const g = (idx) => (idx >= 0 && rr[idx] != null) ? String(rr[idx]).trim() : '';
+        const id = g(ci.id), date = g(ci.date);
+        if (!id && !date) continue;
+        arr.push({ id, 일자: (date.length > 10 ? date.slice(0, 10) : date), rgn1: g(ci.rgn1), rgn2: g(ci.rgn2), type: g(ci.type), content: (ci.content >= 0 && rr[ci.content] != null) ? String(rr[ci.content]) : '', person: g(ci.person), ts: g(ci.ts), _row: i + 1 });
+      }
+    }
+    STATE.relaxations = arr;
+  } catch (_) { /* 유지 */ }
 }
 
 // ═══════════════════════════════════════════════════════════
