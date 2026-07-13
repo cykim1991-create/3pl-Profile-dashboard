@@ -5643,8 +5643,10 @@ function renderPerfList() {
       const d = _kpiDateOf(r);
       return d && d >= thisWeek.start && d <= thisWeek.end && Number(r['총처리건수']||0) >= 1;
     }));
+    // 데일리운영현황 보존기간(약 3주) 내 한 번이라도 운행(총처리건수 ≥ 1)했는지
+    const hasAnyVol = hist.some(r => Number(r['총처리건수']||0) >= 1);
     return {
-      p, pid, rgn2, tpl3, region, grade, prev, prior, priorWeek, hasVolThisWeek,
+      p, pid, rgn2, tpl3, region, grade, prev, prior, priorWeek, hasVolThisWeek, hasAnyVol,
       // 노출 기준: 운영상태 '운영중' 협력사
       isActive: String(p['운영상태'] || '').trim() === '운영중',
       // 신규 태그: 최근운영중전환 날짜가 N일 이내
@@ -5671,9 +5673,10 @@ function renderPerfList() {
   });
 
   // ── 노출 기준 ──
-  //   운영상태와 무관하게, 기준일(전일/선택일)에 데일리운영현황에서 실제 운행한
-  //   (처리건수 ≥ 1) 협력사를 노출. (상단 KPI 카드의 '전일 운행 협력사' 기준과 동일)
-  let recordsFiltered = records.filter(r => !r.empty && Number((r.prev && r.prev.totalVol) || 0) >= 1);
+  //   운영상태·기준일과 무관하게, 데일리운영현황 보존기간(약 3주) 내에
+  //   한 번이라도 운행(총처리건수 ≥ 1)한 이력이 있으면 노출.
+  //   (기준일에 운행이력이 없으면 지표는 '해당 기간 데이터 없음'으로 렌더됨)
+  let recordsFiltered = records.filter(r => r.hasAnyVol);
 
   // ── 신규만 필터 (퍼포먼스 리스트 전용) ──
   // 최근운영중전환 날짜가 N일 이내인 협력사만
