@@ -433,6 +433,7 @@ textarea.form-input{resize:vertical;min-height:60px}
       <button class="nav-btn" onclick="switchView('realtime',this)">📡 실시간 운행현황</button>
       <button class="nav-btn" onclick="switchView('churn',this)">📉 이탈 협력사</button>
       <button class="nav-btn" onclick="switchView('penalty',this)">⛔ 운영중지 대상</button>
+      <button class="nav-btn" onclick="openRgn2QualityModal()">📈 지역별 데일리 품질</button>
     </div>
     <div class="topbar-filters">
       <button class="filter-select" id="regionFilterBtn" onclick="openRegionFilterModal()"
@@ -765,8 +766,11 @@ textarea.form-input{resize:vertical;min-height:60px}
     </div>
     <div style="padding:12px 18px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-size:12px;color:var(--text-secondary);font-weight:600">📍 지역 선택</span>
-      <select id="rgn2QualitySelect" class="filter-select" style="padding:6px 10px;font-size:12.5px;min-width:220px;cursor:pointer"
-              onchange="_renderRgn2QualityCharts(this.value)"></select>
+      <select id="quality-rgn1" class="filter-select" style="padding:6px 10px;font-size:12.5px;min-width:150px;cursor:pointer"
+              title="RGN1 (광역)" onchange="_onQualityRgn1Change()"></select>
+      <span style="color:var(--text-muted)">›</span>
+      <select id="quality-rgn2" class="filter-select" style="padding:6px 10px;font-size:12.5px;min-width:170px;cursor:pointer"
+              title="RGN2 (시·구)" onchange="_renderRgn2QualityCharts(this.value)"></select>
     </div>
     <div id="rgn2QualityBody" style="padding:12px 18px;max-height:74vh;overflow-y:auto"></div>
   </div>
@@ -4917,26 +4921,56 @@ function _qualityLineChart(title, labels, series, fmt, labelFmt) {
   return _svgFrame(title, w, h, grid + lines + legend + xlabels);
 }
 
-// 배너 지역 클릭(또는 직접 호출) → 데일리 품질 추이 팝업 열기
-//   지역 선택 드롭다운을 채우고, 선택된 지역의 차트를 렌더
+// RGN2_일별지표에 데이터가 있는 지역을 광역(RGN1)별로 그룹화 → [{key,label,prefix,items:[rgn2...]}]
+function _qualityRgn1Groups() {
+  const allR = [...new Set((STATE.rgn2Daily || []).map(r => r.RGN2).filter(Boolean))].sort();
+  return _groupRgn2ByCity(allR).filter(g => g.items.length);
+}
+
+// 선택된 RGN1(광역)에 속한 RGN2 드롭다운 채우기 → 선택된 RGN2 값 반환
+function _fillQualityRgn2(rgn1Key, selectRgn2) {
+  const groups = _qualityRgn1Groups();
+  const g = groups.find(x => x.key === rgn1Key) || groups[0];
+  const sel2 = document.getElementById('quality-rgn2');
+  if (!g || !sel2) return '';
+  const pick = (selectRgn2 && g.items.includes(selectRgn2)) ? selectRgn2 : g.items[0];
+  sel2.innerHTML = g.items.map(r =>
+    `<option value="${_escHtml(r)}"${r === pick ? ' selected' : ''}>${_escHtml((g.prefix && r.replace(g.prefix, '')) || r)}</option>`).join('');
+  sel2.value = pick;
+  return pick;
+}
+
+// RGN1 변경 시 → RGN2 목록 갱신 + 첫 지역 차트 렌더
+function _onQualityRgn1Change() {
+  const sel1 = document.getElementById('quality-rgn1');
+  const pick = _fillQualityRgn2(sel1 ? sel1.value : '');
+  _renderRgn2QualityCharts(pick);
+}
+
+// 네비 버튼(인자 없음) 또는 배너 클릭(rgn2 전달) → 품질 추이 팝업 열기
+//   RGN1 → RGN2 2단계 드롭다운을 채우고 선택 지역 차트 렌더
 function openRgn2QualityModal(rgn2) {
-  const sel = document.getElementById('rgn2QualitySelect');
-  if (sel) {
-    // rgn2_일별지표에 데이터가 있는 전국 RGN2 목록 → 광역별 optgroup
-    const allR = [...new Set((STATE.rgn2Daily || []).map(r => r.RGN2).filter(Boolean))].sort();
-    // 선택 지역이 목록에 없으면(데이터 없음) 맨 앞에 추가해 선택 가능하게
-    const groups = _groupRgn2ByCity(allR).filter(g => g.items.length);
-    sel.innerHTML = groups.map(g =>
-      `<optgroup label="${_escHtml(g.label)}">` +
-      g.items.map(r => `<option value="${_escHtml(r)}"${r === rgn2 ? ' selected' : ''}>${_escHtml((g.prefix && r.replace(g.prefix, '')) || r)}</option>`).join('') +
-      `</optgroup>`).join('');
-    if (rgn2 && !allR.includes(rgn2)) {
-      sel.insertAdjacentHTML('afterbegin', `<option value="${_escHtml(rgn2)}" selected>${_escHtml(rgn2)}</option>`);
-    }
-    sel.value = rgn2;
+  const groups = _qualityRgn1Groups();
+  const sel1 = document.getElementById('quality-rgn1');
+  const openModal = () => document.getElementById('rgn2QualityModal').classList.add('open');
+
+  if (!groups.length) {   // 데이터 자체가 없음
+    if (sel1) sel1.innerHTML = '';
+    const s2 = document.getElementById('quality-rgn2'); if (s2) s2.innerHTML = '';
+    _renderRgn2QualityCharts(rgn2 || '-');
+    openModal();
+    return;
   }
-  _renderRgn2QualityCharts(rgn2);
-  document.getElementById('rgn2QualityModal').classList.add('open');
+  // 대상 그룹/지역 결정: rgn2 전달 시 그 지역 → 아니면 첫 광역의 첫 지역
+  let g = rgn2 ? groups.find(x => x.items.includes(rgn2)) : null;
+  if (!g) g = groups[0];
+  const target = (rgn2 && g.items.includes(rgn2)) ? rgn2 : g.items[0];
+
+  if (sel1) sel1.innerHTML = groups.map(x =>
+    `<option value="${_escHtml(x.key)}"${x.key === g.key ? ' selected' : ''}>${_escHtml(x.label)}</option>`).join('');
+  const pick = _fillQualityRgn2(g.key, target);
+  _renderRgn2QualityCharts(pick);
+  openModal();
 }
 
 // 선택된 RGN2의 데일리 품질 추이 차트 렌더 (드롭다운 onchange + 최초 오픈에서 호출)
