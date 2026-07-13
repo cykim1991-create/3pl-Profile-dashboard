@@ -179,6 +179,9 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .perf-ticker .ticker-item b{color:#fb7a4b;font-weight:700;margin-left:5px}
 .perf-ticker .ticker-gap{display:inline-block;width:220px;flex-shrink:0}
 @keyframes tickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+/* 데일리 품질 차트 날짜별 호버 스트립 — 커서 올릴 때만 옅게 하이라이트 */
+.q-strip{cursor:pointer}
+.q-strip:hover{fill:rgba(255,255,255,0.07)}
 /* 신규 태그 — 그라데이션 + 은은한 글로우 펄스 */
 .badge-new{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 9px;border-radius:999px;
   font-size:10px;font-weight:800;letter-spacing:.4px;color:#fff;white-space:nowrap;vertical-align:middle;
@@ -4932,7 +4935,26 @@ function _qualityLineChart(title, labels, series, fmt, labelFmt) {
   const xlabels = labels.map((l, i) =>
     (i % step === 0 || i === n - 1) ? `<text x="${xFor(i)}" y="${h-padB+14}" font-size="9" fill="${TC.secondary}" text-anchor="middle">${l}</text>` : ''
   ).join('');
-  return _svgFrame(title, w, h, grid + lines + legend + xlabels);
+
+  // 날짜별 호버 스트립 — 커서 올리면 그날 최고/최저 지역+값 툴팁 + 옅은 하이라이트
+  const hasBand = series.some(s => s.bandLo && s.bandHi);
+  let strips = '';
+  if (hasBand) {
+    const stripW = n > 1 ? cW / (n - 1) : cW;
+    for (let i = 0; i < n; i++) {
+      const tipLines = series.filter(s => s.bandLo && s.bandHi).map(s => {
+        const hv = s.bandHi[i], lv = s.bandLo[i];
+        if (!isFinite(hv) || !isFinite(lv)) return null;
+        const hn = (s.bandHiName && s.bandHiName[i]) || '', ln = (s.bandLoName && s.bandLoName[i]) || '';
+        return `${s.label}  최고 ${hn} ${lf(hv)}  ·  최저 ${ln} ${lf(lv)}`;
+      }).filter(Boolean);
+      if (!tipLines.length) continue;
+      const tip = `${labels[i]}\n` + tipLines.join('\n');
+      const x = xFor(i) - stripW / 2;
+      strips += `<rect class="q-strip" x="${x}" y="${padT}" width="${stripW}" height="${cH}" fill="transparent"><title>${_escHtml(tip)}</title></rect>`;
+    }
+  }
+  return _svgFrame(title, w, h, grid + lines + legend + xlabels + strips);
 }
 
 // 광역명 → 짧은 표기 (RGN2 옵션 라벨용). 서울/경기/인천은 접두 생략(구/시만)
@@ -4956,7 +4978,9 @@ function _rgn2ShortLabel(r) {
 // RGN2_일별지표에 데이터가 있는 지역을 RGN1 6구분으로 그룹화 (요청 순서)
 //   1.서울시 2.경기도 3.인천광역시 4.세종시 5.광역시(부산·대구·광주·대전·울산) 6.기타 지방(도)
 function _qualityRgn1Groups() {
-  const allR = [...new Set((STATE.rgn2Daily || []).map(r => r.RGN2).filter(Boolean))].sort();
+  // 화성시는 데일리 품질에서 제외 (드롭다운·밴드 모두)
+  const allR = [...new Set((STATE.rgn2Daily || []).map(r => r.RGN2).filter(Boolean))]
+    .filter(r => !r.includes('화성시')).sort();
   const defs = [
     { key: 'seoul',    label: '⭐ 서울시',     match: r => r.startsWith('서울특별시') },
     { key: 'gyeonggi', label: '⭐ 경기도',     match: r => r.startsWith('경기도') },
@@ -5072,19 +5096,30 @@ function _renderRgn2QualityCharts(rgn2) {
   const recentDates = recent.map(r => String(r.일자 || '').slice(0, 10));
   const _grp = _qualityRgn1Groups().find(g => g.items.includes(rgn2));
   const groupSet = new Set(_grp ? _grp.items : [rgn2]);
-  // rgn2Daily 기반 지표 밴드
+  // 날짜별 값 배열 → 최저/최고 값 + 해당 지역명 밴드로 변환
+  const _toBand = (entriesByDate) => {
+    const bandLo = [], bandHi = [], bandLoName = [], bandHiName = [];
+    recentDates.forEach(d => {
+      const arr = entriesByDate[d] || [];
+      if (!arr.length) { bandLo.push(null); bandHi.push(null); bandLoName.push(''); bandHiName.push(''); return; }
+      let mn = arr[0], mx = arr[0];
+      arr.forEach(o => { if (o.v < mn.v) mn = o; if (o.v > mx.v) mx = o; });
+      bandLo.push(mn.v); bandHi.push(mx.v);
+      bandLoName.push(_rgn2ShortLabel(mn.r) || mn.r);
+      bandHiName.push(_rgn2ShortLabel(mx.r) || mx.r);
+    });
+    return { bandLo, bandHi, bandLoName, bandHiName };
+  };
+  // rgn2Daily 기반 지표 밴드 (같은 광역 내 지역들, 화성시 제외됨 = groupSet에 없음)
   const bandFor = (extractor) => {
     const byDate = {};
     (STATE.rgn2Daily || []).forEach(r => {
       if (!groupSet.has(r.RGN2)) return;
       const d = String(r.일자 || '').slice(0, 10); if (!d) return;
       const v = extractor(r); if (!isFinite(v)) return;
-      (byDate[d] = byDate[d] || []).push(v);
+      (byDate[d] = byDate[d] || []).push({ v, r: r.RGN2 });
     });
-    return {
-      bandLo: recentDates.map(d => (byDate[d] && byDate[d].length) ? Math.min(...byDate[d]) : null),
-      bandHi: recentDates.map(d => (byDate[d] && byDate[d].length) ? Math.max(...byDate[d]) : null),
-    };
+    return _toBand(byDate);
   };
   // 액티브 협력사수 밴드: 그룹 내 RGN2별·날짜별 운행≥1 협력사 수
   const grpActive = {};   // key: `${rgn2}|${date}` → Set(pid)
@@ -5096,10 +5131,13 @@ function _renderRgn2QualityCharts(rgn2) {
     const k = rr + '|' + d;
     (grpActive[k] = grpActive[k] || new Set()).add(pid);
   });
-  const activeBand = {
-    bandLo: recentDates.map(d => { const vs = [...groupSet].map(rr => (grpActive[rr + '|' + d] || new Set()).size).filter(v => v > 0); return vs.length ? Math.min(...vs) : null; }),
-    bandHi: recentDates.map(d => { const vs = [...groupSet].map(rr => (grpActive[rr + '|' + d] || new Set()).size).filter(v => v > 0); return vs.length ? Math.max(...vs) : null; }),
-  };
+  const _activeByDate = {};
+  recentDates.forEach(d => {
+    _activeByDate[d] = [...groupSet]
+      .map(rr => ({ v: (grpActive[rr + '|' + d] || new Set()).size, r: rr }))
+      .filter(o => o.v > 0);
+  });
+  const activeBand = _toBand(_activeByDate);
 
   const charts = [
     _qualityLineChart('3PL처리비중 (%)', labels,
@@ -5124,7 +5162,11 @@ function _renderRgn2QualityCharts(rgn2) {
       [{ label: 'UTR', color: '#60a5fa', values: recent.map(r => num(r, 'UTR')), ...bandFor(r => num(r, 'UTR')) }],
       v => v.toFixed(2)),
   ];
-  body.innerHTML = charts.map(c => `<div class="modal-section" style="margin-bottom:10px">${c}</div>`).join('');
+  const note = `<div style="font-size:11px;color:var(--text-muted);margin:0 0 10px;line-height:1.55">
+    옅은 영역 = 같은 광역(RGN1) 내 지역들의 <b style="color:var(--text-secondary)">일자별 최저~최고 범위</b> (보조 지표).
+    그래프 위에 <b style="color:var(--text-secondary)">커서를 올리면</b> 그 날의 최고·최저 지역과 값이 표시됩니다.
+  </div>`;
+  body.innerHTML = note + charts.map(c => `<div class="modal-section" style="margin-bottom:10px">${c}</div>`).join('');
   document.getElementById('rgn2QualityModal').classList.add('open');
 }
 
