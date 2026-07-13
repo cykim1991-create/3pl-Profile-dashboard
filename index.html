@@ -4950,7 +4950,7 @@ function _qualityLineChart(title, labels, series, fmt, labelFmt) {
         const x = xFor(i), hy = yFor(hv), ly = yFor(lv);
         const hn = _escHtml((s.bandHiName && s.bandHiName[i]) || '');
         const ln = _escHtml((s.bandLoName && s.bandLoName[i]) || '');
-        const lbl = (yv, txt) => `<text x="${x}" y="${yv}" font-size="8.5" fill="${s.color}" text-anchor="middle" font-weight="700" stroke="${BC.card}" stroke-width="2.5" paint-order="stroke">${txt}</text>`;
+        const lbl = (yv, txt) => `<text x="${x}" y="${yv}" font-size="8.5" fill="#ffffff" text-anchor="middle" font-weight="700" stroke="${BC.card}" stroke-width="2.5" paint-order="stroke">${txt}</text>`;
         const dot = (cy) => `<circle cx="${x}" cy="${cy}" r="3.2" fill="${BC.card}" stroke="${s.color}" stroke-width="2"/>`;
         reveal += dot(hy) + lbl(hy - 8, `▲ ${hn} ${lf(hv)}`)
                +  dot(ly) + lbl(ly + 15, `▼ ${ln} ${lf(lv)}`);
