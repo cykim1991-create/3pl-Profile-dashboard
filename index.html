@@ -763,7 +763,12 @@ textarea.form-input{resize:vertical;min-height:60px}
       <div class="modal-title" id="rgn2QualityTitle">데일리 품질 추이</div>
       <button class="modal-close" onclick="closeRgn2QualityModal()">✕</button>
     </div>
-    <div id="rgn2QualityBody" style="padding:14px 18px;max-height:80vh;overflow-y:auto"></div>
+    <div style="padding:12px 18px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--text-secondary);font-weight:600">📍 지역 선택</span>
+      <select id="rgn2QualitySelect" class="filter-select" style="padding:6px 10px;font-size:12.5px;min-width:220px;cursor:pointer"
+              onchange="_renderRgn2QualityCharts(this.value)"></select>
+    </div>
+    <div id="rgn2QualityBody" style="padding:12px 18px;max-height:74vh;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -4912,8 +4917,30 @@ function _qualityLineChart(title, labels, series, fmt, labelFmt) {
   return _svgFrame(title, w, h, grid + lines + legend + xlabels);
 }
 
-// 배너 지역 클릭 → 해당 RGN2 데일리 품질 추이 팝업
+// 배너 지역 클릭(또는 직접 호출) → 데일리 품질 추이 팝업 열기
+//   지역 선택 드롭다운을 채우고, 선택된 지역의 차트를 렌더
 function openRgn2QualityModal(rgn2) {
+  const sel = document.getElementById('rgn2QualitySelect');
+  if (sel) {
+    // rgn2_일별지표에 데이터가 있는 전국 RGN2 목록 → 광역별 optgroup
+    const allR = [...new Set((STATE.rgn2Daily || []).map(r => r.RGN2).filter(Boolean))].sort();
+    // 선택 지역이 목록에 없으면(데이터 없음) 맨 앞에 추가해 선택 가능하게
+    const groups = _groupRgn2ByCity(allR).filter(g => g.items.length);
+    sel.innerHTML = groups.map(g =>
+      `<optgroup label="${_escHtml(g.label)}">` +
+      g.items.map(r => `<option value="${_escHtml(r)}"${r === rgn2 ? ' selected' : ''}>${_escHtml((g.prefix && r.replace(g.prefix, '')) || r)}</option>`).join('') +
+      `</optgroup>`).join('');
+    if (rgn2 && !allR.includes(rgn2)) {
+      sel.insertAdjacentHTML('afterbegin', `<option value="${_escHtml(rgn2)}" selected>${_escHtml(rgn2)}</option>`);
+    }
+    sel.value = rgn2;
+  }
+  _renderRgn2QualityCharts(rgn2);
+  document.getElementById('rgn2QualityModal').classList.add('open');
+}
+
+// 선택된 RGN2의 데일리 품질 추이 차트 렌더 (드롭다운 onchange + 최초 오픈에서 호출)
+function _renderRgn2QualityCharts(rgn2) {
   const body = document.getElementById('rgn2QualityBody');
   const titleEl = document.getElementById('rgn2QualityTitle');
   if (!body) return;
