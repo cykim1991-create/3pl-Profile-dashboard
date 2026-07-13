@@ -4328,8 +4328,14 @@ function _filterRealtimePartners(partnerList) {
     if (rt['협력사ID']) rtIds.add(rt['협력사ID']);
     if (rt['협력사명']) rtNames.add(rt['협력사명']);
   });
+  // 데일리운영현황 보존기간(약 3주) 내 운행이력(총처리건수 ≥ 1) 협력사ID
+  const dailyOpIds = new Set();
+  (STATE.kpi || []).forEach(r => {
+    if (r['협력사ID'] && Number(r['총처리건수'] || 0) >= 1) dailyOpIds.add(r['협력사ID']);
+  });
+  // 노출 대상: 실시간 시트에 있거나(오늘 운영) OR 보존기간 내 운행이력이 있는 협력사
   const list = (partnerList || []).filter(p =>
-    rtIds.has(p['협력사ID']) || (p['협력사명'] && rtNames.has(p['협력사명']))
+    rtIds.has(p['협력사ID']) || (p['협력사명'] && rtNames.has(p['협력사명'])) || dailyOpIds.has(p['협력사ID'])
   );
   // 실시간 시트의 가장 최근 일자 (보통 오늘) — 라벨용
   const dates = [...new Set((STATE.realtimeKpi || []).map(r => r['일자']).filter(Boolean))].sort();
