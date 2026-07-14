@@ -1830,19 +1830,29 @@ async function init() {
       if (s.length > 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
       return s;
     };
-    STATE.rgn2Daily = parseSheet(rgn2DailyVals, _r2HeaderIdx, _r2DataIdx).map(r => ({
-      일자:           _fmtCell(r['일자']),
-      RGN2:           (r['RGN2'] || '').toString().trim(),
-      '3PL처리비중':  _parsePercent(r['3PL처리비중']),
-      '60분초과율':   Number(String(r['60분초과율']||'').replace(/[%\s,]/g,'')) || 0,
-      UTR:            Number(r['UTR']||0) || 0,
-      Total_DCPO:     Number(String(r['Total_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
-      // 사용자 시트는 3pl_라이더수, 3pl_DCPO 컬럼도 있음 — 향후 활용을 위해 함께 저장
-      '3pl_라이더수': Number(String(r['3pl_라이더수']||r['3PL_라이더수']||'').replace(/[,\s명]/g,'')) || 0,
-      FL_라이더수:    Number(String(r['FL_라이더수']||'').replace(/[,\s명]/g,'')) || 0,
-      '3pl_DCPO':     Number(String(r['3pl_DCPO']||r['3PL_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
-      FL_DCPO:        Number(String(r['FL_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
-    }));
+    STATE.rgn2Daily = (() => {
+      const mapped = parseSheet(rgn2DailyVals, _r2HeaderIdx, _r2DataIdx).map(r => ({
+        일자:           _fmtCell(r['일자']),
+        RGN2:           (r['RGN2'] || '').toString().trim(),
+        '3PL처리비중':  _parsePercent(r['3PL처리비중']),
+        '60분초과율':   Number(String(r['60분초과율']||'').replace(/[%\s,]/g,'')) || 0,
+        UTR:            Number(r['UTR']||0) || 0,
+        Total_DCPO:     Number(String(r['Total_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
+        // 사용자 시트는 3pl_라이더수, 3pl_DCPO 컬럼도 있음 — 향후 활용을 위해 함께 저장
+        '3pl_라이더수': Number(String(r['3pl_라이더수']||r['3PL_라이더수']||'').replace(/[,\s명]/g,'')) || 0,
+        FL_라이더수:    Number(String(r['FL_라이더수']||'').replace(/[,\s명]/g,'')) || 0,
+        '3pl_DCPO':     Number(String(r['3pl_DCPO']||r['3PL_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
+        FL_DCPO:        Number(String(r['FL_DCPO']||'').replace(/[,\s원]/g,'')) || 0,
+      }));
+      // 같은 (RGN2 · 일자) 중복 행은 맨 처음 행만 사용 (시트 순서 기준)
+      const seen = new Set();
+      return mapped.filter(r => {
+        const k = r.RGN2 + '|' + r.일자;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    })();
     // tpl3Share 호환 — 각 RGN2의 가장 최근 일자 3PL처리비중을 정적 매핑으로 노출
     STATE.tpl3Share = (() => {
       const latest = {};
@@ -5209,9 +5219,6 @@ function _renderRgn2QualityCharts(rgn2) {
     _qualityLineChart('60분 초과율 (%)', labels,
       [{ label: '60분초과율', color: '#fb923c', values: recent.map(r => num(r, '60분초과율')), ...bandFor(r => num(r, '60분초과율')) }],
       v => v.toFixed(1) + '%'),
-    _qualityLineChart('UTR', labels,
-      [{ label: 'UTR', color: '#60a5fa', values: recent.map(r => num(r, 'UTR')), ...bandFor(r => num(r, 'UTR')) }],
-      v => v.toFixed(2)),
   ];
   const note = `<div style="font-size:11px;color:var(--text-muted);margin:0 0 10px;line-height:1.55">
     옅은 영역 = 같은 광역(RGN1) 내 지역들의 <b style="color:var(--text-secondary)">일자별 최저~최고 범위</b> (보조 지표)
@@ -5241,6 +5248,12 @@ function _relaxRgn2List(rgn1) {
   return _availableRgn2List().filter(r => { const i = r.indexOf('_'); return (i < 0 ? r : r.slice(0, i)) === rgn1; });
 }
 function _relaxRgn2Short(r) { const i = r.indexOf('_'); return i < 0 ? r : r.slice(i + 1); }
+// 이력 목록 지역 표시 라벨 (전국 / RGN1 전체 / 특정 시·구)
+function _relaxRegionLabel(r) {
+  if (r.rgn1 === '전국') return '🌐 전국 (모든 지역)';
+  if (!r.rgn2 || r.rgn2 === '전체') return `${r.rgn1} 전체`;
+  return `${r.rgn1} ${_relaxRgn2Short(r.rgn2)}`;
+}
 
 function _relaxDefaultForm() {
   const r1 = _relaxRgn1List(); const rgn1 = r1[0] || '';
@@ -5269,8 +5282,10 @@ function renderRelaxModal() {
   const body = document.getElementById('relaxBody');
   if (!body) return;
   const f = _relaxForm || (_relaxForm = _relaxDefaultForm());
-  const rgn1List = _relaxRgn1List();
-  const rgn2List = _relaxRgn2List(f.rgn1);
+  const rgn1List = ['전국', ..._relaxRgn1List()];
+  const isNation = f.rgn1 === '전국';
+  const rgn2List = isNation ? ['전체'] : ['전체', ..._relaxRgn2List(f.rgn1)];
+  const rgn2Label = (r) => r === '전체' ? (isNation ? '— 전국 전체 —' : '전체 (RGN1 전역)') : _relaxRgn2Short(r);
 
   const opt = (v, cur, label) => `<option value="${_escHtml(v)}"${v === cur ? ' selected' : ''}>${_escHtml(label != null ? label : v)}</option>`;
   const showOrder = f.type === '발주량';
@@ -5291,8 +5306,8 @@ function renderRelaxModal() {
           </select>
         </label>
         <label style="font-size:11px;color:var(--text-secondary);font-weight:600">지역 (RGN2)
-          <select id="relax-rgn2" style="width:100%;margin-top:4px;padding:6px 9px;font-size:12.5px;background:var(--bg-page);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
-            ${rgn2List.map(r => opt(r, f.rgn2, _relaxRgn2Short(r))).join('')}
+          <select id="relax-rgn2" ${isNation ? 'disabled' : ''} style="width:100%;margin-top:4px;padding:6px 9px;font-size:12.5px;background:var(--bg-page);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
+            ${rgn2List.map(r => opt(r, (isNation ? '전체' : f.rgn2), rgn2Label(r))).join('')}
           </select>
         </label>
         <label style="font-size:11px;color:var(--text-secondary);font-weight:600">완화 유형
@@ -5332,7 +5347,7 @@ function renderRelaxModal() {
   const rows = list.length ? list.map(r => `
     <tr>
       <td style="white-space:nowrap;color:var(--text-cell)">${_escHtml(r.일자 || '-')}</td>
-      <td style="color:var(--text-secondary);font-size:11.5px">${_escHtml(r.rgn1 || '-')} <span style="color:var(--accent-soft)">${_escHtml(_relaxRgn2Short(r.rgn2 || ''))}</span></td>
+      <td style="color:var(--text-cell);font-size:11.5px">${_escHtml(_relaxRegionLabel(r))}</td>
       <td style="text-align:center">${_relaxTypeBadge(r.type)}</td>
       <td style="color:var(--text-cell)">${_escHtml(r.content || '-')}</td>
       <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${_escHtml((r.person || '').split('@')[0])}</td>
@@ -5356,8 +5371,14 @@ function renderRelaxModal() {
 function _relaxRgn1Change() {
   const rgn1 = document.getElementById('relax-rgn1').value;
   const sel2 = document.getElementById('relax-rgn2');
-  const list = _relaxRgn2List(rgn1);
-  sel2.innerHTML = list.map(r => `<option value="${_escHtml(r)}">${_escHtml(_relaxRgn2Short(r))}</option>`).join('');
+  if (rgn1 === '전국') {
+    sel2.disabled = true;
+    sel2.innerHTML = `<option value="전체">— 전국 전체 —</option>`;
+    return;
+  }
+  sel2.disabled = false;
+  const list = ['전체', ..._relaxRgn2List(rgn1)];
+  sel2.innerHTML = list.map(r => `<option value="${_escHtml(r)}">${r === '전체' ? '전체 (RGN1 전역)' : _escHtml(_relaxRgn2Short(r))}</option>`).join('');
 }
 function _relaxTypeChange() {
   const t = document.getElementById('relax-type').value;
@@ -5392,10 +5413,11 @@ async function saveRelaxation() {
 
   const date = (document.getElementById('relax-date') || {}).value || '';
   const rgn1 = (document.getElementById('relax-rgn1') || {}).value || '';
-  const rgn2 = (document.getElementById('relax-rgn2') || {}).value || '';
+  let rgn2 = (document.getElementById('relax-rgn2') || {}).value || '';
   const type = (document.getElementById('relax-type') || {}).value || '';
   if (!date) { showErr('일자를 입력해 주세요'); return; }
-  if (!rgn2) { showErr('지역(RGN2)을 선택해 주세요'); return; }
+  if (rgn1 === '전국') rgn2 = '';           // 전국: RGN2 없음
+  else if (!rgn2) { showErr('지역(RGN2)을 선택해 주세요'); return; }   // rgn2 = 특정 시·구 또는 '전체'
 
   let content = '';
   if (type === '발주량') {
