@@ -75,15 +75,17 @@ button{cursor:pointer;font-family:inherit}
 input,select,textarea{font-family:inherit;font-size:13px}
 
 #app{display:flex;flex-direction:column;height:100vh}
-.topbar{background:var(--bg-card);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;gap:16px;height:52px;flex-shrink:0;z-index:100}
-.topbar-logo{font-size:15px;font-weight:700;color:var(--text-strong);white-space:nowrap}
+.topbar{background:var(--bg-card);border-bottom:1px solid var(--border);padding:6px 20px;display:flex;align-items:center;gap:12px 16px;min-height:52px;flex-shrink:0;flex-wrap:wrap;row-gap:6px;z-index:100}
+.topbar-logo{font-size:15px;font-weight:700;color:var(--text-strong);white-space:nowrap;flex-shrink:0}
 .topbar-logo span{color:var(--accent)}
-.topbar-nav{display:flex;gap:2px;flex:1}
-.nav-btn{padding:6px 14px;border:none;background:transparent;color:var(--text-secondary);border-radius:6px;font-size:13px;font-weight:500;transition:all .15s}
+.topbar-nav{display:flex;gap:2px;flex:1 1 auto;min-width:0;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin}
+.topbar-nav::-webkit-scrollbar{height:5px}
+.topbar-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.nav-btn{padding:6px 14px;border:none;background:transparent;color:var(--text-secondary);border-radius:6px;font-size:13px;font-weight:500;transition:all .15s;white-space:nowrap;flex-shrink:0}
 .nav-btn:hover{background:var(--border);color:var(--text-primary)}
 .nav-btn.active{background:var(--accent-bg);color:var(--accent-soft);font-weight:600}
-.topbar-filters{display:flex;align-items:center;gap:8px}
-.filter-select{background:var(--bg-filter);border:1px solid var(--accent-bg);color:var(--text-cell);padding:5px 10px;border-radius:6px;font-size:12px}
+.topbar-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0}
+.filter-select{background:var(--bg-filter);border:1px solid var(--accent-bg);color:var(--text-cell);padding:5px 10px;border-radius:6px;font-size:12px;white-space:nowrap}
 .filter-select:focus{outline:none;border-color:var(--accent)}
 .region-badge{background:var(--accent-bg);color:var(--accent-soft);padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600}
 
@@ -122,7 +124,7 @@ input,select,textarea{font-family:inherit;font-size:13px}
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .section-title{font-size:14px;font-weight:600;color:var(--text-primary)}
 .section-actions{display:flex;gap:8px;align-items:center}
-.btn{padding:6px 12px;border:none;border-radius:6px;font-size:12px;font-weight:500;transition:all .15s}
+.btn{padding:6px 12px;border:none;border-radius:6px;font-size:12px;font-weight:500;transition:all .15s;white-space:nowrap}
 .btn-primary{background:#2563eb;color:#ffffff}
 .btn-primary:hover{background:#1d4ed8;color:#ffffff}
 .btn-ghost{background:var(--bg-filter);color:var(--text-secondary);border:1px solid var(--border)}
@@ -1755,6 +1757,7 @@ async function init() {
           return m;
         }, new Map())
       : new Map();
+    STATE.rgn2Info = _rgn2Info;   // 권역명 → RGN2 매핑 (다른 계산에서도 재사용)
     (STATE.partners || []).forEach(p => {
       const area = (p['권역명'] || '').toString().trim();
       const mapped = area ? _rgn2Info.get(area) : '';
@@ -5139,7 +5142,13 @@ function _renderRgn2QualityCharts(rgn2) {
   const num = (r, k) => Number(r[k] || 0);
 
   // 액티브 협력사수: 데일리운영현황(STATE.kpi)에서 해당 RGN2·날짜별 총처리건수≥1 협력사 수
-  const pidToRgn2 = new Map((STATE.partners || []).map(p => [p['협력사ID'], (p['RGN2'] || '').toString().trim()]));
+  // 지역 매핑 = 협력사 '권역명'을 RGN2정보 시트로 매핑 (예: 표준경기의왕C → 경기도_의왕시). 실패 시 RGN2 컬럼 fallback.
+  const _rgn2InfoMap = STATE.rgn2Info || new Map();
+  const pidToRgn2 = new Map((STATE.partners || []).map(p => {
+    const area = (p['권역명'] || '').toString().trim();
+    const viaInfo = area ? _rgn2InfoMap.get(area) : '';
+    return [p['협력사ID'], (viaInfo || (p['RGN2'] || '').toString().trim())];
+  }));
   const activeByDate = {};
   (STATE.kpi || []).forEach(r => {
     if (Number(r['총처리건수'] || 0) < 1) return;
