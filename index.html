@@ -5711,6 +5711,17 @@ function renderPenalty() {
   // 협력사 마스터 lookup (RGN2 / 운영상태 join용)
   const metaByPid = new Map((STATE.partners || []).map(p => [p['협력사ID'], p]));
 
+  // 최근 7일 처리건수 합계 — 데일리운영현황(STATE.kpi)의 최근 7개 일자 총처리건수 합산 (협력사ID별)
+  const _kpiDates7 = [...new Set((STATE.kpi || []).map(r => String(r['일자'] || '').slice(0, 10)).filter(Boolean))].sort();
+  const _recent7Set = new Set(_kpiDates7.slice(-7));
+  const vol7ByPid = {};
+  (STATE.kpi || []).forEach(r => {
+    const d = String(r['일자'] || '').slice(0, 10);
+    if (!_recent7Set.has(d)) return;
+    const pid = r['협력사ID']; if (!pid) return;
+    vol7ByPid[pid] = (vol7ByPid[pid] || 0) + Number(r['총처리건수'] || 0);
+  });
+
   let rows = (STATE.penalty || []).filter(r => r.주차 === week);
   if (allowed) rows = rows.filter(r => r.협력사ID && allowed.has(r.협력사ID));
   rows = rows.map(r => {
@@ -5718,7 +5729,8 @@ function renderPenalty() {
     const master = metaByPid.get(r.협력사ID);
     const rgn2 = master ? (getPartnerRgn2(master, getLatestKPI(r.협력사ID)) || '-') : '-';
     const opStatus = master ? (master['운영상태'] || '') : '';
-    const vol7sum = Math.round((r.처리건수 || 0) * 7);   // 7일일평균 × 7 = 최근 7일 합계
+    // 최근 7일 처리건수 합계 = 데일리운영현황 실측 합산 (없으면 null → '-')
+    const vol7sum = (vol7ByPid[r.협력사ID] != null) ? vol7ByPid[r.협력사ID] : null;
     // 등급은 프로파일과 동일 기준: 마스터(협력사기본정보) 등급 → 실시간 KPI 등급 → (없으면) 패널티 원본 등급
     const _rtKpi = getRealtimeKPI(r.협력사ID);
     const gradeView = (master && master['등급']) || (_rtKpi && _rtKpi['등급']) || r.등급 || '-';
