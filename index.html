@@ -533,6 +533,7 @@ textarea.form-input{resize:vertical;min-height:60px}
               <th class="center" data-sort="realtime:riderAct" style="cursor:pointer">운행<br><span style="font-size:10px;font-weight:400">라이더</span><span id="sort-realtime-riderAct"></span></th>
               <th class="center" data-sort="realtime:sets" style="cursor:pointer">신청<br><span style="font-size:10px;font-weight:400">세트</span><span id="sort-realtime-sets"></span></th>
               <th class="center" data-sort="realtime:totalVol" style="cursor:pointer">총처리<br><span style="font-size:10px;font-weight:400">건수</span><span id="sort-realtime-totalVol"></span></th>
+              <th class="center" data-sort="realtime:notSlaVol" style="cursor:pointer">SLA 외<br><span style="font-size:10px;font-weight:400">처리건수</span><span id="sort-realtime-notSlaVol"></span></th>
               <th class="center slot-group" data-sort="realtime:amAch" style="cursor:pointer">아침점심<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-amAch"></span></th>
               <th class="center slot-group" data-sort="realtime:pmAch" style="cursor:pointer">오후<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-pmAch"></span></th>
               <th class="center slot-group" data-sort="realtime:evAch" style="cursor:pointer">저녁<br><span style="font-size:10px;font-weight:400">달성률</span><span id="sort-realtime-evAch"></span></th>
@@ -1729,8 +1730,8 @@ async function init() {
     // 활동로그만 row1=제목, row2=헤더, row3=가이드, row4+=데이터 (header=1, data=3)
     const [partnerVals, kpiVals, realtimeVals, logVals, mgrVals, rgn2DailyVals, contactVals, rgn2InfoVals, penaltyVals, penaltyDecVals, relaxVals] = await Promise.all([
       fetchSheet('협력사기본정보',     'A:L'),    // 12열 (K=최근운영중전환 날짜, L=주요애로사항)
-      fetchSheet('데일리운영현황',     'A:U'),    // 21열 (목표 4컬럼)
-      fetchSheet('실시간운행현황',     'A:AB'),   // 28열 (AB열 = active_rider 추가)
+      fetchSheet('데일리운영현황',     'A:V'),    // 22열 (V=SLA시간대외_처리건수 추가)
+      fetchSheet('실시간운행현황',     'A:AZ'),   // today_new (기존 28열 + 신규 7열)
       fetchSheet('활동로그',           'A:K'),    // 11열 (상태 포함)
       fetchSheet('RGN2_담당자',        'A:C'),    // 3열 (RGN2, 담당자, 변경일시)
       fetchSheet('RGN2_일별지표',      'A:J'),    // 8~10열 — 사용자 시트는 3pl_라이더수/3pl_DCPO 포함 10열
@@ -1779,7 +1780,7 @@ async function init() {
       }
       return r;
     });
-    STATE.kpi          = filterKPIRecent(allKPI, 3);
+    STATE.kpi          = filterKPIRecent(allKPI, 4);   // 보존기간 3주 → 4주
     // 실시간운행현황: 두 가지 형식 자동 감지
     //  (a) 새 형식: row1=헤더(영문 snake_case), row2+=데이터
     //  (b) 샘플 형식: row1=제목, row2=헤더, row3+=데이터
@@ -2390,6 +2391,8 @@ function getStatusBadge(p) {
     '온보딩':     `<span class="badge badge-onb">🟡 온보딩 🔔</span>`,
     'Ramp-Up':    `<span class="badge badge-ramp">🔵 Ramp-Up 🔔</span>`,
     '전환검토':   `<span class="badge badge-pre">전환검토</span>`,
+    '운영정지':   `<span class="badge badge-risk">⛔ 운영정지</span>`,
+    '준비중':     `<span class="badge badge-onb">🟡 준비중</span>`,
   };
   return map[s] || `<span class="badge">${s}</span>`;
 }
@@ -2676,6 +2679,13 @@ function _normalizeRealtimeRow(r) {
   const nt = Number(r['night_complete_count']   || r['심야논피크_물량']   || 0);
   const sets = Number(r['commit_sets'] || r['신청세트수'] || 0);
   const setsForDiv = sets > 0 ? sets : 1;
+  // today_new 신규 컬럼 — SLA 슬롯 합 / SLA 시간대 외(00~08:59) / 배차 거절수
+  const slaCnt = (r['sla_complete_count'] != null && r['sla_complete_count'] !== '')
+    ? Number(r['sla_complete_count']) : (ml + pl + dn + nt);
+  const notSlaCnt = Number(r['not_sla_complete_count'] || 0);
+  const rejected  = Number(r['rejected_count'] || 0);
+  // 총처리건수 = 하루 전체 = SLA 슬롯 합 + SLA 시간대 외
+  const totalDay = (isFinite(slaCnt) ? slaCnt : 0) + (isFinite(notSlaCnt) ? notSlaCnt : 0);
 
   // 일자: Date 객체 또는 ISO 문자열 → "YYYY-MM-DD"
   let date = r['part_date'] || r['일자'] || '';
@@ -2703,7 +2713,10 @@ function _normalizeRealtimeRow(r) {
     오후논피크_물량:   pl,
     저녁피크_물량:     dn,
     심야논피크_물량:   nt,
-    총처리건수:     ml + pl + dn + nt,
+    총처리건수:     totalDay,            // 하루 전체(SLA 슬롯 + SLA 외)
+    SLA처리건수:    slaCnt,              // 4개 슬롯 합
+    SLA외처리건수:  notSlaCnt,           // 00~08:59
+    거절건수:       rejected,            // SLA 시간대 배차 거절 수
     목표_아침점심:  tgt('target_orders_ml') || Number(r['목표_아침점심'] || 0),
     목표_오후:      tgt('target_orders_pl') || Number(r['목표_오후']     || 0),
     목표_저녁:      tgt('target_orders_d')  || Number(r['목표_저녁']     || 0),
@@ -3383,7 +3396,7 @@ function makeDCPOSpark(values) {
 // ═══════════════════════════════════════════════════
 const _RT_SORT_KEYS = [
   'rgn2','region','contract','partnerName','grade',
-  'riderJoin','riderAct','sets','totalVol','amAch','pmAch','evAch','niAch'
+  'riderJoin','riderAct','sets','totalVol','notSlaVol','amAch','pmAch','evAch','niAch'
 ];
 
 function renderRealtime() {
@@ -3536,6 +3549,7 @@ function renderRealtime() {
     const riderActN  = kpi ? Number(kpi['운행라이더수']||0) : 0;
     const setsN      = kpi ? Number(kpi['신청세트수']||kpi['세트수']||p['현재세트수']||0) : Number(p['현재세트수']||0);
     const totalVolN  = kpi ? Number(kpi['총처리건수']||0) : 0;
+    const notSlaN    = kpi ? Number(kpi['SLA외처리건수']||0) : 0;
 
     const amVol = kpi ? Number(kpi['아침점심피크_물량']||0) : 0;
     const pmVol = kpi ? Number(kpi['오후논피크_물량']||0)   : 0;
@@ -3554,7 +3568,7 @@ function renderRealtime() {
 
     return {
       p, kpi, rLvl, operArea, rgn2, regionDisp, contractType, grade,
-      riderJoinN, riderActN, setsN, totalVolN,
+      riderJoinN, riderActN, setsN, totalVolN, notSlaN,
       amVol, pmVol, evVol, niVol, amAchN, pmAchN, evAchN, niAchN,
       slaRaw, inSLA, outSLA, tgt,    // 권역별 슬롯 목표
       // sort keys (raw values)
@@ -3581,6 +3595,7 @@ function renderRealtime() {
       riderAct:    r => r.riderActN,
       sets:        r => r.setsN,
       totalVol:    r => r.totalVolN,
+      notSlaVol:   r => r.notSlaN,
       amAch:       r => r.amAchN,
       pmAch:       r => r.pmAchN,
       evAch:       r => r.evAchN,
@@ -3604,7 +3619,7 @@ function renderRealtime() {
   }
 
   if (!records.length) {
-    tbody.innerHTML = `<tr><td colspan="13" class="empty">필터 결과가 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14" class="empty">필터 결과가 없습니다</td></tr>`;
     return;
   }
 
@@ -3646,6 +3661,7 @@ function renderRealtime() {
       <td style="text-align:center;color:#4ade80;font-weight:600">${r.riderActN ? r.riderActN.toLocaleString() : '-'}</td>
       <td style="text-align:center;color:var(--text-secondary)">${r.setsN || '-'}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${r.kpi?r.totalVolN.toLocaleString():'-'}</td>
+      <td style="text-align:center;color:var(--text-secondary)">${r.kpi?(r.notSlaN?r.notSlaN.toLocaleString():'0'):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.amVol,r.setsN,r.tgt.am,slotPhase.am):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.pmVol,r.setsN,r.tgt.pm,slotPhase.pm):'-'}</td>
       <td class="ach-cell">${r.kpi?slotAchievementFmt(r.evVol,r.setsN,r.tgt.ev,slotPhase.ev):'-'}</td>
