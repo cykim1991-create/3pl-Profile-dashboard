@@ -453,8 +453,6 @@ textarea.form-input{resize:vertical;min-height:60px}
       </select>
       <button class="btn btn-ghost btn-sm" onclick="resetTopFilters()" title="RGN2/담당자 필터 초기화"
               style="font-size:11px">🔄 필터 초기화</button>
-      <button class="btn btn-primary btn-sm" onclick="openBriefingModal()" title="아침 영업 브리핑 보고서 작성"
-              style="font-size:11px">📝 영업 브리핑</button>
       <button class="btn btn-ghost btn-sm" id="themeToggleBtn" onclick="toggleTheme()" title="라이트/다크 모드 전환">☀️</button>
       <button class="btn btn-sm" id="gsiBtn" onclick="gsiLogin()" style="background:var(--accent-bg);color:var(--text-secondary);border:1px solid var(--border);font-size:11px">🔑 로그인</button>
     </div>
@@ -800,30 +798,6 @@ textarea.form-input{resize:vertical;min-height:60px}
   </div>
 </div>
 
-<!-- 데이터 업데이트 대기 안내 모달 (영업 브리핑 진입 시 D-1 누락 알림) -->
-<div class="modal-overlay" id="dataStaleModal" onclick="closeModal(event)">
-  <div class="modal" onclick="event.stopPropagation()" style="max-width:460px">
-    <div class="modal-header">
-      <div class="modal-title">⏳ 데이터 업데이트 대기 중</div>
-      <button class="modal-close" id="dataStale-close">✕</button>
-    </div>
-    <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
-      <div style="font-size:13px;color:var(--text-primary);line-height:1.55">
-        익일 데이터 업데이트가 안되었어요.<br>
-        <b style="color:var(--accent-soft)">오전 9시 이후</b> 다시 시도해주세요.
-      </div>
-      <div style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;color:var(--text-secondary);display:flex;flex-direction:column;gap:4px">
-        <div>📅 기대 일자(D-1): <b id="dataStale-expected" style="color:var(--text-primary)">-</b></div>
-        <div>📊 시트 최신 일자: <b id="dataStale-latest"   style="color:var(--text-primary)">-</b></div>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px">
-        <button class="btn btn-ghost btn-sm"   id="dataStale-close-2" onclick="document.getElementById('dataStaleModal').classList.remove('open')">취소</button>
-        <button class="btn btn-primary btn-sm" id="dataStale-proceed">그래도 보기</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- 운영중지 유예 결정 모달 -->
 <div class="modal-overlay" id="penaltyDecisionModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
@@ -853,17 +827,6 @@ textarea.form-input{resize:vertical;min-height:60px}
         <button class="btn btn-primary btn-sm" id="penaltyDec-save" onclick="savePenaltyDecision()">💾 저장</button>
       </div>
     </div>
-  </div>
-</div>
-
-<!-- 영업 브리핑 보고서 모달 -->
-<div class="modal-overlay" id="briefingModal" onclick="closeModal(event)">
-  <div class="modal" onclick="event.stopPropagation()" style="max-width:780px">
-    <div class="modal-header">
-      <div class="modal-title">📝 영업 브리핑 보고서</div>
-      <button class="modal-close" onclick="closeBriefingModal()">✕</button>
-    </div>
-    <div id="briefingBody" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px;max-height:82vh;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -2874,88 +2837,10 @@ function closeRgn2ManagerModal() {
 }
 
 // ═══════════════════════════════════════════════════
-// 영업 브리핑 보고서 모달 (RGN2별 자동 산출 + 영업계획 입력)
+// RGN2 인라인 지표 패널용 집계·포맷 헬퍼
+//   (영업 브리핑 보고서 모달은 미사용으로 삭제됨 — 이 헬퍼들은
+//    _renderRgn2BriefingPanel 이 계속 사용한다)
 // ═══════════════════════════════════════════════════
-
-const _briefingState = {
-  regions: [],   // 사용자가 선택한 RGN2 배열
-  plan: '',      // 당일 영업계획 텍스트
-};
-
-function openBriefingModal() {
-  // 어제(D-1) 데이터 누락 시 알람 — 데일리 시트 최대 일자가 운영일 -1 보다 이전이면 노출
-  // 시트는 매일 오전 9시 업데이트 → 9시 이전엔 D-1 데이터가 없을 수 있음.
-  const { isStale, expectedD1, d1 } = _filterD1OpPartners(STATE.partners || []);
-  if (isStale) {
-    showDataStaleModal({ expectedD1, latestD: d1, onProceed: () => {
-      _renderBriefingBody();
-      document.getElementById('briefingModal').classList.add('open');
-    }});
-    return;
-  }
-  // 지역은 사용자가 직접 추가 (자동 선택 X)
-  _renderBriefingBody();
-  document.getElementById('briefingModal').classList.add('open');
-}
-
-// 데일리 시트 업데이트 대기 안내 모달 — 영업 브리핑 진입 시 호출
-// onProceed: 사용자가 '그래도 보기' 선택 시 실행할 콜백 (보통 브리핑 진행)
-function showDataStaleModal({ expectedD1, latestD, onProceed }) {
-  const overlay = document.getElementById('dataStaleModal');
-  if (!overlay) return; // 모달 미설치 시 그냥 진행
-  const exp = document.getElementById('dataStale-expected');
-  const lat = document.getElementById('dataStale-latest');
-  if (exp) exp.textContent = expectedD1 || '-';
-  if (lat) lat.textContent = latestD    || '-';
-  // 버튼 핸들러
-  const proceedBtn = document.getElementById('dataStale-proceed');
-  const closeBtn   = document.getElementById('dataStale-close');
-  const hide = () => overlay.classList.remove('open');
-  if (proceedBtn) proceedBtn.onclick = () => { hide(); if (onProceed) onProceed(); };
-  if (closeBtn)   closeBtn.onclick   = () => { hide(); };
-  overlay.classList.add('open');
-}
-function closeBriefingModal() {
-  // plan 텍스트는 유지하되 모달만 닫기
-  const ta = document.getElementById('briefingPlan');
-  if (ta) _briefingState.plan = ta.value;
-  document.getElementById('briefingModal').classList.remove('open');
-}
-
-// 영업 브리핑 — 사용 가능한 RGN2 목록
-// 메인 페이지 상단 RGN2 필터(populateRegionFilter)와 동일한 출처/정렬 규칙
-//   = 협력사기본정보 시트의 RGN2 컬럼에 직접 등록된 값만 (자동 추출 폴백 제외)
-function _allRgn2List() {
-  const set = new Set();
-  (STATE.partners || []).forEach(p => {
-    const v = (p['RGN2'] || '').toString().trim();
-    if (v && v !== '-') set.add(v);
-  });
-  return [...set].sort();
-}
-
-function _briefingAddRegion() {
-  const sel = document.getElementById('briefingAddSel');
-  if (!sel) return;
-  const v = sel.value;
-  if (!v) return;
-  if (_briefingState.regions.includes(v)) {
-    showToast('이미 추가된 지역입니다');
-    return;
-  }
-  // plan 보존
-  const ta = document.getElementById('briefingPlan');
-  if (ta) _briefingState.plan = ta.value;
-  _briefingState.regions.push(v);
-  _renderBriefingBody();
-}
-
-function _briefingRemoveRegion(rgn2) {
-  const ta = document.getElementById('briefingPlan');
-  if (ta) _briefingState.plan = ta.value;
-  _briefingState.regions = _briefingState.regions.filter(r => r !== rgn2);
-  _renderBriefingBody();
-}
 
 // ── RGN2 × 날짜 단위 집계 ──
 // 1) RGN2 단위 지표(3PL처리비중/60분초과율/UTR/3pl_DCPO/FL_라이더수/FL_DCPO)는
@@ -3041,38 +2926,6 @@ function _bN(v, opts) {
   return v.toLocaleString(undefined, { maximumFractionDigits: dec, minimumFractionDigits: dec }) + unit;
 }
 
-// 보고서 텍스트 생성 (한 RGN2 블록)
-function _briefingBlockText(rgn2) {
-  const { d1, d2 } = _briefingDates();
-  const a = _briefingAggregate(rgn2, d1);
-  const b = d2 ? _briefingAggregate(rgn2, d2) : null;
-  if (!a) return `[${rgn2}] 주요 지표 실적 현황(전일 대비)\n\n* 데이터 없음\n`;
-  // 3PL처리비중 (0~1 비율) → 백분율 + 전일 대비 %p 변화량
-  const shareTxt = a.sharePct != null
-    ? (a.sharePct * 100).toFixed(1) + '%'
-    : '-';
-  const shareDelta = (a.sharePct != null && b && b.sharePct != null)
-    ? _bDeltaFmt(a.sharePct * 100, b.sharePct * 100, {pp:true, dec:1})
-    : '';
-  // FL 대비 3PL DCPO 차이 — 양수면 FL보다 비쌈 ▲, 음수면 FL보다 쌈 ▼
-  const dcpoGapTxt = (a.dcpo3pl && a.flDcpo)
-    ? (() => {
-        const gap = a.dcpo3pl - a.flDcpo;
-        const arrow = gap > 0 ? '▲' : '▼';
-        return `(FL 대비 ${arrow}${Math.abs(Math.round(gap)).toLocaleString()}원)`;
-      })()
-    : '(FL 대비 -)';
-  return [
-    `[${rgn2}] 주요 지표 실적 현황(전일 대비)`,
-    ``,
-    `* 3PL처리비중: ${shareTxt} ${shareDelta}`.trim(),
-    `* 60분초과율: ${_bN(a.over60, {dec:1, unit:'%'})} ${b? _bDeltaFmt(a.over60, b.over60, {pp:true, dec:1}) : ''}`.trim(),
-    `* UTR ${_bN(a.utr, {dec:1})} ${b? _bDeltaFmt(a.utr, b.utr, {dec:1}) : ''}`.trim(),
-    `* 운행라이더수 FL/3PL ${_bN(a.flRiders)}명/${_bN(a.riders3pl)}명 ${b? `(${_bArrow(a.flRiders,b.flRiders,'명')}/${_bArrow(a.riders3pl,b.riders3pl,'명')})` : ''}`.trim(),
-    `* 3PL DCPO ${_bN(a.dcpo3pl, {unit:'원'})} ${dcpoGapTxt}`,
-  ].join('\n');
-}
-
 // FL/3PL 라이더수 변화는 ▲500명 / ▼60명 식으로 합쳐 표기 (단일 단위)
 function _bArrow(curr, prev, unit) {
   if (prev === null || prev === undefined || isNaN(prev) || !prev) return '-';
@@ -3080,130 +2933,6 @@ function _bArrow(curr, prev, unit) {
   if (Math.abs(d) < 1) return '±0' + (unit||'');
   const arrow = d > 0 ? '▲' : '▼';
   return arrow + Math.abs(Math.round(d)).toLocaleString() + (unit||'');
-}
-
-function _buildBriefingText() {
-  const blocks = _briefingState.regions.map(r => _briefingBlockText(r));
-  const planRaw = (document.getElementById('briefingPlan')?.value || '').trim();
-  const planLines = planRaw.split('\n').map(l => l.trim()).filter(Boolean);
-  const planTxt = `[당일 영업계획]\n` + (planLines.length
-    ? '\n' + planLines.map(l => l.startsWith('*') ? l : `* ${l}`).join('\n')
-    : '\n* (영업계획을 작성해주세요)');
-  return blocks.join('\n\n') + '\n\n' + planTxt;
-}
-
-async function copyBriefingText() {
-  const ta = document.getElementById('briefingPlan');
-  if (ta) _briefingState.plan = ta.value;
-  const text = _buildBriefingText();
-  try {
-    await navigator.clipboard.writeText(text);
-    showToast('✓ 보고서 복사됨 — 슬랙에 붙여넣기 하세요');
-  } catch (e) {
-    // fallback: 텍스트 영역 선택 후 execCommand
-    const tmp = document.createElement('textarea');
-    tmp.value = text; document.body.appendChild(tmp);
-    tmp.select(); try { document.execCommand('copy'); showToast('✓ 보고서 복사됨'); }
-    catch(_) { showToast('❌ 클립보드 접근 실패'); }
-    document.body.removeChild(tmp);
-  }
-}
-
-// ── 본문 렌더링 ──
-function _renderBriefingBody() {
-  const body = document.getElementById('briefingBody');
-  if (!body) return;
-  const { d1, d2 } = _briefingDates();
-  const all = _allRgn2List();
-  const remain = all.filter(r => !_briefingState.regions.includes(r));
-
-  // 지역 카드 HTML
-  const regionCards = _briefingState.regions.length
-    ? _briefingState.regions.map(rgn2 => _renderBriefingRegionCard(rgn2, d1, d2)).join('')
-    : `<div style="color:var(--text-muted);text-align:center;padding:20px;background:var(--bg-section);border-radius:8px">지역(RGN2)을 추가해 주세요</div>`;
-
-  body.innerHTML = `
-    <div style="background:var(--bg-section);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <div style="font-size:11.5px;color:var(--text-secondary)">기준일 D-1: <span style="color:var(--accent-soft);font-weight:600">${d1||'-'}</span> &nbsp;|&nbsp; 비교일 D-2: <span style="color:var(--text-secondary)">${d2||'-'}</span></div>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <select id="briefingAddSel" class="filter-select" style="min-width:140px">
-          <option value="">${remain.length ? '지역 선택…' : '선택 가능 지역 없음'}</option>
-          ${remain.map(r => `<option value="${r}">${r}</option>`).join('')}
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="_briefingAddRegion()" ${remain.length?'':'disabled'}>+ 지역 추가</button>
-      </div>
-    </div>
-
-    <div style="display:flex;flex-direction:column;gap:10px">${regionCards}</div>
-
-    <div style="background:var(--bg-section);border-radius:8px;padding:12px 14px">
-      <div style="font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">📌 당일 영업계획</div>
-      <textarea id="briefingPlan" rows="5"
-                style="width:100%;background:var(--bg-input-2);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:10px 12px;font-size:12.5px;font-family:inherit;line-height:1.6;box-sizing:border-box;resize:vertical"
-                placeholder="• 영등포구 기존 협력사 퍼포먼스 중간 점검&#10;• 동작구 현황 체크 시작&#10;• 의왕시 협력사 인터뷰">${_briefingState.plan.replace(/</g,'&lt;')}</textarea>
-      <div style="font-size:10.5px;color:var(--text-muted);margin-top:4px">한 줄에 하나씩 쓰면 자동으로 글머리 기호가 붙습니다</div>
-    </div>
-
-    <div style="background:var(--bg-section);border:1px dashed var(--border);border-radius:8px;padding:12px 14px">
-      <div style="font-size:11.5px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">📋 미리보기 (복사될 텍스트)</div>
-      <pre id="briefingPreview" style="white-space:pre-wrap;color:var(--text-cell);font-family:inherit;font-size:12px;line-height:1.65;margin:0">${_buildBriefingText().replace(/</g,'&lt;')}</pre>
-    </div>
-
-    <div style="display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn btn-ghost btn-sm" onclick="closeBriefingModal()">닫기</button>
-      <button class="btn btn-primary" onclick="copyBriefingText()">📋 보고서 복사</button>
-    </div>
-  `;
-
-  // 영업계획 textarea 변경 시 미리보기 업데이트
-  const ta = document.getElementById('briefingPlan');
-  if (ta) ta.addEventListener('input', () => {
-    _briefingState.plan = ta.value;
-    const pv = document.getElementById('briefingPreview');
-    if (pv) pv.textContent = _buildBriefingText();
-  });
-}
-
-// 한 지역 카드 렌더 — 자동 산출된 지표 + 변화량 + 삭제 버튼
-function _renderBriefingRegionCard(rgn2, d1, d2) {
-  const a = _briefingAggregate(rgn2, d1);
-  const b = d2 ? _briefingAggregate(rgn2, d2) : null;
-  if (!a) {
-    return `<div style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="font-size:14px;font-weight:700;color:var(--text-primary)">[${rgn2}]</div>
-        <button class="btn btn-ghost btn-sm" style="color:#f87171" onclick="_briefingRemoveRegion('${rgn2}')">삭제</button>
-      </div>
-      <div style="color:var(--text-muted);font-size:12px">${d1} 데이터 없음</div>
-    </div>`;
-  }
-  const shareTxt = a.sharePct != null ? (a.sharePct * 100).toFixed(1) + '%' : '-';
-  const shareDelta = (a.sharePct != null && b && b.sharePct != null)
-    ? _bDeltaFmt(a.sharePct * 100, b.sharePct * 100, {pp:true, dec:1})
-    : '';
-  const dcpoGap = (a.dcpo3pl && a.flDcpo) ? (a.dcpo3pl - a.flDcpo) : null;
-  const gapHtml = dcpoGap !== null
-    ? `<span style="color:${dcpoGap>0?'#f87171':'#4ade80'};font-size:11px">FL 대비 ${dcpoGap>0?'▲':'▼'}${Math.abs(Math.round(dcpoGap)).toLocaleString()}원</span>`
-    : `<span style="color:var(--text-muted);font-size:11px">FL 대비 -</span>`;
-  const cell = (label, val, delta) => `<div style="display:flex;flex-direction:column;gap:2px;min-width:0">
-    <span style="font-size:10.5px;color:var(--text-secondary)">${label}</span>
-    <span style="font-size:13.5px;color:var(--text-primary);font-weight:700">${val}</span>
-    ${delta?`<span style="font-size:10.5px;color:var(--text-secondary)">${delta}</span>`:''}
-  </div>`;
-  return `<div style="background:var(--bg-section);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:14px;font-weight:700;color:var(--text-primary)">[${rgn2}] <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:4px">${d1}</span></div>
-      <button class="btn btn-ghost btn-sm" style="color:#f87171" onclick="_briefingRemoveRegion('${rgn2}')">삭제</button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px">
-      ${cell('3PL처리비중', shareTxt, shareDelta)}
-      ${cell('60분초과율',  _bN(a.over60,{dec:1,unit:'%'}),  b? _bDeltaFmt(a.over60,b.over60,{pp:true,dec:1}) : '')}
-      ${cell('UTR',         _bN(a.utr,{dec:1}),               b? _bDeltaFmt(a.utr,b.utr,{dec:1}) : '')}
-      ${cell('운행라이더수 FL', _bN(a.flRiders)+'명',         b? _bArrow(a.flRiders,b.flRiders,'명') : '')}
-      ${cell('운행라이더수 3PL',_bN(a.riders3pl)+'명',        b? _bArrow(a.riders3pl,b.riders3pl,'명') : '')}
-      ${cell('3PL DCPO',    _bN(a.dcpo3pl,{unit:'원'}),       gapHtml)}
-    </div>
-  </div>`;
 }
 
 // 달성률 cell: stacked "212%" on top, "처리건수/목표건수" below
