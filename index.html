@@ -2406,25 +2406,78 @@ function getPendingLogs(pid) {
 
 function _kpiDateOf(k) { return k['일자'] || k['주차시작일'] || ''; }
 
+
+// ── 협력사 조회 인덱스 ──────────────────────────────────────
+// getLatestKPI / getRealtimeKPI / getKPIHistory 는 원래 매 호출마다
+// STATE.partners / STATE.kpi / STATE.realtimeKpi 를 전부 훑었다(find/filter).
+// 리스트 렌더는 협력사마다 이 함수들을 부르므로 전체 비용이 O(협력사수²)로
+// 늘어나, 전체 지역 선택 시 초기 렌더가 급격히 느려졌다.
+// → 데이터가 바뀔 때 한 번만 Map 을 만들고 이후엔 O(1) 조회한다.
+//
+// 배열 "정체성"이 바뀌면(=시트 재로딩으로 재할당되면) 자동으로 다시 만든다.
+// STATE.partners/kpi/realtimeKpi 는 전부 재할당 방식이고 in-place push 가
+// 없으므로 이 검사로 충분하다.
+let _IDX = null;
+function _lookupIdx() {
+  // ⚠ 정체성 비교는 STATE 의 원본 값으로 해야 한다.
+  //   `STATE.x || []` 로 비교하면 값이 undefined 일 때 매번 새 빈 배열이 만들어져
+  //   비교가 항상 실패하고 캐시가 통째로 무력화된다(SAMPLE 폴백 경로에서 실측).
+  const P0 = STATE.partners, K0 = STATE.kpi, R0 = STATE.realtimeKpi;
+  if (_IDX && _IDX._P === P0 && _IDX._K === K0 && _IDX._R === R0) return _IDX;
+  const P = P0 || [], K = K0 || [], R = R0 || [];
+
+  const partnerByPid = new Map(), partnerByName = new Map();
+  P.forEach(p => {
+    const pid = p['협력사ID'], nm = p['협력사명'];
+    if (pid && !partnerByPid.has(pid))  partnerByPid.set(pid, p);
+    if (nm  && !partnerByName.has(nm))  partnerByName.set(nm, p);
+  });
+
+  // 한 KPI 행은 협력사ID 버킷과 협력사명 버킷 양쪽에 들어간다.
+  // (원래 filter 조건이 "이름 일치 OR ID 일치" 였으므로 두 버킷의 합집합이 답이다)
+  // 같은 일자 중복 행의 순서를 시트 순서로 고정하기 위해 원본 인덱스를 함께 기억한다.
+  const kpiByPid = new Map(), kpiByName = new Map(), rowOrder = new WeakMap();
+  K.forEach((k, i) => {
+    rowOrder.set(k, i);
+    const pid = k['협력사ID'], nm = k['협력사명'];
+    if (pid) { let a = kpiByPid.get(pid);  if (!a) kpiByPid.set(pid, a = []);  a.push(k); }
+    if (nm)  { let a = kpiByName.get(nm);  if (!a) kpiByName.set(nm, a = []);  a.push(k); }
+  });
+
+  const rtByPid = new Map(), rtByName = new Map();
+  R.forEach(r => {
+    const pid = r['협력사ID'], nm = r['협력사명'];
+    if (pid && !rtByPid.has(pid)) rtByPid.set(pid, r);
+    if (nm  && !rtByName.has(nm)) rtByName.set(nm, r);
+  });
+
+  _IDX = { _P:P0, _K:K0, _R:R0, partnerByPid, partnerByName,
+           kpiByPid, kpiByName, rtByPid, rtByName, rowOrder, histCache: new Map() };
+  return _IDX;
+}
+
+// 일자 오름차순 + 같은 일자면 시트 순서 유지
+function _kpiRowCmp(idx) {
+  return (a, b) => {
+    const da = _kpiDateOf(a), db = _kpiDateOf(b);
+    if (da !== db) return da > db ? 1 : -1;
+    return (idx.rowOrder.get(a) || 0) - (idx.rowOrder.get(b) || 0);
+  };
+}
+
 function getLatestKPI(pid) {
   // 데일리운영현황(STATE.kpi)에서 가장 최근 일자의 행 — 일자별/주차별 집계용
-  const partner = STATE.partners.find(p => p['협력사ID'] === pid);
-  const name    = partner ? partner['협력사명'] : null;
-  const rows    = STATE.kpi.filter(k =>
-    (name && k['협력사명'] === name) || k['협력사ID'] === pid
-  );
-  if (!rows.length) return null;
-  return rows.sort((a,b) => _kpiDateOf(b) > _kpiDateOf(a) ? 1 : -1)[0];
+  const hist = getKPIHistory(pid);          // 일자 오름차순
+  return hist.length ? hist[hist.length - 1] : null;
 }
 
 // 실시간운행현황(STATE.realtimeKpi) 시트에서 협력사 한 행 — 오늘 스냅샷
 // 실시간 시트에 없는 필드(라이더수/SLA/AR/등급/계약형태)는 데일리 최신/파트너 마스터에서 보충
 function getRealtimeKPI(pid) {
-  const partner = STATE.partners.find(p => p['협력사ID'] === pid);
+  const idx = _lookupIdx();
+  const partner = idx.partnerByPid.get(pid) || null;
   const name = partner ? partner['협력사명'] : null;
-  const rt = (STATE.realtimeKpi || []).find(k =>
-    k['협력사ID'] === pid || (name && k['협력사명'] === name)
-  );
+  const rt = idx.rtByPid.get(pid) || (name ? idx.rtByName.get(name) : null) || null;
   const daily = getLatestKPI(pid);
   if (!rt) return daily;
   if (!daily) return rt;
@@ -2517,11 +2570,25 @@ function _renderPartnerContactsSection(pid) {
 }
 
 function getKPIHistory(pid) {
-  const partner = STATE.partners.find(p => p['협력사ID'] === pid);
+  const idx = _lookupIdx();
+  const cached = idx.histCache.get(pid);
+  if (cached) return cached;
+
+  const partner = idx.partnerByPid.get(pid) || null;
   const name    = partner ? partner['협력사명'] : null;
-  return STATE.kpi
-    .filter(k => (name && k['협력사명'] === name) || k['협력사ID'] === pid)
-    .sort((a,b) => _kpiDateOf(a) > _kpiDateOf(b) ? 1 : -1);
+  const byPid   = idx.kpiByPid.get(pid) || [];
+  const byName  = (name && idx.kpiByName.get(name)) || [];
+
+  let rows;
+  if (!byName.length)      rows = byPid.slice();
+  else if (!byPid.length)  rows = byName.slice();
+  else {
+    const seen = new Set(byPid);
+    rows = byPid.concat(byName.filter(r => !seen.has(r)));   // 합집합(중복 제거)
+  }
+  rows.sort(_kpiRowCmp(idx));
+  idx.histCache.set(pid, rows);
+  return rows;
 }
 
 // DoD helpers (computed from daily records)
