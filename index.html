@@ -4170,7 +4170,6 @@ function _computeWeeklyRows(hist, tgt) {
       const tgtPMd = tgtSum('목표_오후',     tgt.pm);
       const tgtEVd = tgtSum('목표_저녁',     tgt.ev);
       const tgtNId = tgtSum('목표_심야',     tgt.ni);
-      const tgtTotal = tgtAMd + tgtPMd + tgtEVd + tgtNId;
       const latest = rows.slice().sort((a,b)=> _kpiDateOf(b) > _kpiDateOf(a) ? 1 : -1)[0];
       const grade  = latest && latest['등급'] ? latest['등급'] : '-';
 
@@ -4199,11 +4198,6 @@ function _computeWeeklyRows(hist, tgt) {
         orderVol: hasOrderVol ? orderVol : null,
         orderAch,
         tgtAm: tgtAMd, tgtPm: tgtPMd, tgtEv: tgtEVd, tgtNi: tgtNId,
-        totalAch: tgtTotal ? (totalVol/tgtTotal)*100 : 0,
-        amAch: tgtAMd ? (amVol/tgtAMd)*100 : 0,
-        pmAch: tgtPMd ? (pmVol/tgtPMd)*100 : 0,
-        evAch: tgtEVd ? (evVol/tgtEVd)*100 : 0,
-        niAch: tgtNId ? (niVol/tgtNId)*100 : 0,
       };
     });
 }
@@ -4243,7 +4237,6 @@ function _aggregateRange(hist, startDate, endDate, tgt) {
 
   const wSum = rows.reduce((s,r) => s + _slaOf(r) * Number(r['총처리건수']||0), 0);
   const sla  = totalVol ? wSum / totalVol : 0;
-  const tgtTotal = sets * (tgt.am + tgt.pm + tgt.ev + tgt.ni) * days;
 
   let orderVol = 0, orderDays = 0;
   rows.forEach(r => {
@@ -4291,7 +4284,6 @@ function _aggregateRange(hist, startDate, endDate, tgt) {
     riderActAvg, riderJoinAvg,
     orderVol: hasOrderVol ? orderVol : null,
     orderAch: hasOrderVol && orderVol ? (totalVol/orderVol)*100 : null,
-    totalAch: tgtTotal ? (totalVol/tgtTotal)*100 : 0,
     slotsAchieved, slotsPossible, slotsRatio,
   };
 }
