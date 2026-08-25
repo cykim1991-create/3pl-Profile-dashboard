@@ -4110,6 +4110,21 @@ function _orderVolumeOf(row) {
   return null;  // 데이터 없음
 }
 
+// ── SLA 시간대 외(00~08:59) 처리건수 ──
+// 데일리운영현황(STATE.kpi) 은 시트 헤더명 그대로(SLA시간대외_처리건수),
+// 실시간운행현황(today_new) 은 정규화된 SLA외처리건수 를 쓴다. 둘 다 받는다.
+function _notSlaVolumeOf(row) {
+  const keys = ['SLA시간대외_처리건수','SLA외처리건수','not_sla_complete_count'];
+  for (const k of keys) {
+    const v = row[k];
+    if (v !== undefined && v !== null && v !== '') {
+      const n = Number(v);
+      if (!isNaN(n)) return n;
+    }
+  }
+  return null;  // 데이터 없음
+}
+
 // ── 협력사 KPI → 주차별 집계 행 (내부 공용) ──────────
 function _computeWeeklyRows(hist, tgt) {
   const weekMap = {};
@@ -6387,12 +6402,13 @@ function _renderPerfWeekly(body, hist, tgt) {
     ni: asc.map(w => w.totalVol ? (w.niVol/w.totalVol)*100 : 0),
   });
 
-  // 세부 테이블 (최신 위) — 처리건수/목표건수 형식 (달성률 색상)
+  // 세부 테이블 (최신 위) — 슬롯 셀은 달성률(%) 위, "처리건수/목표건수" 아래.
+  // 발주물량 달성률 셀과 동일한 형식. 목표 = 평균 sets × per-set 목표 × days.
+  // 색상은 슬롯 기존 기준 유지 (≥100% 초록 / ≥80% 노랑 / <80% 빨강)
   const volTargetTd = (v, target) => {
     if (!target) return `<td style="text-align:center;color:var(--text-cell)">${(v||0).toLocaleString()}</td>`;
     const pct = (v / target) * 100;
-    const color = _achColor(pct);
-    return `<td style="text-align:center"><span style="color:${color};font-weight:700">${(v||0).toLocaleString()}</span><span style="color:var(--text-muted);font-weight:400">/${Math.round(target).toLocaleString()}</span></td>`;
+    return `<td style="text-align:center"><span style="color:${_achColor(pct)};font-weight:700">${pct.toFixed(1)}%</span><span style="display:block;color:var(--text-muted);font-size:10px;margin-top:1px">${(v||0).toLocaleString()}/${Math.round(target).toLocaleString()}</span></td>`;
   };
 
   const tableRows = weeks.map(w => {
@@ -6442,7 +6458,7 @@ function _renderPerfWeekly(body, hist, tgt) {
               <th rowspan="2" class="center">세트수<br><span style="font-size:10px;font-weight:400">(평균)</span></th>
               <th rowspan="2" class="center">전체<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
               <th rowspan="2" class="center">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span></th>
-              <th colspan="4" class="center slot-group">시간대별 처리건수</th>
+              <th colspan="4" class="center slot-group">시간대별 달성률</th>
               <th rowspan="2" class="center">수락률</th>
               <th rowspan="2" class="center">Active<br><span style="font-size:10px;font-weight:400">라이더수 / 계약 (비중)</span></th>
             </tr>
@@ -6460,11 +6476,11 @@ function _renderPerfWeekly(body, hist, tgt) {
 }
 
 function _renderPerfDaily(body, hist, tgt) {
-  // 최근 2주(14일)만
+  // 최근 4주(28일)만
   const dailyDesc = hist
     .slice()
     .sort((a,b) => _kpiDateOf(b) > _kpiDateOf(a) ? 1 : -1)
-    .slice(0, 14);
+    .slice(0, 28);
   if (!dailyDesc.length) { body.innerHTML = `<div class="empty">일자별 데이터 없음</div>`; return; }
 
   // 차트는 오래된 → 최신 (왼쪽에서 오른쪽으로)
@@ -6489,19 +6505,19 @@ function _renderPerfDaily(body, hist, tgt) {
     ni: asc.map(r => { const t = Number(r['총처리건수']||0); return t ? Number(r['심야논피크_물량']||0)  /t*100 : 0; }),
   });
 
-  // "처리건수/목표건수" 형식 셀 (목표 = sets × per-set 목표)
-  // 달성률에 따라 처리건수 색상 구분 (≥100% 초록 / ≥80% 노랑 / <80% 빨강)
+  // 슬롯 셀 — 달성률(%) 위, "처리건수/목표건수" 아래. 발주물량 달성률 셀과 동일한 형식.
+  // 목표 = sets × per-set 목표. 색상은 슬롯 기존 기준 유지 (≥100% 초록 / ≥80% 노랑 / <80% 빨강)
   const volTargetTd = (v, target) => {
     if (!target) return `<td style="text-align:center;color:var(--text-cell)">${(v||0).toLocaleString()}</td>`;
     const pct = (v / target) * 100;
-    const color = _achColor(pct);
-    return `<td style="text-align:center"><span style="color:${color};font-weight:700">${(v||0).toLocaleString()}</span><span style="color:var(--text-muted);font-weight:400">/${Math.round(target).toLocaleString()}</span></td>`;
+    return `<td style="text-align:center"><span style="color:${_achColor(pct)};font-weight:700">${pct.toFixed(1)}%</span><span style="display:block;color:var(--text-muted);font-size:10px;margin-top:1px">${(v||0).toLocaleString()}/${Math.round(target).toLocaleString()}</span></td>`;
   };
 
   const tableRows = dailyDesc.map(r => {
     const date = _kpiDateOf(r);
     const dow  = _dowKor(date);
     const totalVol = Number(r['총처리건수']||0);
+    const notSlaVol = _notSlaVolumeOf(r);
     const amVol = Number(r['아침점심피크_물량']||0);
     const pmVol = Number(r['오후논피크_물량']||0);
     const evVol = Number(r['저녁피크_물량']||0);
@@ -6531,6 +6547,7 @@ function _renderPerfDaily(body, hist, tgt) {
         <span style="color:var(--text-secondary);font-weight:400;margin-left:4px">(${dow})</span></td>
       <td style="text-align:center;color:var(--text-cell)">${sets || '-'}</td>
       <td style="text-align:center;font-weight:700;color:var(--text-primary)">${totalVol.toLocaleString()}</td>
+      <td style="text-align:center;color:var(--text-secondary)">${notSlaVol === null ? '-' : notSlaVol.toLocaleString()}</td>
       ${orderCell}
       ${volTargetTd(amVol, tAm)}
       ${volTargetTd(pmVol, tPm)}
@@ -6551,14 +6568,15 @@ function _renderPerfDaily(body, hist, tgt) {
     <div class="modal-section">
       <div class="modal-section-title">📆 일자별 세부 지표 <span style="color:var(--text-muted);font-size:11px;font-weight:400;margin-left:6px">최근 ${dailyDesc.length}일</span></div>
       <div class="table-wrap table-scroll">
-        <table class="data-table" style="min-width:1040px">
+        <table class="data-table" style="min-width:1180px">
           <thead>
             <tr>
               <th rowspan="2" style="padding:9px 6px">일자</th>
               <th rowspan="2" class="center">세트수</th>
               <th rowspan="2" class="center">전체<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
+              <th rowspan="2" class="center">SLA 외<br><span style="font-size:10px;font-weight:400">처리건수</span></th>
               <th rowspan="2" class="center">발주물량<br><span style="font-size:10px;font-weight:400">달성률</span></th>
-              <th colspan="4" class="center slot-group">시간대별 처리건수</th>
+              <th colspan="4" class="center slot-group">시간대별 달성률</th>
               <th rowspan="2" class="center">수락률</th>
               <th rowspan="2" class="center">Active<br><span style="font-size:10px;font-weight:400">라이더수 / 계약 (비중)</span></th>
             </tr>
