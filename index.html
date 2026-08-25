@@ -4152,11 +4152,25 @@ function _computeWeeklyRows(hist, tgt) {
       const days     = rows.length;
       const wSum = rows.reduce((s,r) => s + _slaOf(r) * Number(r['총처리건수']||0), 0);
       const sla  = totalVol ? wSum / totalVol : 0;
-      const tgtTotal = sets * (tgt.am + tgt.pm + tgt.ev + tgt.ni) * days;
-      const tgtAMd = sets * tgt.am * days;
-      const tgtPMd = sets * tgt.pm * days;
-      const tgtEVd = sets * tgt.ev * days;
-      const tgtNId = sets * tgt.ni * days;
+      // 주차 슬롯 목표 = 그 주에 포함된 각 일자 목표의 합.
+      //   운행일(세트수>0)  : 그 날 신청세트수 × 그 날 per-set 목표
+      //   미운행일(세트수 0): 목표 물량은 운행 여부와 무관하게 적용되는 물량이므로
+      //                       운행일 평균 세트수(sets) × per-set 목표로 계상한다.
+      // 예전엔 주 전체를 평균 세트수 × per-set 목표 × 일수 로 근사해, 주중에 목표가
+      // 바뀐 주에서 실제 목표와 어긋났다(일자별로 목표를 잡으면서 그 건은 해소).
+      // ⚠ 세트수 0 행은 로더가 목표_* 정규화(÷세트수)를 건너뛰어 시트 원본(총 목표)이
+      //   그대로 남아 있다 → 미운행일에는 그 행의 목표_* 를 쓰지 않고 fb(per-set)만 쓴다.
+      const tgtSum = (key, fb) => rows.reduce((acc, r) => {
+        const daySets = Number(r['신청세트수'] || r['세트수'] || 0);
+        return acc + (daySets > 0
+          ? daySets * Number(r[key] || fb || 0)
+          : sets    * Number(fb || 0));
+      }, 0);
+      const tgtAMd = tgtSum('목표_아침점심', tgt.am);
+      const tgtPMd = tgtSum('목표_오후',     tgt.pm);
+      const tgtEVd = tgtSum('목표_저녁',     tgt.ev);
+      const tgtNId = tgtSum('목표_심야',     tgt.ni);
+      const tgtTotal = tgtAMd + tgtPMd + tgtEVd + tgtNId;
       const latest = rows.slice().sort((a,b)=> _kpiDateOf(b) > _kpiDateOf(a) ? 1 : -1)[0];
       const grade  = latest && latest['등급'] ? latest['등급'] : '-';
 
@@ -4184,6 +4198,7 @@ function _computeWeeklyRows(hist, tgt) {
         riderActAvg, riderJoinAvg,
         orderVol: hasOrderVol ? orderVol : null,
         orderAch,
+        tgtAm: tgtAMd, tgtPm: tgtPMd, tgtEv: tgtEVd, tgtNi: tgtNId,
         totalAch: tgtTotal ? (totalVol/tgtTotal)*100 : 0,
         amAch: tgtAMd ? (amVol/tgtAMd)*100 : 0,
         pmAch: tgtPMd ? (pmVol/tgtPMd)*100 : 0,
@@ -6416,11 +6431,11 @@ function _renderPerfWeekly(body, hist, tgt) {
     const riderJoin = w.riderJoinAvg || 0;
     const actShare  = riderJoin ? (riderAct/riderJoin)*100 : 0;
     const setsTxt   = w.sets ? Math.round(w.sets).toLocaleString() : '-';
-    // 주차 슬롯 목표 = 평균 sets × per-set 목표 × days
-    const tAm = (w.sets || 0) * (tgt.am || 0) * (w.days || 0);
-    const tPm = (w.sets || 0) * (tgt.pm || 0) * (w.days || 0);
-    const tEv = (w.sets || 0) * (tgt.ev || 0) * (w.days || 0);
-    const tNi = (w.sets || 0) * (tgt.ni || 0) * (w.days || 0);
+    // 주차 슬롯 목표 = 포함된 각 일자 목표의 합 (_computeWeeklyRows 에서 계산)
+    const tAm = w.tgtAm || 0;
+    const tPm = w.tgtPm || 0;
+    const tEv = w.tgtEv || 0;
+    const tNi = w.tgtNi || 0;
     // 발주물량 달성률
     const orderAch = w.orderAch;
     const orderCell = (orderAch === null || orderAch === undefined)
