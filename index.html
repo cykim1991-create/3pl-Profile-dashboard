@@ -1866,9 +1866,11 @@ async function init() {
       if (vals.length < 2 || !vals[0]) return map;
       const headers = vals[0].map(h => String(h == null ? '' : h).trim());
       const col = n => headers.indexOf(n);
+      // 헤더 별칭 허용 (시트에 따라 '주차' 또는 '평가주차')
+      const colA = names => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return i; } return -1; };
       const ci = {
-        wk: col('주차'), pid: col('협력사ID'), name: col('협력사명'),
-        status: col('유예여부'), reason: col('사유'), person: col('결정자'), ts: col('결정일시'),
+        wk: colA(['주차','평가주차']), pid: col('협력사ID'), name: col('협력사명'),
+        status: colA(['유예여부','유예 여부']), reason: col('사유'), person: col('결정자'), ts: col('결정일시'),
       };
       if (ci.wk < 0 || ci.pid < 0) return map;   // 헤더 형식 불일치 시 무시
       for (let i = 1; i < vals.length; i++) {
@@ -5796,7 +5798,8 @@ async function _refreshPenaltyDecisions() {
     if (vals && vals.length >= 2 && vals[0]) {
       const headers = vals[0].map(h => String(h == null ? '' : h).trim());
       const col = n => headers.indexOf(n);
-      const ci = { wk: col('주차'), pid: col('협력사ID'), status: col('유예여부'), reason: col('사유'), person: col('결정자'), ts: col('결정일시') };
+      const colA = names => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return i; } return -1; };
+      const ci = { wk: colA(['주차','평가주차']), pid: col('협력사ID'), status: colA(['유예여부','유예 여부']), reason: col('사유'), person: col('결정자'), ts: col('결정일시') };
       if (ci.wk >= 0 && ci.pid >= 0) {
         for (let i = 1; i < vals.length; i++) {
           const r = vals[i]; if (!r) continue;
