@@ -683,6 +683,14 @@ textarea.form-input{resize:vertical;min-height:60px}
           <span id="penalty-week-label" style="font-size:11px;color:var(--text-secondary);font-weight:400;margin-left:8px"></span>
         </div>
         <div class="section-actions">
+          <input
+            type="text"
+            id="penaltySearchInput"
+            placeholder="🔍 협력사명, ID, 지역 검색…"
+            oninput="renderPenalty()"
+            class="filter-select"
+            style="min-width:240px;padding:6px 12px;font-size:12.5px"
+          />
           <select class="filter-select" id="penalty-status-filter" onchange="renderPenalty()"
                   title="유예 결정 상태 필터" style="padding:6px 10px;font-size:12px;cursor:pointer">
             <option value="">전체 상태</option>
@@ -1866,9 +1874,11 @@ async function init() {
       if (vals.length < 2 || !vals[0]) return map;
       const headers = vals[0].map(h => String(h == null ? '' : h).trim());
       const col = n => headers.indexOf(n);
+      // 헤더 별칭 허용 (시트에 따라 '주차' 또는 '평가주차')
+      const colA = names => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return i; } return -1; };
       const ci = {
-        wk: col('주차'), pid: col('협력사ID'), name: col('협력사명'),
-        status: col('유예여부'), reason: col('사유'), person: col('결정자'), ts: col('결정일시'),
+        wk: colA(['주차','평가주차']), pid: col('협력사ID'), name: col('협력사명'),
+        status: colA(['유예여부','유예 여부']), reason: col('사유'), person: col('결정자'), ts: col('결정일시'),
       };
       if (ci.wk < 0 || ci.pid < 0) return map;   // 헤더 형식 불일치 시 무시
       for (let i = 1; i < vals.length; i++) {
@@ -3556,6 +3566,8 @@ function _clearAllTableFilters(tableKey) {
   if (tableKey === 'penalty') {
     const sf = document.getElementById('penalty-status-filter');
     if (sf) sf.value = '';   // 상태 필터도 해제
+    const ps = document.getElementById('penaltySearchInput');
+    if (ps) ps.value = '';   // 검색어도 해제
   }
   _rerenderTable(tableKey);
 }
@@ -5506,6 +5518,16 @@ function renderPenalty() {
   });
   if (statusF) rows = rows.filter(r => r.status === statusF);
 
+  // ── 검색 필터 (협력사명 / 협력사ID / RGN2 / 권역) ──
+  const pSearch = (document.getElementById('penaltySearchInput')?.value || '').trim().toLowerCase();
+  if (pSearch) {
+    rows = rows.filter(r => {
+      const hay = [r.협력사명, r.협력사ID, r.rgn2, r.권역]
+        .map(v => String(v || '').toLowerCase()).join(' ');
+      return hay.includes(pSearch);
+    });
+  }
+
   // ── 정렬 ──
   if (st.sortKey) {
     const keyMap = {
@@ -5796,7 +5818,8 @@ async function _refreshPenaltyDecisions() {
     if (vals && vals.length >= 2 && vals[0]) {
       const headers = vals[0].map(h => String(h == null ? '' : h).trim());
       const col = n => headers.indexOf(n);
-      const ci = { wk: col('주차'), pid: col('협력사ID'), status: col('유예여부'), reason: col('사유'), person: col('결정자'), ts: col('결정일시') };
+      const colA = names => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return i; } return -1; };
+      const ci = { wk: colA(['주차','평가주차']), pid: col('협력사ID'), status: colA(['유예여부','유예 여부']), reason: col('사유'), person: col('결정자'), ts: col('결정일시') };
       if (ci.wk >= 0 && ci.pid >= 0) {
         for (let i = 1; i < vals.length; i++) {
           const r = vals[i]; if (!r) continue;
