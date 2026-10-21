@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --line: #e6e8eb;
+    --text: #1b1d1f;
+    --sub: #6b7178;
+    --faint: #a3a9b0;
+    --blue: #2b7bff;
+    --blue-weak: #eaf2ff;
+    --green: #12b76a;
+    --green-weak: #e8f8ef;
+    --red: #f04438;
+    --red-weak: #fdecea;
+    --gray-weak: #eef0f2;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; word-break: keep-all;
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+
+  /* 상단 */
+  .topbar { background: var(--card); border-bottom: 1px solid var(--line); }
+  .topbar .wrap { height: 52px; display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-weight: 800; letter-spacing: -0.3px; }
+  .topbar small { color: var(--sub); font-size: 13px; }
+
+  .hero { padding: 36px 0 28px; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 99px; background: var(--blue-weak); color: var(--blue); font-size: 13px; font-weight: 700; }
+  .hero h1 { font-size: 26px; line-height: 1.35; margin: 12px 0 10px; letter-spacing: -0.5px; }
+  .hero h1 em { font-style: normal; color: var(--blue); }
+  .hero p { margin: 0; color: var(--sub); }
+  .cta { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; height: 46px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-weight: 700; text-decoration: none; cursor: pointer; }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  section.block { margin: 0 0 20px; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 22px 18px; }
+  h2 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.3px; }
+  .lead { color: var(--sub); margin: 0 0 18px; font-size: 14px; }
+
+  /* 전후 비교 */
+  .seg { display: inline-flex; background: var(--gray-weak); border-radius: 10px; padding: 3px; margin-bottom: 14px; }
+  .seg button { border: 0; background: transparent; padding: 7px 16px; border-radius: 8px; font-weight: 700; color: var(--sub); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .screen { border: 1px solid var(--line); border-radius: 12px; background: #fafbfc; padding: 14px; overflow: hidden; }
+  .screen h3 { margin: 0 0 10px; font-size: 16px; }
+  .screen .caption { margin: 12px 0 0; font-size: 13px; color: var(--sub); }
+  .m-row { display: flex; gap: 8px; }
+  .m-box { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; flex: 1; min-width: 0; }
+  .m-label { font-size: 11px; color: var(--sub); white-space: nowrap; }
+  .m-num { font-weight: 800; font-size: 16px; }
+  .m-num.good { color: var(--green); }
+  .m-input { height: 22px; border-radius: 5px; background: var(--gray-weak); flex: 1; }
+  .m-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 4px; }
+  .m-tag.ok { background: var(--green-weak); color: var(--green); }
+  .m-tag.no { background: var(--red-weak); color: var(--red); }
+  .m-tag.on { background: var(--blue-weak); color: var(--blue); }
+  .m-tag.wait { background: var(--gray-weak); color: var(--sub); }
+  .m-bar { height: 4px; border-radius: 4px; background: var(--gray-weak); margin-top: 6px; overflow: hidden; }
+  .m-bar i { display: block; height: 100%; }
+  .m-table { width: 100%; border-collapse: collapse; font-size: 11px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .m-table th, .m-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  .m-table th { background: var(--gray-weak); color: var(--sub); font-weight: 600; }
+  .m-table td.dim { color: var(--faint); }
+  .m-scroll { overflow: hidden; position: relative; }
+  .m-scroll::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 36px; background: linear-gradient(90deg, transparent, #fafbfc); }
+  .m-chips { display: flex; gap: 6px; margin: 2px 0 8px; }
+  .m-chip { font-size: 11px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 99px; background: var(--card); }
+  .m-chip.on { border-color: var(--blue); color: var(--blue); background: var(--blue-weak); }
+  .gap { height: 8px; }
+
+  /* 변화 목록 */
+  .changes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .chg { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .chg .head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .chg b { font-size: 15px; }
+  .chg .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 5px; background: var(--blue-weak); color: var(--blue); }
+  .chg .tag.up { background: var(--green-weak); color: var(--green); }
+  .chg p { margin: 0; font-size: 13.5px; color: var(--text); }
+  .chg .before { margin-top: 6px; font-size: 12.5px; color: var(--faint); }
+
+  /* 설문 */
+  .notice { background: var(--blue-weak); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; color: #1d4fb8; margin-bottom: 22px; }
+  .part { margin-top: 26px; }
+  .part:first-of-type { margin-top: 0; }
+  .part-title { font-size: 13px; font-weight: 800; color: var(--blue); margin: 0 0 12px; letter-spacing: .2px; }
+  fieldset { border: 0; margin: 0 0 22px; padding: 0; min-width: 0; }
+  legend { font-weight: 700; padding: 0; margin-bottom: 4px; }
+  legend .req { color: var(--red); margin-left: 2px; }
+  .q-hint { font-size: 13px; color: var(--sub); margin: 0 0 10px; }
+  .q-desc { font-size: 13px; color: var(--sub); margin: 2px 0 10px; }
+  fieldset.missing legend, fieldset.missing .q-desc { color: var(--red); }
+
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt { position: relative; }
+  .opt input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .opt span { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font-size: 14px; cursor: pointer; text-align: center; line-height: 1.25; }
+  .opt input:checked + span { border-color: var(--blue); background: var(--blue-weak); color: var(--blue); font-weight: 700; }
+  .opt input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .opts.regions .opt span { min-width: 58px; }
+
+  .scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .scale .opt span { width: 100%; min-height: 48px; padding: 6px 4px; font-size: 12.5px; }
+  .scale-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .scale-foot .opt span { min-height: 32px; padding: 4px 12px; font-size: 12.5px; color: var(--sub); }
+
+  textarea { width: 100%; min-height: 120px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; resize: vertical; background: var(--card); }
+  textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: transparent; }
+  .count { text-align: right; font-size: 12px; color: var(--faint); margin-top: 4px; }
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+  /* 하단 제출 바 */
+  .submit-bar[hidden] { display: none; }
+  .submit-bar { position: sticky; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); margin-top: 20px; z-index: 5; }
+  .submit-bar .wrap { display: flex; align-items: center; gap: 12px; }
+  .progress { flex: 1; min-width: 0; }
+  .progress-text { font-size: 12.5px; color: var(--sub); margin-bottom: 4px; }
+  .progress-track { height: 6px; background: var(--gray-weak); border-radius: 6px; overflow: hidden; }
+  .progress-track i { display: block; height: 100%; width: 0; background: var(--blue); transition: width .2s; }
+  .error { color: var(--red); font-size: 13.5px; margin: 8px 0 0; }
+  .error:empty { display: none; }
+
+  .done { text-align: center; padding: 48px 18px; }
+  .done .check { width: 56px; height: 56px; border-radius: 50%; background: var(--blue-weak); color: var(--blue); display: inline-flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; }
+  .done h2 { margin: 16px 0 6px; }
+  .done p { color: var(--sub); margin: 0; }
+  footer { color: var(--faint); font-size: 12px; text-align: center; padding: 20px 0 32px; }
+
+  @media (max-width: 560px) {
+    .hero h1 { font-size: 22px; }
+    .changes { grid-template-columns: 1fr; }
+    .scale .opt span { font-size: 11.5px; }
+    .m-hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap"><span class="brand">배민커넥트비즈</span><small>업데이트 소식</small></div>
+</header>
+
+<main id="main">
+  <div class="wrap">
+    <section class="hero">
+      <span class="pill">NEW</span>
+      <h1>'배달현황'이<br><em>'실시간 운영 현황'</em>으로 바뀌었어요</h1>
+      <p>오늘 운영 상황을 검색 없이 한 화면에서 확인할 수 있어요.</p>
+      <div class="cta">
+        <a class="btn" href="#changes">바뀐 점 보기</a>
+        <a class="btn primary" href="#survey">설문 참여하기 · 약 3분</a>
+      </div>
+    </section>
+
+    <!-- 1. 전후 비교 -->
+    <section class="block card" id="changes">
+      <h2>이런 변화가 있어요</h2>
+      <p class="lead">이전 화면과 바뀐 화면을 눌러서 비교해 보세요.</p>
+      <div class="seg" role="group" aria-label="화면 비교">
+        <button type="button" data-view="before" aria-pressed="false">이전</button>
+        <button type="button" data-view="after" aria-pressed="true">이후</button>
+      </div>
+
+      <div class="screen" data-screen="before" hidden>
+        <h3>배달현황</h3>
+        <div class="m-box">
+          <div class="m-row" style="align-items:center">
+            <span class="m-label">이름</span><span class="m-input"></span>
+            <span class="m-label">아이디</span><span class="m-input"></span>
+            <span class="m-label m-hide-sm">휴대폰번호</span><span class="m-input m-hide-sm"></span>
+          </div>
+          <div class="m-row" style="justify-content:center;margin-top:8px">
+            <span class="m-chip">초기화</span><span class="m-chip on">검색</span>
+          </div>
+        </div>
+        <div class="gap"></div>
+        <div class="m-scroll">
+          <table class="m-table" aria-hidden="true">
+            <tr><th>이름</th><th>운행상태</th><th>완료</th><th>거절</th><th>배차취소</th><th>배달취소</th><th>아침점심피크</th><th>오후논피크</th><th>저녁피크</th></tr>
+            <tr><td>합계</td><td>-</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+            <tr><td>라이더A</td><td><span class="m-tag ok">운행중</span></td><td>25</td><td>4</td><td>10</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+            <tr><td>라이더B</td><td><span class="m-tag no">운행종료</span></td><td>25</td><td>4</td><td>10</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+            <tr><td>라이더C</td><td><span class="m-tag ok">운행중</span></td><td>25</td><td>4</td><td>10</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+          </table>
+        </div>
+        <p class="caption">검색 조건을 넣고 라이더별 표를 옆으로 넘겨 가며 확인해야 했어요.</p>
+      </div>
+
+      <div class="screen" data-screen="after">
+        <h3>실시간 운영 현황</h3>
+        <div class="m-row">
+          <div class="m-box"><div class="m-label">수락률 <span class="m-tag ok">양호</span></div><div class="m-num good">84%</div></div>
+          <div class="m-box"><div class="m-label">완료</div><div class="m-num">1,000</div></div>
+          <div class="m-box"><div class="m-label">진행중</div><div class="m-num">150</div></div>
+          <div class="m-box m-hide-sm"><div class="m-label">취소/거절</div><div class="m-num">80</div></div>
+        </div>
+        <div class="gap"></div>
+        <div class="m-row">
+          <div class="m-box"><div class="m-label"><span class="m-tag ok">달성</span>아침점심</div><div class="m-num">110%</div><div class="m-bar"><i style="width:100%;background:var(--green)"></i></div></div>
+          <div class="m-box"><div class="m-label"><span class="m-tag no">미달성</span>오후논</div><div class="m-num">50%</div><div class="m-bar"><i style="width:50%;background:var(--red)"></i></div></div>
+          <div class="m-box" style="border-color:var(--blue)"><div class="m-label"><span class="m-tag on">진행중</span>저녁</div><div class="m-num">50%</div><div class="m-bar"><i style="width:50%;background:var(--blue)"></i></div></div>
+          <div class="m-box m-hide-sm"><div class="m-label"><span class="m-tag wait">예정</span>심야논</div><div class="m-num" style="color:var(--faint)">0%</div><div class="m-bar"></div></div>
+        </div>
+        <div class="gap"></div>
+        <div class="m-chips"><span class="m-chip on">운행중 800</span><span class="m-chip">운행종료 20</span></div>
+        <table class="m-table" aria-hidden="true">
+          <tr><th>이름</th><th>상태</th><th>완료</th><th>거절/취소</th><th></th></tr>
+          <tr><td>라이더A</td><td><span class="m-tag ok">운행중</span></td><td>100건</td><td>8건</td><td class="dim">›</td></tr>
+          <tr><td>라이더B</td><td><span class="m-tag ok">운행중</span></td><td>92건</td><td>5건</td><td class="dim">›</td></tr>
+          <tr><td>라이더C</td><td><span class="m-tag wait">운행종료</span></td><td>64건</td><td>2건</td><td class="dim">›</td></tr>
+        </table>
+        <p class="caption">요약 → 피크별 달성률 → 라이더 순으로, 들어오자마자 오늘 상황이 보여요.</p>
+      </div>
+
+      <div class="gap"></div><div class="gap"></div>
+      <div class="changes" id="changeList"></div>
+    </section>
+
+    <!-- 2. 설문 -->
+    <section class="block card" id="survey">
+      <h2>더 좋은 화면을 위해 의견을 들려주세요</h2>
+      <p class="lead">바뀐 기능을 써 보신 경험을 바탕으로 답해 주세요. 응답 결과는 다음 개선에 반영합니다.</p>
+      <div class="notice">이름, 연락처, 협력사명·ID 같은 정보는 받지 않아요. 의견 칸에도 개인정보는 적지 말아 주세요.</div>
+
+      <form id="form" novalidate>
+        <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="part"><p class="part-title">1. 기본 정보</p><div id="profileQs"></div></div>
+        <div class="part"><p class="part-title">2. 바뀐 기능 평가</p><div id="changeQs"></div></div>
+        <div class="part"><p class="part-title">3. 전체 의견</p><div id="overallQs"></div></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="submit-bar" id="submitBar" hidden>
+    <div class="wrap">
+      <div class="progress">
+        <div class="progress-text" id="progressText"></div>
+        <div class="progress-track"><i id="progressBar"></i></div>
+      </div>
+      <button class="btn primary" id="submitBtn" type="button">제출하기</button>
+    </div>
+    <div class="wrap"><p class="error" id="error" role="alert"></p></div>
+  </div>
+</main>
+
+<section class="wrap" id="doneView" hidden>
+  <div class="card done" style="margin-top:32px">
+    <div class="check" aria-hidden="true">✓</div>
+    <h2>소중한 의견 감사합니다</h2>
+    <p>보내 주신 내용은 실시간 운영 현황 개선에 활용할게요.</p>
+  </div>
+</section>
+
+<footer>배민커넥트비즈 · 우아한청년들</footer>
+
+<script>
+  var SURVEY = <?!= configJson ?>;
+
+  var $ = function (s, el) { return (el || document).querySelector(s); };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  function opt(type, name, value, label) {
+    return '<label class="opt"><input type="' + type + '" name="' + esc(name) + '" value="' + esc(value) + '">' +
+           '<span>' + esc(label) + '</span></label>';
+  }
+
+  /* 전후 비교 토글 */
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.seg button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      document.querySelectorAll('[data-screen]').forEach(function (s) { s.hidden = s.dataset.screen !== b.dataset.view; });
+    });
+  });
+
+  /* 변화 목록 */
+  $('#changeList').innerHTML = SURVEY.changes.map(function (c) {
+    return '<div class="chg"><div class="head"><b>' + esc(c.title) + '</b>' +
+      '<span class="tag' + (c.tag === '개선' ? ' up' : '') + '">' + esc(c.tag) + '</span></div>' +
+      '<p>' + esc(c.desc) + '</p>' +
+      (c.before ? '<p class="before">이전: ' + esc(c.before) + '</p>' : '') + '</div>';
+  }).join('');
+
+  /* 문항 렌더 */
+  $('#profileQs').innerHTML = SURVEY.profile.map(function (q) {
+    var type = q.type === 'multi' ? 'checkbox' : 'radio';
+    return '<fieldset data-q="' + esc(q.key) + '"><legend>' + esc(q.label) + (q.required ? '<span class="req">*</span>' : '') + '</legend>' +
+      (q.hint ? '<p class="q-hint">' + esc(q.hint) + '</p>' : '') +
+      '<div class="opts' + (q.key === 'region' ? ' regions' : '') + '">' +
+      q.options.map(function (o) { return opt(type, q.key, o, o); }).join('') + '</div></fieldset>';
+  }).join('');
+
+  function scaleBlock(key, skipLabel) {
+    return '<div class="scale">' +
+      SURVEY.scale.map(function (label, i) { return opt('radio', key, String(i + 1), label); }).join('') + '</div>' +
+      (skipLabel ? '<div class="scale-foot">' + opt('radio', key, 'skip', skipLabel) + '</div>' : '');
+  }
+
+  $('#changeQs').innerHTML = SURVEY.changes.map(function (c) {
+    return '<fieldset data-q="ch_' + esc(c.key) + '"><legend>' + esc(c.title) + '<span class="req">*</span></legend>' +
+      '<p class="q-desc">' + esc(c.desc) + '</p>' + scaleBlock('ch_' + c.key, c.skipLabel || SURVEY.skipLabel) + '</fieldset>';
+  }).join('');
+
+  $('#overallQs').innerHTML =
+    '<fieldset data-q="overall"><legend>' + esc(SURVEY.overall.label) + '<span class="req">*</span></legend>' +
+    scaleBlock('overall') + '</fieldset>' +
+    '<fieldset><legend><label for="comment">' + esc(SURVEY.comment.label) + '</label></legend>' +
+    '<textarea id="comment" name="comment" maxlength="' + SURVEY.comment.maxLength + '" placeholder="' + esc(SURVEY.comment.placeholder) + '"></textarea>' +
+    '<div class="count"><span id="count">0</span> / ' + SURVEY.comment.maxLength + '</div></fieldset>';
+
+  /* 응답 수집 · 진행률 */
+  var form = $('#form');
+  var requiredKeys = SURVEY.profile.filter(function (q) { return q.required; }).map(function (q) { return q.key; })
+    .concat(SURVEY.changes.map(function (c) { return 'ch_' + c.key; }), ['overall']);
+
+  function answered(key) { return !!form.querySelector('input[name="' + key + '"]:checked'); }
+
+  function updateProgress() {
+    var n = requiredKeys.filter(answered).length;
+    $('#progressText').textContent = '필수 문항 ' + n + ' / ' + requiredKeys.length;
+    $('#progressBar').style.width = (n / requiredKeys.length * 100) + '%';
+  }
+
+  form.addEventListener('change', function (e) {
+    var fs = e.target.closest('fieldset');
+    if (fs) fs.classList.remove('missing');
+    updateProgress();
+  });
+  $('#comment').addEventListener('input', function () { $('#count').textContent = this.value.length; });
+  updateProgress();
+
+  // 제출 바는 설문 영역에 들어온 뒤부터 보인다 (안내 영역을 가리지 않게)
+  var bar = $('#submitBar');
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (es) {
+      if (es[0].isIntersecting) bar.hidden = false;
+    }).observe($('#survey'));
+  } else {
+    bar.hidden = false;
+  }
+
+  function collect() {
+    var val = function (k) { var el = form.querySelector('input[name="' + k + '"]:checked'); return el ? el.value : ''; };
+    var data = { website: form.website.value, changes: {} };
+    SURVEY.profile.forEach(function (q) {
+      data[q.key] = q.type === 'multi'
+        ? Array.prototype.map.call(form.querySelectorAll('input[name="' + q.key + '"]:checked'), function (el) { return el.value; })
+        : val(q.key);
+    });
+    SURVEY.changes.forEach(function (c) { data.changes[c.key] = val('ch_' + c.key); });
+    data.overall = val('overall');
+    data.comment = $('#comment').value;
+    return data;
+  }
+
+  function newId() {
+    var a = new Uint8Array(12);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  }
+  var submissionId = newId();   // 같은 화면에서 다시 눌러도 한 번만 저장된다
+
+  var btn = $('#submitBtn');
+  btn.addEventListener('click', function () {
+    $('#error').textContent = '';
+    var missing = requiredKeys.filter(function (k) { return !answered(k); });
+    missing.forEach(function (k) { form.querySelector('fieldset[data-q="' + k + '"]').classList.add('missing'); });
+    if (missing.length) {
+      $('#error').textContent = '답하지 않은 필수 문항이 ' + missing.length + '개 있어요.';
+      form.querySelector('fieldset[data-q="' + missing[0] + '"]').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    var data = collect();
+    data.submissionId = submissionId;
+    btn.disabled = true;
+    btn.textContent = '제출 중…';
+    google.script.run
+      .withSuccessHandler(function () {
+        $('#main').hidden = true;
+        $('#doneView').hidden = false;
+        window.scrollTo(0, 0);
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = '제출하기';
+        $('#error').textContent = (err && err.message) || '제출하지 못했어요. 잠시 후 다시 시도해 주세요.';
+      })
+      .submitSurvey(data);
+  });
+</script>
+</body>
+</html>
