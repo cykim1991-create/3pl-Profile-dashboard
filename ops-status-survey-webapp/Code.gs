@@ -8,8 +8,9 @@
  * 배포: README.md 참고 (setup 1회 실행 → 웹 앱 배포)
  */
 
+/** 응답 시트 (배민커넥트비즈 최적화 설문). 배포자에게 편집 권한이 있어야 한다. */
+var SHEET_ID = '1xWR4U30E8F1ydc7Dq8SantheTlDrd_Na1YRQczpqp0g';
 var SHEET_TAB = '응답';
-var PROP_SHEET_ID = 'SHEET_ID';
 
 /** 같은 화면에서 두 번 누른 제출을 막는 기간 */
 var DEDUPE_TTL_SEC = 6 * 60 * 60;
@@ -115,34 +116,34 @@ function header_() {
 }
 
 function sheet_() {
-  var id = PropertiesService.getScriptProperties().getProperty(PROP_SHEET_ID);
-  if (!id) throw new Error('설문 준비 중입니다. 잠시 후 다시 시도해 주세요.');
-  var sh = SpreadsheetApp.openById(id).getSheetByName(SHEET_TAB);
+  var sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_TAB);
   if (!sh) throw new Error('설문 준비 중입니다. 잠시 후 다시 시도해 주세요.');
   return sh;
 }
 
 /**
- * 편집기에서 1회 실행(▶). 응답 시트를 새로 만들고 ID 를 스크립트 속성에 저장한다.
- * 이미 SHEET_ID 가 있으면 그 시트의 헤더만 확인한다.
- * 시트는 배포자 드라이브에 생성되며 공유 설정은 바꾸지 않는다 (사내 담당자에게만 직접 공유).
+ * 편집기에서 1회 실행(▶). 응답 시트에 '응답' 탭과 헤더를 만든다.
+ * '응답' 탭이 없으면 비어 있는 첫 탭(시트1)의 이름을 바꿔 쓰고, 첫 탭에 내용이 있으면 새 탭을 추가한다.
+ * 시트의 공유 설정은 바꾸지 않는다 (사내 담당자에게만 직접 공유).
  */
 function setup() {
-  var props = PropertiesService.getScriptProperties();
-  var id = props.getProperty(PROP_SHEET_ID);
-  var ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.create(SURVEY.title + ' 응답');
+  var ss = SpreadsheetApp.openById(SHEET_ID);
   var sh = ss.getSheetByName(SHEET_TAB);
   if (!sh) {
-    sh = ss.getSheets()[0];
-    sh.setName(SHEET_TAB);
+    var first = ss.getSheets()[0];
+    if (first.getLastRow() === 0) {
+      sh = first;
+      sh.setName(SHEET_TAB);
+    } else {
+      sh = ss.insertSheet(SHEET_TAB);
+    }
   }
   if (sh.getLastRow() === 0) {
     var h = header_();
     sh.getRange(1, 1, 1, h.length).setValues([h]).setFontWeight('bold');
     sh.setFrozenRows(1);
   }
-  props.setProperty(PROP_SHEET_ID, ss.getId());
-  Logger.log('응답 시트: %s', ss.getUrl());
+  Logger.log('응답 시트: %s (탭: %s)', ss.getUrl(), SHEET_TAB);
 }
 
 /** 편집기에서 실행해 항목별 평균·응답 수를 실행 기록으로 확인한다. */
