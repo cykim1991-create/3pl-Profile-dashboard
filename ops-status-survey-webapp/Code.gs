@@ -28,7 +28,7 @@ function doGet() {
 
 /**
  * 클라이언트 제출 진입점.
- * @param {Object} form { submissionId, website(허니팟), region[], contract, ownSystem, changes{key:점수|'skip'}, overall, comment }
+ * @param {Object} form { submissionId, website(허니팟), region[], contract, ownSystem, changes{key:점수|'skip'(skipLabel 있는 항목만)}, overall, comment }
  * @return {{ok: boolean}}
  */
 function submitSurvey(form) {
@@ -84,7 +84,7 @@ function validate_(f) {
   var changes = f.changes || {};
   SURVEY.changes.forEach(function (c) {
     var v = changes[c.key];
-    if (v === 'skip') { values.push(c.skipLabel || SURVEY.skipLabel); return; }
+    if (v === 'skip' && c.skipLabel) { values.push(c.skipLabel); return; }
     var s = Number(v);
     if (!(s >= 1 && s <= SURVEY.scale.length && s % 1 === 0)) throw new Error('"' + c.title + '" 항목을 평가해 주세요.');
     values.push(s);

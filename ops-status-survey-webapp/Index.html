@@ -41,7 +41,6 @@
   .hero h1 { font-size: 26px; line-height: 1.35; margin: 12px 0 10px; letter-spacing: -0.5px; }
   .hero h1 em { font-style: normal; color: var(--blue); }
   .hero p { margin: 0; color: var(--sub); }
-  .cta { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
   .btn { display: inline-flex; align-items: center; justify-content: center; height: 46px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-weight: 700; text-decoration: none; cursor: pointer; }
   .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
   .btn:disabled { opacity: .5; cursor: default; }
@@ -163,10 +162,6 @@
       <span class="pill">NEW</span>
       <h1>배민커넥트비즈가<br><em>새롭게 바뀌었어요</em></h1>
       <p>새로운 '실시간 운영 현황'에서 오늘 운영 상황을 한 화면으로 확인해 보세요.</p>
-      <div class="cta">
-        <a class="btn" href="#changes">바뀐 점 보기</a>
-        <a class="btn primary" href="#survey">설문 참여하기 · 약 3분</a>
-      </div>
     </section>
 
     <!-- 사장님 입장에서 좋아진 점 -->
@@ -325,7 +320,7 @@
 
   $('#changeQs').innerHTML = SURVEY.changes.map(function (c) {
     return '<fieldset data-q="ch_' + esc(c.key) + '"><legend>' + esc(c.title) + '<span class="req">*</span></legend>' +
-      '<p class="q-desc">' + esc(c.desc) + '</p>' + scaleBlock('ch_' + c.key, c.skipLabel || SURVEY.skipLabel) + '</fieldset>';
+      '<p class="q-desc">' + esc(c.desc) + '</p>' + scaleBlock('ch_' + c.key, c.skipLabel) + '</fieldset>';
   }).join('');
 
   $('#overallQs').innerHTML =
