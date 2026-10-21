@@ -19,7 +19,7 @@ var SURVEY = {
     },
     {
       key: 'ownSystem', col: '자체·외주 개발 도구', label: '직접 또는 외주로 개발한 웹사이트·앱·프로그램을 쓰고 있나요?',
-      hint: '배민커넥트비즈 외에 배달 현황을 보거나 라이더를 관리하려고 만든 도구', type: 'single', required: true,
+      hint: '배민커넥트비즈 외에 배달 현황을 확인하려고 만든 도구', type: 'single', required: true,
       options: ['사용하고 있어요', '사용하지 않아요']
     }
   ],
