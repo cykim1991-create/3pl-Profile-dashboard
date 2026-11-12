@@ -9,7 +9,7 @@
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com;
-  connect-src 'self' https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://content-sheets.googleapis.com;
+  connect-src 'self' https://sheets.googleapis.com https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://content-sheets.googleapis.com https://mockingbird.admin-bff.betawoowa.in;
   frame-src https://accounts.google.com https://content.googleapis.com;
   style-src 'self' 'unsafe-inline' https://accounts.google.com;
   img-src 'self' data: https://*.googleusercontent.com;
@@ -683,14 +683,6 @@ textarea.form-input{resize:vertical;min-height:60px}
           <span id="penalty-week-label" style="font-size:11px;color:var(--text-secondary);font-weight:400;margin-left:8px"></span>
         </div>
         <div class="section-actions">
-          <input
-            type="text"
-            id="penaltySearchInput"
-            placeholder="🔍 협력사명, ID, 지역 검색…"
-            oninput="renderPenalty()"
-            class="filter-select"
-            style="min-width:240px;padding:6px 12px;font-size:12.5px"
-          />
           <select class="filter-select" id="penalty-status-filter" onchange="renderPenalty()"
                   title="유예 결정 상태 필터" style="padding:6px 10px;font-size:12px;cursor:pointer">
             <option value="">전체 상태</option>
@@ -1874,11 +1866,9 @@ async function init() {
       if (vals.length < 2 || !vals[0]) return map;
       const headers = vals[0].map(h => String(h == null ? '' : h).trim());
       const col = n => headers.indexOf(n);
-      // 헤더 별칭 허용 (시트에 따라 '주차' 또는 '평가주차')
-      const colA = names => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return i; } return -1; };
       const ci = {
-        wk: colA(['주차','평가주차']), pid: col('협력사ID'), name: col('협력사명'),
-        status: colA(['유예여부','유예 여부']), reason: col('사유'), person: col('결정자'), ts: col('결정일시'),
+        wk: col('주차'), pid: col('협력사ID'), name: col('협력사명'),
+        status: col('유예여부'), reason: col('사유'), person: col('결정자'), ts: col('결정일시'),
       };
       if (ci.wk < 0 || ci.pid < 0) return map;   // 헤더 형식 불일치 시 무시
       for (let i = 1; i < vals.length; i++) {
@@ -2416,25 +2406,78 @@ function getPendingLogs(pid) {
 
 function _kpiDateOf(k) { return k['일자'] || k['주차시작일'] || ''; }
 
+
+// ── 협력사 조회 인덱스 ──────────────────────────────────────
+// getLatestKPI / getRealtimeKPI / getKPIHistory 는 원래 매 호출마다
+// STATE.partners / STATE.kpi / STATE.realtimeKpi 를 전부 훑었다(find/filter).
+// 리스트 렌더는 협력사마다 이 함수들을 부르므로 전체 비용이 O(협력사수²)로
+// 늘어나, 전체 지역 선택 시 초기 렌더가 급격히 느려졌다.
+// → 데이터가 바뀔 때 한 번만 Map 을 만들고 이후엔 O(1) 조회한다.
+//
+// 배열 "정체성"이 바뀌면(=시트 재로딩으로 재할당되면) 자동으로 다시 만든다.
+// STATE.partners/kpi/realtimeKpi 는 전부 재할당 방식이고 in-place push 가
+// 없으므로 이 검사로 충분하다.
+let _IDX = null;
+function _lookupIdx() {
+  // ⚠ 정체성 비교는 STATE 의 원본 값으로 해야 한다.
+  //   `STATE.x || []` 로 비교하면 값이 undefined 일 때 매번 새 빈 배열이 만들어져
+  //   비교가 항상 실패하고 캐시가 통째로 무력화된다(SAMPLE 폴백 경로에서 실측).
+  const P0 = STATE.partners, K0 = STATE.kpi, R0 = STATE.realtimeKpi;
+  if (_IDX && _IDX._P === P0 && _IDX._K === K0 && _IDX._R === R0) return _IDX;
+  const P = P0 || [], K = K0 || [], R = R0 || [];
+
+  const partnerByPid = new Map(), partnerByName = new Map();
+  P.forEach(p => {
+    const pid = p['협력사ID'], nm = p['협력사명'];
+    if (pid && !partnerByPid.has(pid))  partnerByPid.set(pid, p);
+    if (nm  && !partnerByName.has(nm))  partnerByName.set(nm, p);
+  });
+
+  // 한 KPI 행은 협력사ID 버킷과 협력사명 버킷 양쪽에 들어간다.
+  // (원래 filter 조건이 "이름 일치 OR ID 일치" 였으므로 두 버킷의 합집합이 답이다)
+  // 같은 일자 중복 행의 순서를 시트 순서로 고정하기 위해 원본 인덱스를 함께 기억한다.
+  const kpiByPid = new Map(), kpiByName = new Map(), rowOrder = new WeakMap();
+  K.forEach((k, i) => {
+    rowOrder.set(k, i);
+    const pid = k['협력사ID'], nm = k['협력사명'];
+    if (pid) { let a = kpiByPid.get(pid);  if (!a) kpiByPid.set(pid, a = []);  a.push(k); }
+    if (nm)  { let a = kpiByName.get(nm);  if (!a) kpiByName.set(nm, a = []);  a.push(k); }
+  });
+
+  const rtByPid = new Map(), rtByName = new Map();
+  R.forEach(r => {
+    const pid = r['협력사ID'], nm = r['협력사명'];
+    if (pid && !rtByPid.has(pid)) rtByPid.set(pid, r);
+    if (nm  && !rtByName.has(nm)) rtByName.set(nm, r);
+  });
+
+  _IDX = { _P:P0, _K:K0, _R:R0, partnerByPid, partnerByName,
+           kpiByPid, kpiByName, rtByPid, rtByName, rowOrder, histCache: new Map() };
+  return _IDX;
+}
+
+// 일자 오름차순 + 같은 일자면 시트 순서 유지
+function _kpiRowCmp(idx) {
+  return (a, b) => {
+    const da = _kpiDateOf(a), db = _kpiDateOf(b);
+    if (da !== db) return da > db ? 1 : -1;
+    return (idx.rowOrder.get(a) || 0) - (idx.rowOrder.get(b) || 0);
+  };
+}
+
 function getLatestKPI(pid) {
   // 데일리운영현황(STATE.kpi)에서 가장 최근 일자의 행 — 일자별/주차별 집계용
-  const partner = STATE.partners.find(p => p['협력사ID'] === pid);
-  const name    = partner ? partner['협력사명'] : null;
-  const rows    = STATE.kpi.filter(k =>
-    (name && k['협력사명'] === name) || k['협력사ID'] === pid
-  );
-  if (!rows.length) return null;
-  return rows.sort((a,b) => _kpiDateOf(b) > _kpiDateOf(a) ? 1 : -1)[0];
+  const hist = getKPIHistory(pid);          // 일자 오름차순
+  return hist.length ? hist[hist.length - 1] : null;
 }
 
 // 실시간운행현황(STATE.realtimeKpi) 시트에서 협력사 한 행 — 오늘 스냅샷
 // 실시간 시트에 없는 필드(라이더수/SLA/AR/등급/계약형태)는 데일리 최신/파트너 마스터에서 보충
 function getRealtimeKPI(pid) {
-  const partner = STATE.partners.find(p => p['협력사ID'] === pid);
+  const idx = _lookupIdx();
+  const partner = idx.partnerByPid.get(pid) || null;
   const name = partner ? partner['협력사명'] : null;
-  const rt = (STATE.realtimeKpi || []).find(k =>
-    k['협력사ID'] === pid || (name && k['협력사명'] === name)
-  );
+  const rt = idx.rtByPid.get(pid) || (name ? idx.rtByName.get(name) : null) || null;
   const daily = getLatestKPI(pid);
   if (!rt) return daily;
   if (!daily) return rt;
@@ -2527,11 +2570,25 @@ function _renderPartnerContactsSection(pid) {
 }
 
 function getKPIHistory(pid) {
-  const partner = STATE.partners.find(p => p['협력사ID'] === pid);
+  const idx = _lookupIdx();
+  const cached = idx.histCache.get(pid);
+  if (cached) return cached;
+
+  const partner = idx.partnerByPid.get(pid) || null;
   const name    = partner ? partner['협력사명'] : null;
-  return STATE.kpi
-    .filter(k => (name && k['협력사명'] === name) || k['협력사ID'] === pid)
-    .sort((a,b) => _kpiDateOf(a) > _kpiDateOf(b) ? 1 : -1);
+  const byPid   = idx.kpiByPid.get(pid) || [];
+  const byName  = (name && idx.kpiByName.get(name)) || [];
+
+  let rows;
+  if (!byName.length)      rows = byPid.slice();
+  else if (!byPid.length)  rows = byName.slice();
+  else {
+    const seen = new Set(byPid);
+    rows = byPid.concat(byName.filter(r => !seen.has(r)));   // 합집합(중복 제거)
+  }
+  rows.sort(_kpiRowCmp(idx));
+  idx.histCache.set(pid, rows);
+  return rows;
 }
 
 // DoD helpers (computed from daily records)
@@ -3566,8 +3623,6 @@ function _clearAllTableFilters(tableKey) {
   if (tableKey === 'penalty') {
     const sf = document.getElementById('penalty-status-filter');
     if (sf) sf.value = '';   // 상태 필터도 해제
-    const ps = document.getElementById('penaltySearchInput');
-    if (ps) ps.value = '';   // 검색어도 해제
   }
   _rerenderTable(tableKey);
 }
@@ -4821,9 +4876,8 @@ function _rgn2ShortLabel(r) {
 // RGN2_일별지표에 데이터가 있는 지역을 RGN1 6구분으로 그룹화 (요청 순서)
 //   1.서울시 2.경기도 3.인천광역시 4.세종시 5.광역시(부산·대구·광주·대전·울산) 6.기타 지방(도)
 function _qualityRgn1Groups() {
-  // 화성시는 데일리 품질에서 제외 (드롭다운·밴드 모두)
   const allR = [...new Set((STATE.rgn2Daily || []).map(r => r.RGN2).filter(Boolean))]
-    .filter(r => !r.includes('화성시')).sort();
+    .sort();
   const defs = [
     { key: 'seoul',    label: '⭐ 서울시',     match: r => r.startsWith('서울특별시') },
     { key: 'gyeonggi', label: '⭐ 경기도',     match: r => r.startsWith('경기도') },
@@ -4959,7 +5013,7 @@ function _renderRgn2QualityCharts(rgn2) {
     });
     return { bandLo, bandHi, bandLoName, bandHiName };
   };
-  // rgn2Daily 기반 지표 밴드 (같은 광역 내 지역들, 화성시 제외됨 = groupSet에 없음)
+  // rgn2Daily 기반 지표 밴드 (같은 광역 내 지역들)
   const bandFor = (extractor) => {
     const byDate = {};
     (STATE.rgn2Daily || []).forEach(r => {
@@ -5518,16 +5572,6 @@ function renderPenalty() {
   });
   if (statusF) rows = rows.filter(r => r.status === statusF);
 
-  // ── 검색 필터 (협력사명 / 협력사ID / RGN2 / 권역) ──
-  const pSearch = (document.getElementById('penaltySearchInput')?.value || '').trim().toLowerCase();
-  if (pSearch) {
-    rows = rows.filter(r => {
-      const hay = [r.협력사명, r.협력사ID, r.rgn2, r.권역]
-        .map(v => String(v || '').toLowerCase()).join(' ');
-      return hay.includes(pSearch);
-    });
-  }
-
   // ── 정렬 ──
   if (st.sortKey) {
     const keyMap = {
@@ -5818,8 +5862,7 @@ async function _refreshPenaltyDecisions() {
     if (vals && vals.length >= 2 && vals[0]) {
       const headers = vals[0].map(h => String(h == null ? '' : h).trim());
       const col = n => headers.indexOf(n);
-      const colA = names => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return i; } return -1; };
-      const ci = { wk: colA(['주차','평가주차']), pid: col('협력사ID'), status: colA(['유예여부','유예 여부']), reason: col('사유'), person: col('결정자'), ts: col('결정일시') };
+      const ci = { wk: col('주차'), pid: col('협력사ID'), status: col('유예여부'), reason: col('사유'), person: col('결정자'), ts: col('결정일시') };
       if (ci.wk >= 0 && ci.pid >= 0) {
         for (let i = 1; i < vals.length; i++) {
           const r = vals[i]; if (!r) continue;
